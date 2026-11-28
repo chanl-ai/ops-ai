@@ -3,12 +3,13 @@
 
   verify --branch B     `make gha-verify`: start verify-full.yml on B, watch it, print each failed job's first error
   failures --run ID     each failed job of a run with its first error line
-  ready                 ci.yml job `ready`: fails when CodeQL is red or a job is red
+  ready                 ci.yml job `ready`: fails when CodeQL or a job is red; in the merge queue also when a pull
+                        request of the group has no valid `reviewed` label (review_problems)
   queue-failure         queue-retry.yml: a failed merge queue run reruns its failed jobs once; a second failure
                         comments each failed job and its first error line; a green rerun queues the request again
   auto-queue --pr N     auto-queue.yml: arms or disarms the merge queue for one pull request into develop by its labels
-                        (`reviewed` arms it, `hold` or a draft, a fork or a stacked base keeps it out); a push after
-                        the review takes `reviewed` off unless it only merged develop in
+                        (`reviewed` arms it, `hold` or a draft, a fork or a stacked base keeps it out); a push takes
+                        `reviewed` off and disarms. A convenience: the queue's `ready` is what enforces the review
   --self-test           every decision below on planted input
 
 The decisions are pure functions (first_error, ready_reasons, queue_step); the commands around them only read
@@ -24,10 +25,13 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 
 WORKFLOW = "verify-full.yml"
 RED = ("failure", "cancelled", "timed_out")
 STAMP = re.compile(r"^\S*\d{4}-\d\d-\d\dT[\d:.]+Z ?")
+WRITERS = ("admin", "maintain", "write")
+WORKFLOW_AUTHOR = "github-actions[bot]"
 QUEUE_BRANCH = re.compile(r"^gh-readonly-queue/[^/]+(?:/.+)?/pr-(\d+)-[0-9a-f]+$")
 
 
@@ -189,6 +193,105 @@ def cmd_verify(branch: str) -> int:
     return 1
 
 
+def review_problems(pr: dict, events: list[dict], pushed_at: str, permission: Callable[[str], str]) -> list[str]:
+    """Why a pull request into develop may not enter the merge queue; empty when it may. It needs a `reviewed` label
+    that was given after its head was pushed (the last `labeled` or `unlabeled` event of that label decides), by
+    someone with write access, and no `hold`. The merge-back that release-finish.yml opens (its author is the
+    workflow's) is the one exemption. Times are the API's UTC `...Z` strings, which sort as text."""
+    if "hold" in pr["labels"]:
+        return ["it carries `hold`"]
+    if pr["head"].startswith("merge-back/") and pr["author"] == WORKFLOW_AUTHOR and not pr["fork"]:
+        return []
+    marks = sorted(
+        (e for e in events if e["event"] in ("labeled", "unlabeled") and e["label"] == "reviewed"),
+        key=lambda e: e["at"],
+    )
+    last = marks[-1] if marks else None
+    if last is None or last["event"] != "labeled" or "reviewed" not in pr["labels"]:
+        return ["it has no `reviewed` label given by a person (or the label was taken off)"]
+    out = []
+    if last["at"] <= pushed_at:
+        out.append(f"`reviewed` was given at {last['at']}, not after the head was pushed at {pushed_at}")
+    access = permission(last["actor"])
+    if access not in WRITERS:
+        out.append(f"{last['actor']} gave `reviewed` with {access or 'no'} access, not write")
+    return out
+
+
+def permission_of(actor: str) -> str:
+    done = subprocess.run(
+        ["gh", "api", f"repos/{repo()}/collaborators/{actor}/permission", "--jq", ".permission"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def review_facts(number: int) -> tuple[dict, list[dict], str]:
+    """One pull request's facts: the pull request, the timeline events that matter, and when its head was pushed. GitHub
+    shows no push time, so it is the later of the newest force-push event on the timeline and the earliest check suite
+    of the head commit (created by the push that brought the commit; a commit cannot be reviewed before it exists on
+    GitHub). A commit's own dates are the pusher's to choose and are not read."""
+    info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
+    raw = gh(
+        "api",
+        "--paginate",
+        f"repos/{repo()}/issues/{number}/timeline?per_page=100",
+        "--jq",
+        '[.[] | select(.event | IN("labeled","unlabeled","head_ref_force_pushed"))'
+        ' | {event, label: (.label.name // ""), actor: (.actor.login // ""), at: .created_at}]',
+    )
+    events = [e for line in raw.splitlines() if line.strip() for e in json.loads(line)]
+    suites = json.loads(
+        gh(
+            "api",
+            f"repos/{repo()}/commits/{info['head']['sha']}/check-suites?per_page=100",
+            "--jq",
+            "[.check_suites[].created_at]",
+        )
+    )
+    if not suites:
+        raise ValueError(f"no check suite for the head of #{number}")
+    pushed = max([min(suites), *(e["at"] for e in events if e["event"] == "head_ref_force_pushed")])
+    pr = {
+        "labels": [x["name"] for x in info["labels"]],
+        "head": info["head"]["ref"],
+        "author": info["user"]["login"],
+        "fork": info["head"]["repo"] is None or info["head"]["repo"]["full_name"] != info["base"]["repo"]["full_name"],
+    }
+    return pr, events, pushed
+
+
+def group_prs(head_ref: str, base_sha: str, head_sha: str) -> list[int]:
+    """The pull requests of a merge queue group: the one the queue branch names and every `Merge pull request #n`
+    commit between the group's base and head."""
+    found = {n for n in [queue_pr(head_ref.removeprefix("refs/heads/"))] if n}
+    lines = gh(
+        "api", f"repos/{repo()}/compare/{base_sha}...{head_sha}", "--jq", '.commits[].commit.message | split("\n")[0]'
+    )
+    found |= {int(m.group(1)) for ln in lines.splitlines() if (m := re.match(r"Merge pull request #(\d+) ", ln))}
+    return sorted(found)
+
+
+def queue_review_reasons() -> list[str]:
+    """In the queue's run, every pull request of the group must hold a valid review; a failure to read any of it fails.
+    A pull request's own run cannot judge this: a label starts no run, so it would stay red until a push."""
+    try:
+        numbers = group_prs(
+            os.environ.get("GROUP_REF", ""), os.environ.get("GROUP_BASE", ""), os.environ.get("GROUP_HEAD", "")
+        )
+        if not numbers:
+            return ["no pull request found in the queue group"]
+        reasons = []
+        for n in numbers:
+            pr, events, pushed = review_facts(n)
+            reasons += [f"#{n}: {why}" for why in review_problems(pr, events, pushed, permission_of)]
+        return reasons
+    except (SystemExit, KeyError, ValueError, TypeError) as err:
+        return [f"the review could not be checked ({err}); the queue run fails closed"]
+
+
 def cmd_ready() -> int:
     needs = json.loads(os.environ.get("NEEDS") or "{}")
     sha, event = os.environ.get("HEAD_SHA", ""), os.environ.get("GITHUB_EVENT_NAME", "")
@@ -213,6 +316,8 @@ def cmd_ready() -> int:
         if not codeql:
             codeql = {"analysis": "missing"}
     reasons = ready_reasons(needs, codeql)
+    if event == "merge_group":
+        reasons += queue_review_reasons()
     for r in reasons:
         print(f"::error title=Not ready::{r}")
     print("ready: " + ("no, see above" if reasons else "every job passed, CodeQL is green"))
@@ -236,9 +341,6 @@ def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, u
     elif step == "requeue":
         gh("pr", "merge", str(pr), "--auto", "--merge")
     return 0
-
-
-WRITERS = ("admin", "maintain", "write")
 
 
 def gh_ok(*args: str) -> bool:
@@ -271,43 +373,49 @@ def armed(number: int) -> bool:
     return out.returncode != 0 or out.stdout.strip() == "true"
 
 
-def label_refused(number: int, actor: str, dry: bool) -> bool:
-    """`reviewed` counts only from someone with write, maintain or admin rights; the label of anyone else comes off with
-    one comment. An unreadable permission refuses too."""
-    out = subprocess.run(
-        ["gh", "api", f"repos/{repo()}/collaborators/{actor}/permission", "--jq", ".permission"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if out.returncode == 0 and out.stdout.strip() in WRITERS:
-        return False
+def label_refused(number: int, actor: str, dry: bool) -> int | None:
+    """`reviewed` counts only from someone with write, maintain or admin rights. None when the label stands; otherwise
+    the label comes off with one comment and the answer is the exit code (1 when the removal failed)."""
+    if permission_of(actor) in WRITERS:
+        return None
     print(f"#{number}: {actor} may not label a pull request `reviewed`")
-    if not dry:
-        gh("pr", "edit", str(number), "--remove-label", "reviewed", check=False)
-        gh(
-            "pr",
-            "comment",
-            str(number),
-            "--body",
-            "`reviewed` comes from a maintainer with write access; the label was removed.",
-            check=False,
-        )
-    return True
+    if dry:
+        return 0
+    removed = gh_ok("pr", "edit", str(number), "--remove-label", "reviewed")
+    gh_ok(
+        "pr",
+        "comment",
+        str(number),
+        "--body",
+        "`reviewed` comes from a maintainer with write access; the label was removed.",
+    )
+    return 0 if removed else 1
 
 
 def cmd_auto_queue(number: int, action: str, dry: bool, *, label: str = "", actor: str = "") -> int:
     """Only the API is called with the event's pull request number, never the pull request's code. `action` is
     empty for a hand-started run, which judges a pull request into develop and leaves every other base alone."""
     if action == "synchronize":
+        # The merge-back that release-finish.yml arms is pushed to once, by the workflow, and is exempt from review.
+        head = subprocess.run(
+            ["gh", "api", f"repos/{repo()}/pulls/{number}", "--jq", ".head.ref"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        if head.startswith("merge-back/"):
+            print(f"#{number}: a merge-back, left armed")
+            return 0
         return drop_review(number, dry)
     info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
     if not action and info["base"]["ref"] != "develop":
         print(f"#{number}: base {info['base']['ref']}, not judged by hand")
         return 0
     labels = [x["name"] for x in info["labels"]]
-    if action == "labeled" and label == "reviewed" and "reviewed" in labels and label_refused(number, actor, dry):
-        return 0
+    if action == "labeled" and label == "reviewed" and "reviewed" in labels:
+        refused = label_refused(number, actor, dry)
+        if refused is not None:
+            return refused
     pr = {
         "base": info["base"]["ref"],
         "head": info["head"]["ref"],

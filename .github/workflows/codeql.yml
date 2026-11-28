@@ -5,7 +5,8 @@ name: codeql
 
 on:
   pull_request:
-    branches: [develop, main]
+    # A pull request into a release or hotfix branch runs ci.yml, whose `ready` waits for these checks.
+    branches: [develop, main, "release/[0-9]*", "hotfix/**"]
   push:
     # A release or hotfix branch is scanned on every push, with the rest of its security scans (release-security.yml).
     branches: [main, "release/[0-9]*", "hotfix/**"]

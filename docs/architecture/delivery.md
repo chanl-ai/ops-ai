@@ -122,7 +122,7 @@ its number is not reused.
 |---|---|---|
 | Draft | A pull request opened as a draft | Nothing from `ci.yml`; CodeQL and the leak scan as usual |
 | Ready | Marked ready for review | The jobs of what it changed (below) |
-| Reviewed | The reviewer adds the label `reviewed`; `hold` keeps it out, any push removes the label and disarms, and the label counts only from someone with write rights | `auto-queue.yml` arms it: not a draft, base `develop`, from this repository. A stacked pull request is armed only once its base merged and it was retargeted to `develop` |
+| Reviewed | The reviewer adds the label `reviewed`; `hold` keeps it out, any push removes the label and disarms (best effort); the queue's `ready` is what enforces it, reading the label's timeline: given by someone with write access after the head was pushed, never taken off, no `hold` | `auto-queue.yml` arms it: not a draft, base `develop`, from this repository. A stacked pull request is armed only once its base merged and it was retargeted to `develop` |
 | Queue | Armed pull request | The merge queue: every job of the plan, SQL Server included. A second red run drops it with the label `queue-failed` and a comment naming each failed job |
 | `develop` | The queue's merge | Staging deploys it (skipped with a notice while a release or hotfix branch exists) |
 | Release branch | `make release-start` | Every job on each push, `release-security.yml`, the staging deploy; `make release-rc` tags a candidate |

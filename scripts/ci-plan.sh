@@ -15,8 +15,8 @@
 set -euo pipefail
 base=${1:?usage: ci-plan.sh <base sha | file of changed paths>}
 cd "$(git rev-parse --show-toplevel)"
-# CI_TRIVIAL=true (ci.yml, from scripts/ci_trivial.py: the diff is empty or only the release's version fields and
-# changelog) plans nothing for a pull request or a queue group, so a merge-back of a release is green in about a minute.
+# CI_TRIVIAL=true (ci.yml, from scripts/ci_trivial.py: the pull request changes no file against its base) plans nothing
+# for a pull request or a queue group, so a merge-back of a release that develop already holds is green in about a minute.
 trivial=false
 case "${GITHUB_EVENT_NAME:-}" in pull_request | merge_group) [ "${CI_TRIVIAL:-}" = true ] && trivial=true ;; esac
 if { [ "${CI_TESTED:-}" = true ] && [ "${GITHUB_REF:-}" = refs/heads/develop ] || [ "$trivial" = true ]; } && [ "${CI_FULL:-}" != true ]; then

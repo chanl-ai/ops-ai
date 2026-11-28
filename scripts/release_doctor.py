@@ -8,7 +8,7 @@ Static: no workflow, make target, script, guide, agent or skill file names a rem
 train, tagging develop, moving main by a push, keep-current) or a stale statement about what CI runs; the version file
 equals both SDK versions; release.md lists exactly the release targets that exist and is at most 80 lines.
 Live: at most one release or hotfix branch, with a version file that matches its name; every vX.Y.Z tag is reachable from main;
-main's version file is that tag's, or the open release's; develop holds main; no merge-back pull request is unarmed.
+main's version file is that tag's, or the open release's; develop holds main; no merge-back pull request is unarmed; `release-gate` is a required check on main.
 """
 
 from __future__ import annotations
@@ -190,6 +190,12 @@ def judge_live(state: dict) -> list[str]:
             out.append(
                 f"merge-back pull request #{pr['number']} ({pr['head']}) is not armed. Fix: gh pr merge --auto --merge {pr['number']}"
             )
+    required = state.get("main_required", "not read")
+    if required != "not read" and (required is None or "release-gate" not in required):
+        out.append(
+            "release-gate is not a required check on main (or its protection could not be read), so a release pull request "
+            "can merge unproven. Fix: add `release-gate` to the required status checks of the main branch protection"
+        )
     return out
 
 
@@ -229,7 +235,20 @@ def live_state() -> dict:
     prs = json.loads(
         sh("gh", "pr", "list", "--base", "develop", "--state", "open", "--json", "number,headRefName,autoMergeRequest")
     )
+    try:
+        required = json.loads(
+            sh(
+                "gh",
+                "api",
+                "repos/{owner}/{repo}/branches/main/protection/required_status_checks",
+                "--jq",
+                "[.contexts[], .checks[].context]",
+            )
+        )
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        required = None
     return {
+        "main_required": required,
         "branches": branches,
         "proofs": {b: proof_of(sh("git", "rev-parse", f"origin/{b}").strip()) for b in branches},
         "tags": tags,

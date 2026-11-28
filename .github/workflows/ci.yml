@@ -607,7 +607,8 @@ jobs:
           git push -q "$PUSH_URL" "HEAD:refs/heads/$HEAD_REF"
 
   ready:
-    # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head. The
+    # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head; in the
+    # queue's own run also that each pull request of the group was labelled `reviewed` by a maintainer after its last push. The
     # queue tests the pull request on develop's tip, so a stale base does not matter. A queue group and
     # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
     # scripts/pr_flow.py ready; its --self-test is in make checks.
@@ -629,6 +630,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # A pull request that changes no file runs no CodeQL; only then does ready not wait for it.
           TRIVIAL: ${{ needs.plan.outputs.trivial }}
+          # In the merge queue, every pull request of the group must carry a valid `reviewed` label (pr_flow.py review_problems).
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          GROUP_HEAD: ${{ github.event.merge_group.head_sha }}
         run: python3 scripts/pr_flow.py ready
 
   ci-ok:
