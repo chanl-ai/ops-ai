@@ -129,9 +129,10 @@ grep -c '^OPS_SVC_KEY_[A-Z]*=.' ops-ai.env | sed 's/^/proof: service keys set: /
 echo "proof: 6. docker compose up"
 $C up -d --wait --wait-timeout 600 migrate platform tools models kb files opa fake-model
 connect() {
-  $C run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-    --base-url http://fake-model:8746/v1 --alias default --model fake-chat --input-price 1 --output-price 1 \
-    --budget 5 --key-id "$1" | sed -n 's/^OPS_MODELS_KEY=//p'
+  printf '%s\n' "$ADMIN_PASSWORD" | $C run --rm -T --no-deps -e OPS_INSTALL_ADMIN_EMAIL=admin@example.com agents \
+    python /app/deploy/fly/connect_model.py --models-url http://models:8730 --base-url http://fake-model:8746/v1 \
+    --alias default --model fake-chat --input-price 1 --output-price 1 --budget 5 --key-id "$1" --password-stdin |
+    sed -n 's/^OPS_MODELS_KEY=//p'
 }
 setenv OPS_MODELS_KEY_AGENTS "$(connect purpose:agents)"
 setenv OPS_MODELS_KEY_DOCUMENTS "$(connect purpose:documents)"

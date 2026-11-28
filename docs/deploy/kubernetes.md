@@ -42,9 +42,11 @@ are the ones Compose runs, and PostgreSQL stays outside the cluster.
    and apply again.
 
    ```bash
-   kubectl -n ops-ai exec deploy/agents -- python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-     --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default --model <id> \
-     --input-price <n> --output-price <n> --budget <cap> --key-id purpose:agents   # again with purpose:documents
+   # Signs in as the first admin; the password is asked for at the terminal, never put on the command line.
+   kubectl -n ops-ai exec -it deploy/agents -- python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
+     --admin-email <first admin email> --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default \
+     --model <id> --input-price <n> --output-price <n> --budget <cap> --key-id purpose:agents --password-stdin
+   # again with purpose:documents
    ```
 
 5. **Route traffic** from your ingress or load balancer, with TLS, to the Service `proxy` on port 8080. Sign in as the

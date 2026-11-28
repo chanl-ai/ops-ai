@@ -86,9 +86,13 @@ refuses to start on a database whose version is behind its chain. A change to `a
 
 ```
 fly ssh console -a <app-prefix>-agents -C "python /app/deploy/fly/connect_model.py \
-  --models-url http://<app-prefix>-models.internal:8730 --base-url http://<app-prefix>-fake.internal:8746/v1 \
-  --alias default --model fake-chat --input-price 1 --output-price 1 --budget 5 --key-id purpose:agents"
+  --models-url http://<app-prefix>-models.internal:8730 --platform-url http://<app-prefix>-platform.internal:8710 \
+  --admin-email <first admin email> --base-url http://<app-prefix>-fake.internal:8746/v1 --alias default \
+  --model fake-chat --input-price 1 --output-price 1 --budget 5 --key-id purpose:agents --password-stdin"
 ```
+
+It signs in as the first admin and asks for the password at the terminal; the connection and `default` are that
+account's. Later changes are made on Settings › Workspace › Models.
 
 It runs on the agents app because it signs with agents-service's own key. Again with `--key-id purpose:documents`, also from the agents app. Each prints its key once; put them in a private file as
 `OPS_MODELS_KEY_AGENTS=` and `OPS_MODELS_KEY_DOCUMENTS=` lines, run `apps.py secrets ... --models <file>`, then deploy

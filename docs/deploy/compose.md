@@ -43,13 +43,16 @@ process does not allow an install script. The [install script](install.md) runs 
 
 ## Connect a model
 
-The connect step binds the model alias `default` to your endpoint and prints a model key once. Run it for agents and
-for documents, put the two keys in the settings file, and start again.
+The connect step signs in as the first admin, binds the account's model alias `default` to your endpoint and prints a
+model key once. It asks for the admin's password (or reads it from stdin), never from the command line. Run it for
+agents and for documents, put the two keys in the settings file, and start again. Later changes to the model are made
+on Settings › Workspace › Models.
 
 ```bash
-$C run --rm --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-  --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default --model <provider model id> \
-  --input-price <per million tokens> --output-price <per million tokens> --budget <cap> --key-id purpose:agents
+$C run --rm --no-deps -e OPS_INSTALL_ADMIN_EMAIL=<first admin email> agents python /app/deploy/fly/connect_model.py \
+  --models-url http://models:8730 --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default \
+  --model <provider model id> --input-price <per million tokens> --output-price <per million tokens> --budget <cap> \
+  --key-id purpose:agents --password-stdin
 # again with --key-id purpose:documents; set OPS_MODELS_KEY_AGENTS and OPS_MODELS_KEY_DOCUMENTS
 $C up -d
 ```

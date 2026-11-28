@@ -245,8 +245,9 @@ The models-service connection points at the fake on this machine, bound once aft
 ```
 fly ssh console -a <your-app> -C 'sh -c "cd /app && OPS_SERVICE_SIGNING_KEY=\$OPS_SVC_KEY_AGENTS \
   OPS_SERVICE_SIGNING_KID=svc-agents-1 /app/.venv/bin/python deploy/fly/connect_model.py \
-  --models-url http://127.0.0.1:8730 --base-url http://127.0.0.1:8746/v1 --alias default --model fake-chat \
-  --input-price 1 --output-price 1 --budget 5 --key-id purpose:agents"'
+  --models-url http://127.0.0.1:8730 --platform-url http://127.0.0.1:8710 --admin-email <first admin email> \
+  --base-url http://127.0.0.1:8746/v1 --alias default --model fake-chat --input-price 1 --output-price 1 --budget 5 \
+  --key-id purpose:agents --password-stdin"'
 ```
 
 The existing keys stay. The per-service apps, if started again, need the same command run on `<app-prefix>-agents`

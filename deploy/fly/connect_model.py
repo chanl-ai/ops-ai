@@ -1,23 +1,28 @@
-"""Points one model alias at a provider and issues a model key with a spending cap, through models-service's own
-routes. Run it where agents-service runs (`fly ssh console -a <agents app>`, `docker compose run --rm agents`): it signs
-models-service's admin token with that service's own key (OPS_SERVICE_SIGNING_KEY), which no other machine holds.
+"""Points the `default` model alias (or another) at a provider and issues a model key with a spending cap, through
+models-service's own routes. The connection and the alias are the account's, so they are made as its first admin, who
+signs in (the password is read from stdin, never from the command line); the key is issued with models-service's
+admin token, signed with agents-service's own key (OPS_SERVICE_SIGNING_KEY), so run it where agents-service runs
+(`fly ssh console -a <agents app>`, `docker compose run --rm agents`, `kubectl exec -i deploy/agents`).
 
-    python deploy/fly/connect_model.py --models-url <models-service URL> --base-url <provider base URL>/v1 \\
-        --key-ref provider --alias default --model <provider model id> --input-price <per million> \\
-        --output-price <per million> --budget 25 --key-id purpose:agents
+    printf '%s\n' "$ADMIN_PASSWORD" | OPS_INSTALL_ADMIN_EMAIL=<first admin> python deploy/fly/connect_model.py \
+        --models-url <models-service URL> --base-url <provider base URL>/v1 --key-ref provider --alias default \
+        --model <provider model id> --input-price <per million> --output-price <per million> --budget 25 \
+        --key-id purpose:agents --password-stdin
 
 For an Azure OpenAI resource add `--type azure-openai --api-version <v1 or a date> --region <region>`, with the
 resource's endpoint as `--base-url` and the deployment as `--model`; all four default from OPENAI_API_TYPE,
 OPENAI_API_BASE, OPENAI_API_VERSION and OPENAI_API_REGION.
 
-`--key-ref` names a model provider key saved on Settings > Model providers; the key itself never passes through here.
-A second run rebinds the connection, adds an alias version and leaves an existing key alone. The key's secret is
+`--key-ref` names a model provider key saved on Settings > Workspace > Models; the key itself never passes through
+here. A second run rebinds the connection, adds an alias version and leaves an existing key alone. The key's secret is
 printed once: set it as the service's OPS_MODELS_KEY, which models-service refuses once the key's budget is spent.
+An admin changes the model later on Settings > Workspace > Models.
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import sys
 from typing import Any
@@ -41,6 +46,13 @@ def _check(r: httpx.Response, *ok: int) -> dict[str, Any]:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--models-url", default=os.environ.get("OPS_MODELS_URL", "http://127.0.0.1:8730"))
+    p.add_argument("--platform-url", default=os.environ.get("OPS_PLATFORM_URL", "http://platform:8710"))
+    p.add_argument(
+        "--admin-email",
+        default=os.environ.get("OPS_INSTALL_ADMIN_EMAIL") or os.environ.get("OPS_BOOTSTRAP_ADMIN_EMAIL"),
+        help="the first admin, who connects the account's model; OPS_INSTALL_ADMIN_EMAIL",
+    )
+    p.add_argument("--password-stdin", action="store_true", help="read the admin's password from the first stdin line")
     p.add_argument("--provider", default="provider", help="connection name")
     # Defaults from the install's model settings (OPENAI_API_TYPE, OPENAI_API_BASE, OPENAI_API_VERSION,
     # OPENAI_API_REGION), which ModelConnectionSettings has already checked.
@@ -84,11 +96,28 @@ def main() -> None:
     if a.type == "azure-openai":
         where |= {"apiVersion": a.api_version, "region": a.region}
 
+    if not a.admin_email or not a.password_stdin:
+        sys.exit(
+            "connect as the first admin: set OPS_INSTALL_ADMIN_EMAIL and pass the password on stdin (--password-stdin)"
+        )
+    # At a terminal it asks without echo; piped, it reads the first line.
+    password = getpass.getpass("first admin's password: ") if sys.stdin.isatty() else sys.stdin.readline().rstrip("\n")
+    if not password:
+        sys.exit("no password on stdin")
+    signed = httpx.post(
+        f"{a.platform_url}/v1/auth/sign-in", json={"email": a.admin_email, "password": password}, timeout=20
+    )
+    if signed.status_code != 200:
+        sys.exit(f"the first admin's sign-in answered {signed.status_code}")
+    session = signed.json()["data"]
+    principal = session["principal"]
+    team = principal.get("teamId") or next(iter(principal.get("teamIds") or []), None)
+    admin = {"Authorization": f"Bearer {session['token']}", **({"X-Team-Id": team} if team else {})}
     signer = service_signer(settings)
     token = mint_service_token(
         signer, service="agents", audience="models", tenant_id=os.environ.get("OPS_BOOTSTRAP_TENANT_ID"), ttl_s=300
     )
-    with httpx.Client(base_url=a.models_url, headers={"Authorization": f"Bearer {token}"}, timeout=15) as c:
+    with httpx.Client(base_url=a.models_url, headers=admin, timeout=15) as c:
         made = c.post("/v1/models/providers", json={"name": a.provider, "type": a.type, **where})
         if made.status_code == 409:
             found = _check(c.get("/v1/models/providers", params={"search": a.provider}), 200)["data"]["data"]
@@ -110,7 +139,8 @@ def main() -> None:
             alias = c.post(f"/v1/models/aliases/{a.alias}/versions", json=version)
         ref = _check(alias, 201)["data"]
         print(f"alias {ref['name']}: version {ref['version']} on {a.model}")
-        key = c.post("/v1/models/keys", json={"id": a.key_id, "kind": "purpose", "budget": a.budget})
+        service = {"Authorization": f"Bearer {token}"}
+        key = c.post("/v1/models/keys", json={"id": a.key_id, "kind": "purpose", "budget": a.budget}, headers=service)
         if key.status_code == 409:
             print(f"key {a.key_id}: exists; OPS_MODELS_KEY stays as set (rotate it through models-service to replace)")
             return

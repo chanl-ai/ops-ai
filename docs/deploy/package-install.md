@@ -79,9 +79,11 @@ Run once for agents and once for documents (`--key-id purpose:documents`); put t
 as `OPS_MODELS_KEY_AGENTS` and `OPS_MODELS_KEY_DOCUMENTS`, then start everything.
 
 ```bash
-$C run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-  --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default --model <provider model id> \
-  --input-price <per million tokens> --output-price <per million tokens> --budget <cap> --key-id purpose:agents
+# Signs in as the first admin, who owns the account's model setup; it asks for the password.
+$C run --rm --no-deps -e OPS_INSTALL_ADMIN_EMAIL=<first admin email> agents python /app/deploy/fly/connect_model.py \
+  --models-url http://models:8730 --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default \
+  --model <provider model id> --input-price <per million tokens> --output-price <per million tokens> --budget <cap> \
+  --key-id purpose:agents --password-stdin
 $C up -d
 ```
 

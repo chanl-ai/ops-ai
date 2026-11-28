@@ -73,9 +73,10 @@ echo "proof: starting $PROJECT"
 $COMPOSE up -d --wait --wait-timeout 180 migrate platform tools models kb files fake-model opa
 echo "proof: connecting the fake model"
 connect() {
-  $COMPOSE run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-    --base-url http://fake-model:8746/v1 --alias default --model fake-chat --input-price 1 --output-price 1 \
-    --budget 5 --key-id "$1" | sed -n 's/^OPS_MODELS_KEY=//p'
+  printf '%s\n' "$PASSWORD" | $COMPOSE run --rm -T --no-deps -e OPS_INSTALL_ADMIN_EMAIL=admin@compose.example agents \
+    python /app/deploy/fly/connect_model.py --models-url http://models:8730 --base-url http://fake-model:8746/v1 \
+    --alias default --model fake-chat --input-price 1 --output-price 1 --budget 5 --key-id "$1" --password-stdin |
+    sed -n 's/^OPS_MODELS_KEY=//p'
 }
 printf 'OPS_MODELS_KEY_AGENTS=%s\nOPS_MODELS_KEY_DOCUMENTS=%s\n' "$(connect purpose:agents)" "$(connect purpose:documents)" >>"$ENV"
 $COMPOSE up -d --wait --wait-timeout 240

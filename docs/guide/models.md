@@ -33,8 +33,8 @@ receive. Each service holds a model key, and no service holds your provider's cr
 
 You can try the platform without a provider or a key, because the release package includes a
 [test model](#the-test-model) that answers from fixed rules. When you are ready for a real endpoint, your operator binds
-the alias with the connect-model command ([Connect a model](../deploy/compose.md#connect-a-model)). The command prints a
-model key once, so save it when it appears.
+the alias with the connect-model command ([Connect a model](../deploy/compose.md#connect-a-model)), signed in as
+the account's first admin. The command prints a model key once, so save it when it appears.
 
 ```mermaid
 flowchart TB

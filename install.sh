@@ -516,8 +516,11 @@ connect_model() {
   fi
   for kid in agents documents; do
     [ -z "$(getenv "OPS_MODELS_KEY_$(upper $kid)")" ] || continue
-    key=$(compose run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-      --base-url "$base" ${ref[@]+"${ref[@]}"} --alias default --model "$model" "${prices[@]}" --key-id "purpose:$kid" |
+    # As the first admin, who owns the account's model setup; the password goes on stdin, never on a command line.
+    key=$(printf '%s\n' "${A_ADMIN_PASSWORD:-$(getenv OPS_BOOTSTRAP_ADMIN_PASSWORD)}" | compose run --rm -T --no-deps \
+      -e OPS_INSTALL_ADMIN_EMAIL="$(getenv OPS_BOOTSTRAP_ADMIN_EMAIL)" agents python /app/deploy/fly/connect_model.py \
+      --models-url http://models:8730 --base-url "$base" ${ref[@]+"${ref[@]}"} --alias default --model "$model" \
+      "${prices[@]}" --key-id "purpose:$kid" --password-stdin |
       sed -n 's/^OPS_MODELS_KEY=//p') || die "connecting the model for $kid failed"
     [ -n "$key" ] || die "models-service issued no key for purpose:$kid (it exists already: rotate it in the console, then set OPS_MODELS_KEY_$(upper $kid))"
     setenv "OPS_MODELS_KEY_$(upper $kid)" "$key"
@@ -547,6 +550,7 @@ Ops AI $TAG is running.
   Sign in:   $(getenv OPS_BOOTSTRAP_ADMIN_EMAIL)
   Password:  the one you gave$([ "${GENERATED_PASSWORD:-0}" = 1 ] && printf ', or the generated one: see OPS_BOOTSTRAP_ADMIN_PASSWORD in %s' "$(basename "$ENV_FILE")")
 
+Models:    change the model or add providers on Settings › Workspace › Models.
 Change the password after the first sign-in, then delete the OPS_BOOTSTRAP_ADMIN_PASSWORD line from $(basename "$ENV_FILE").
 Keep $(basename "$ENV_FILE") safe and with your backups: its keys unlock stored credentials.
 Next: ./install.sh status | backup | upgrade | logs [service]
