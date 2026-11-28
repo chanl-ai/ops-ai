@@ -22,13 +22,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels its older run. A run already going for develop, main or a release branch is
-# never cancelled (it may be deploying staging, and a deploy stopped halfway leaves the machine between two releases),
-# but a run still waiting for a runner is replaced by the next push to that branch: the group is the branch, so a burst
-# of merges queues one waiting run, not one per commit, and the next run plans from the last green commit
-# (scripts/ci-last-green.sh), so the replaced commit is checked with it. A merge queue entry has its own ref.
+# A newer push to a pull request cancels its older run. A push to develop or main never cancels one: that run may be
+# deploying staging, and a deploy stopped halfway leaves the machine between two releases. Its group holds the commit,
+# because a group with one slot also drops a queued run when a newer one queues, even with cancel-in-progress off.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -84,8 +82,9 @@ jobs:
           # develop, and main, is planned from the last commit whose run passed ci-ok, so a merge whose run was lost or
           # failed is checked with the next one. With no such commit the plan is a full run.
           if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/develop ]; then
-            tested=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&head_sha=$GITHUB_SHA&status=success&per_page=1" --jq .total_count || echo 0)
-            if [ "${tested:-0}" -gt 0 ]; then export CI_TESTED=true; fi
+            tested=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&head_sha=$GITHUB_SHA&per_page=20" \
+              | scripts/ci-tested.sh "$GITHUB_SHA" || echo false)
+            if [ "$tested" = true ]; then export CI_TESTED=true; fi
           fi
           if [ "$GITHUB_EVENT_NAME" = push ] && [ "${CI_TESTED:-}" != true ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
             green=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=${GITHUB_REF#refs/heads/}&event=push&status=success&per_page=50" \

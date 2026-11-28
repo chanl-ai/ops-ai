@@ -87,10 +87,6 @@ def gh(*args: str, check: bool = True, stdin: str | None = None) -> str:
     return r.stdout
 
 
-def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=check)
-
-
 def repo() -> str:
     return (
         os.environ.get("GITHUB_REPOSITORY")

@@ -245,10 +245,29 @@ def test_a_develop_push_of_a_commit_the_queue_tested_plans_no_test_job(tmp_path:
     ), p
     # The workflow sets it only from a green merge_group run of the pushed sha.
     run = _plan_step()["run"]
-    assert "event=merge_group&head_sha=$GITHUB_SHA&status=success" in run and "CI_TESTED=true" in run, run
+    assert "event=merge_group&head_sha=$GITHUB_SHA" in run and "ci-tested.sh" in run and "CI_TESTED=true" in run, run
     # Without that run (a direct push) the plan is made as before.
     p = plan(tmp_path, "services/kb-service/src/ops_kb/app.py", ref=develop, event="push")
     assert p["services"] != "[]" and _runs("service", p), p
+
+
+def test_only_a_successful_merge_group_run_of_the_sha_counts_as_tested() -> None:
+    def tested(body: str) -> str:
+        return subprocess.run(
+            ["bash", str(ROOT / "scripts/ci-tested.sh"), "abc"], input=body, capture_output=True, text=True, check=False
+        ).stdout.strip()
+
+    run = '{"workflow_runs":[{"head_sha":"%s","conclusion":"%s"}]}'
+    assert tested(run % ("abc", "success")) == "true"
+    for body in (
+        run % ("abc", "failure"),
+        run % ("def", "success"),
+        '{"message":"Bad credentials"}',
+        "null",
+        "",
+        "<html>",
+    ):
+        assert tested(body) == "false", body
 
 
 def test_a_release_or_main_push_runs_every_job_even_when_told_it_was_tested(tmp_path: Path) -> None:
