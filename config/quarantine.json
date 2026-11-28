@@ -49,6 +49,13 @@
       "expires": "2026-12-26",
       "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
       "added": "2026-11-26"
+    },
+    {
+      "id": "uc-199:api",
+      "owner": "ops-release",
+      "expires": "2026-12-12",
+      "reason": "api script needs a standing stack with GreenMail; hosted has neither",
+      "added": "2026-11-27"
     }
   ]
 }
