@@ -36,7 +36,7 @@ export default function WorkspaceGeneralPage() {
     }
   };
   return (
-    <SettingsPageLayout section="General" description="The name, address and logo every team in this workspace shares.">
+    <SettingsPageLayout sample={false} section="General" description="The name, address and logo every team in this workspace shares.">
       <SettingCard
         id="name"
         title="Workspace name"

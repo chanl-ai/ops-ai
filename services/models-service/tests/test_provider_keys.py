@@ -8,26 +8,21 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Annotated, Any
 from uuid import uuid4
 
 import httpx
 import pytest
 import sqlalchemy as sa
-from fastapi import Header, Request
 from pydantic import SecretStr
 
-from ops_access import ANY_TEAM, OWNER, builtin_roles_for
-from ops_identity import Principal
-from ops_identity.fastapi import current_principal
+from ops_identity.fastapi import current_principal, current_tenant_caller
 from ops_models.__main__ import dev_provider_keys
 from ops_models.app import create_models_app
 from ops_models.store import provider_keys
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
-from ops_store import isolation
 
-from .conftest import SERVICE, Models
+from .conftest import SERVICE, Models, admin_as, admins, as_account, people
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -40,45 +35,6 @@ def _provider(seen: list[str | None]) -> httpx.AsyncClient:
         return httpx.Response(200, json={"id": "up", "object": "chat.completion", "choices": [choice], "usage": usage})
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
-
-
-def people(tenant: str, *, owner: bool = False) -> Any:
-    """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
-    is the account admin); with `owner` or `X-Owner` also the workspace's Owner (the install admin), as an install's
-    first admin is. A request with a bearer token (a service) is resolved as usual."""
-
-    async def as_person(
-        request: Request,
-        authorization: Annotated[str | None, Header()] = None,
-        x_team_id: Annotated[str | None, Header()] = None,
-        x_role: Annotated[str | None, Header()] = None,
-        x_owner: Annotated[str | None, Header()] = None,
-    ) -> Principal:
-        if authorization:
-            return await current_principal(request, authorization=authorization)
-        team = x_team_id or "team_security"
-        held = list(builtin_roles_for(x_role or "admin", security_team=team == "team_security"))
-        p = Principal(
-            kind="person",
-            sub="usr_nadia",
-            email="nadia@harborpine.example",
-            name="nadia",
-            tenant_id=tenant,
-            team_id=team,
-            team_ids=[team],
-            roles={team: x_role or "admin"},
-            access={team: held, **({ANY_TEAM: [OWNER.id]} if owner or x_owner else {})},
-            scopes=[],
-            auth_method="session",
-            # The workspace's Security team, which platform-service names in every person's token.
-            security_team="team_security",
-        )
-        # As the real dependency does: the request acts in the person's tenant and team, which the database holds
-        # provider keys to.
-        isolation.enter_caller(p, dev=False)
-        return p
-
-    return as_person
 
 
 @dataclass
@@ -99,6 +55,20 @@ class Rig:
         return await self.models.complete(self.secret, alias=self.alias, **{"X-Tenant-Id": tenant or self.tenant})
 
 
+async def _bind(client: httpx.AsyncClient, tenant: str, key_name: str, alias: str | None = None) -> str:
+    """A connection of `tenant` naming `key_name`, and an alias of that account on it."""
+    conn = {"name": f"openai-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
+    pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=admin_as(tenant))
+    assert pid.status_code == 201, pid.text
+    alias = alias or f"bank-keys-{uuid4().hex[:8]}"
+    version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
+    made = await client.post(
+        "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=admin_as(tenant)
+    )
+    assert made.status_code == 201, made.text
+    return alias
+
+
 async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[Rig]:
     """A connection naming a fresh key, an alias on it and a model key, for a fresh tenant; `in_settings` is the dev
     stack's value for that key from settings."""
@@ -107,17 +77,12 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
     fallback = {key_name: in_settings} if in_settings else {}
     app = create_models_app(models.engine, upstream=_provider(seen), provider_secrets=fallback)
     app.dependency_overrides[current_principal] = people(tenant)
+    # Writes resolve the tenant caller: the account admin of the account X-Tenant-Id names (admin_as).
+    app.dependency_overrides[current_tenant_caller] = admins(current_tenant_caller)
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:
-        conn = {"name": f"openai-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-        pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=SERVICE)
-        alias = f"bank-keys-{uuid4().hex[:8]}"
-        version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
-        made = await client.post(
-            "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE
-        )
-        assert made.status_code == 201, made.text
+        alias = await _bind(client, tenant, key_name)
         on_app = Models(client, models.engine, app)
         key_id, secret = await on_app.key(budget="5")
         yield Rig(client, seen, tenant, key_name, alias, key_id, secret, on_app)
@@ -152,7 +117,7 @@ async def test_a_call_naming_no_account_uses_no_accounts_key(rig: Rig) -> None:
     """A provider key is an account's own; a call that names no tenant is refused, never signed with the key of an
     account the install names."""
     assert (await rig.save("sk-mine")).status_code == 200
-    r = await rig.models.complete(rig.secret, alias=rig.alias)
+    r = await rig.models.complete(rig.secret, alias=rig.alias, **{"X-Tenant-Id": ""})
     assert (r.status_code, r.json()["error"]["code"]) == (400, "tenant_required"), r.text
     assert rig.seen == []
 
@@ -162,7 +127,7 @@ async def test_a_value_is_never_read_back_nor_stored_in_the_clear(rig: Rig) -> N
     listed = await rig.client.get("/v1/provider-keys")
     assert "sk-do-not-show" not in saved.text + listed.text
     assert [k["name"] for k in listed.json()["data"]["data"]] == [rig.key_name]
-    async with rig.models.engine.connect() as c:
+    async with as_account(rig.models.engine, rig.tenant) as c:
         stored = await c.scalar(
             sa.select(provider_keys.c.ciphertext).where(
                 provider_keys.c.tenant_id == rig.tenant, provider_keys.c.name == rig.key_name
@@ -185,8 +150,11 @@ async def test_only_an_account_admin_sets_lists_or_deletes_a_key(rig: Rig) -> No
 
 async def test_another_accounts_key_is_not_used_for_this_accounts_call(rig: Rig) -> None:
     assert (await rig.save("sk-mine")).status_code == 200
-    r = await rig.complete(tenant=f"t_{uuid4().hex[:8]}")
-    assert r.status_code == 503 and rig.seen == []
+    # The other account names the same key and alias on a connection of its own, and saved no key.
+    other = f"t_{uuid4().hex[:8]}"
+    await _bind(rig.client, other, rig.key_name, rig.alias)
+    r = await rig.complete(tenant=other)
+    assert r.status_code == 503 and rig.seen == [], r.text
 
 
 async def test_a_key_a_connection_names_is_not_deleted(rig: Rig) -> None:

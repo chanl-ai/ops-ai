@@ -42,7 +42,7 @@ export default function GeneralSettingsPage() {
   const gone = !!value && !current.data?.agentName;
 
   return (
-    <SettingsPageLayout section="General" description="Choices that apply to everyone in this team.">
+    <SettingsPageLayout sample={false} section="General" description="Choices that apply to everyone in this team.">
       <SampleData>
         <SettingCard id="name" title="Team name" description="Shown in the team switcher and on everything the team owns." help="Please use 32 characters at maximum." onSave={() => undefined}>
           <Input value={name} maxLength={32} onChange={(e) => setName(e.target.value)} aria-label="Team name" className="w-full bg-card sm:w-1/2" />

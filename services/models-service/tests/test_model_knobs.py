@@ -18,7 +18,7 @@ from ops_models.app import create_models_app
 from ops_models.catalog import CATALOG_DIR, Catalog
 from ops_service_kit.contract import response_checker
 
-from .conftest import LOCAL, SERVICE, Models
+from .conftest import ADMIN, LOCAL, SERVICE, Models
 
 HAIKU = "claude-haiku-4-5"
 
@@ -39,10 +39,10 @@ async def _rig(models: Models, sent: list[dict[str, Any]]) -> tuple[httpx.AsyncC
 
 async def _alias(c: httpx.AsyncClient, kind: str, model: str, **conn: str) -> str:
     tag = f"knobs-{uuid4().hex[:8]}"
-    made = await c.post("/v1/models/providers", json={"name": tag, "type": kind, **conn}, headers=SERVICE)
+    made = await c.post("/v1/models/providers", json={"name": tag, "type": kind, **conn}, headers=ADMIN)
     assert made.status_code == 201, made.text
     version = {"providerId": made.json()["data"]["id"], "modelId": model, "clearedSensitivity": "internal"}
-    assert (await c.post("/v1/models/aliases", json={"name": tag, **version}, headers=SERVICE)).status_code == 201
+    assert (await c.post("/v1/models/aliases", json={"name": tag, **version}, headers=ADMIN)).status_code == 201
     return tag
 
 

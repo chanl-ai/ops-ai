@@ -18,7 +18,7 @@ from pydantic_ai.usage import RunUsage
 
 from ops_models.app import create_models_app
 
-from .conftest import SERVICE, Models
+from .conftest import ADMIN, SERVICE, Models
 
 
 def _openai(models: Models, secret: str) -> AsyncOpenAI:
@@ -149,10 +149,10 @@ async def test_an_openai_compatible_provider_gets_the_tools_and_returns_the_call
             "baseUrl": "http://up/v1",
             "keyRef": "UPSTREAM_KEY",
         }
-        pid = (await client.post("/v1/models/providers", json=conn, headers=SERVICE)).json()["data"]["id"]
+        pid = (await client.post("/v1/models/providers", json=conn, headers=ADMIN)).json()["data"]["id"]
         alias = f"bank-up-{uuid4().hex[:8]}"
         version = {"name": alias, "providerId": pid, "modelId": "gpt-up", "clearedSensitivity": "internal"}
-        assert (await client.post("/v1/models/aliases", json=version, headers=SERVICE)).status_code == 201
+        assert (await client.post("/v1/models/aliases", json=version, headers=ADMIN)).status_code == 201
         key_id, secret = await models.key(budget="5")
         agent = _agent(Models(client, models.engine, app), secret, alias=alias)
         if stream:
@@ -181,12 +181,12 @@ async def test_an_alias_version_sets_the_reasoning_effort_a_request_leaves_unset
             "baseUrl": "http://up/v1",
             "keyRef": "UPSTREAM_KEY",
         }
-        pid = (await client.post("/v1/models/providers", json=conn, headers=SERVICE)).json()["data"]["id"]
+        pid = (await client.post("/v1/models/providers", json=conn, headers=ADMIN)).json()["data"]["id"]
         fast, plain = f"fast-{uuid4().hex[:8]}", f"plain-{uuid4().hex[:8]}"
         for name, effort in ((fast, "minimal"), (plain, None)):
             version = {"name": name, "providerId": pid, "modelId": "gpt-up", "clearedSensitivity": "internal"}
             made = await client.post(
-                "/v1/models/aliases", json=version | ({"reasoningEffort": effort} if effort else {}), headers=SERVICE
+                "/v1/models/aliases", json=version | ({"reasoningEffort": effort} if effort else {}), headers=ADMIN
             )
             assert made.status_code == 201, made.text
             listed = (await client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]

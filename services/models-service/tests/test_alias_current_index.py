@@ -18,8 +18,9 @@ from ops_models.store.aliases import AliasFields
 from ops_models.store.tables import model_aliases
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
-from .conftest import Models
+from .conftest import Models, as_account
 
 FIELDS: AliasFields = {
     "provider_id": SCRIPTED,
@@ -35,21 +36,32 @@ async def test_two_versions_leave_one_current_and_a_second_current_is_refused(
 ) -> None:
     aliases = Aliases(models.engine)
     name = f"alias-{uuid4().hex[:8]}"
-    assert await aliases.create(name, "chat", FIELDS)
-    assert await aliases.add_version(name, FIELDS) == 2
-    versions = await aliases.version_page(name, ListParams())
+    # As the seeded account, whose scripted connection the versions name.
+    with isolation.scope("local", None):
+        assert await aliases.create(name, "chat", FIELDS)
+        assert await aliases.add_version(name, FIELDS) == 2
+        versions = await aliases.version_page(name, ListParams())
     assert versions is not None
     assert [(v.version, v.status) for v in versions.data] == [(1, "retired"), (2, "current")]
 
-    row = {**FIELDS, "name": name, "version": 3, "kind": "chat", "status": "current", "created_at": now_iso()}
+    row = {
+        **FIELDS,
+        "tenant_id": "local",
+        "name": name,
+        "version": 3,
+        "kind": "chat",
+        "status": "current",
+        "created_at": now_iso(),
+    }
     engine = create_async_engine(database_url)
     try:
         with pytest.raises(IntegrityError):
-            async with engine.begin() as c:
+            async with as_account(engine, "local") as c:
                 await c.execute(sa.insert(model_aliases).values(**row))
         # A third retired version is no conflict: the index covers current rows only.
-        async with engine.begin() as c:
+        async with as_account(engine, "local") as c:
             await c.execute(sa.insert(model_aliases).values(**{**row, "status": "retired"}))
     finally:
         await engine.dispose()
-    assert (await aliases.current(name)) is not None
+    with isolation.scope("local", None):
+        assert (await aliases.current(name)) is not None

@@ -1358,6 +1358,25 @@
         "title": "Envelope[ListResult[ProviderOut]]",
         "type": "object"
       },
+      "Envelope_PlatformEventOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PlatformEventOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[PlatformEventOut]",
+        "type": "object"
+      },
       "Envelope_ProviderCreated_": {
         "additionalProperties": false,
         "properties": {
@@ -2050,6 +2069,72 @@
           "hasPrev"
         ],
         "title": "Pagination",
+        "type": "object"
+      },
+      "PlatformEventIn": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "teamId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Teamid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "key",
+          "teamId"
+        ],
+        "title": "PlatformEventIn",
+        "type": "object"
+      },
+      "PlatformEventOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "default": 0,
+            "title": "Changed",
+            "type": "integer"
+          },
+          "handled": {
+            "title": "Handled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "handled"
+        ],
+        "title": "PlatformEventOut",
         "type": "object"
       },
       "ProviderCreated": {
@@ -4107,7 +4192,7 @@
     },
     "/v1/models/chat-model": {
       "put": {
-        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet. The chat aliases are the install's, so this\nalso needs `install.manage` (403 `install_admin_only`).",
+        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet. The chat aliases are the account's, written\nas any alias is (`settings.manage`, 403 `admin_only`).",
         "operationId": "providers_set_chat_model",
         "parameters": [
           {
@@ -6331,6 +6416,147 @@
           "providers"
         ],
         "x-ops-public": "sdk"
+      }
+    },
+    "/v1/platform-events": {
+      "post": {
+        "description": "One event platform-service reports, acted on in the team its token names; the body only repeats it.",
+        "operationId": "platform_events_platform_event",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformEventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PlatformEventOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Platform Event",
+        "tags": [
+          "platform-events"
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/provider-keys": {

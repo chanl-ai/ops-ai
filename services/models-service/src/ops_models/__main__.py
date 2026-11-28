@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import uvicorn
 
 from ops_identity import Auth
+from ops_identity.fastapi import DEV_TENANT
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
 from ops_store.database import Database, open_database
@@ -15,7 +17,7 @@ from ops_store.schema_version import require_current_schema
 
 from .app import create_models_app
 from .connection_settings import ModelConnectionSettings
-from .seed import install_connection, seed
+from .seed import install_connection, seed, seed_account
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
@@ -25,7 +27,11 @@ async def _seed(engine: Database, settings: Settings, connection: ModelConnectio
     """Seeds on this short-lived loop, then empties the pool: its connections belong to this loop, and uvicorn serves
     on another, where reusing one fails with "attached to a different loop"."""
     await seed(
-        engine, settings.models_fake_openai_url, install_connection(connection), kb_daily_cap=settings.kb_ai_daily_cap
+        engine,
+        settings.models_fake_openai_url,
+        install_connection(connection),
+        tenant=settings.bootstrap_tenant_id or DEV_TENANT,
+        kb_daily_cap=settings.kb_ai_daily_cap,
     )
     await engine.dispose()
 
@@ -53,13 +59,27 @@ def main() -> None:
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="models-service")
     engine = open_database(settings.database_url)
+    account_models: Callable[[str], Awaitable[int]] | None = None
     if settings.environment == "dev":
         asyncio.run(_seed(engine, settings, connection))
+        install_tenant = settings.bootstrap_tenant_id or DEV_TENANT
+        installed = install_connection(connection)
+
+        # Each account the dev seed adds gets the install account's dev models, as its own rows.
+        async def made(tenant: str) -> int:
+            fake = settings.models_fake_openai_url
+            return await seed_account(
+                engine, tenant, install_tenant=install_tenant, fake_openai_url=fake, install=installed
+            )
+
+        account_models = made
+
     app = create_models_app(
         engine,
         auth=Auth.from_settings(settings, audience="models"),
         provider_secrets=dev_provider_keys(settings),
         overlap_seconds=settings.model_key_overlap_seconds,
+        account_models=account_models,
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.models_port, log_config=None, access_log=False)
 

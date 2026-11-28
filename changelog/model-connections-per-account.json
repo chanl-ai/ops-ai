@@ -1,0 +1,1 @@
+{"date": "2026-11-27", "title": "Model connections and aliases stay inside your account", "description": "Each account sees and calls only its own model connections and aliases. Upgrading clears existing ones, so an admin re-picks them.", "tag": "fix"}

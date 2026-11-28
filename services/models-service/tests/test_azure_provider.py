@@ -23,8 +23,9 @@ from fastapi import Header, Request
 from ops_identity import Principal, current_tenant_caller
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
+from ops_store import isolation
 
-from .conftest import SERVICE, Models
+from .conftest import ADMIN, SERVICE, Models
 
 FAKE = Path(__file__).resolve().parents[1] / "scripts" / "fake_openai"
 KEY = "azure-key-0123456789abcdef"
@@ -67,7 +68,7 @@ def _person(role: str) -> Any:
         if authorization:
             return await current_tenant_caller(request, authorization=authorization, x_team_id=x_team_id)
         team = "team_security" if role == "admin" else "team_ops"
-        return Principal(
+        p = Principal(
             kind="person",
             sub=f"usr_{role}",
             email=f"{role}@bank.example",
@@ -81,6 +82,9 @@ def _person(role: str) -> Any:
             # The workspace's Security team, which platform-service names in every person's token.
             security_team="team_security",
         )
+        # As the real dependency does: the request acts in the person's account, which holds its connections.
+        isolation.enter_caller(p, dev=False)
+        return p
 
     return caller
 
@@ -101,14 +105,14 @@ class Azure:
             "region": region,
             **extra,
         }
-        r = await self.client.post("/v1/models/providers", json=body, headers=SERVICE)
+        r = await self.client.post("/v1/models/providers", json=body, headers=ADMIN)
         assert r.status_code == 201, r.text
         return str(r.json()["data"]["id"])
 
     async def alias(self, provider_id: str) -> str:
         name = f"claims-{uuid4().hex[:8]}"
         version = {"name": name, "providerId": provider_id, "modelId": DEPLOYMENT, "clearedSensitivity": "internal"}
-        assert (await self.client.post("/v1/models/aliases", json=version, headers=SERVICE)).status_code == 201
+        assert (await self.client.post("/v1/models/aliases", json=version, headers=ADMIN)).status_code == 201
         return name
 
     async def call(self, alias: str, *, stream: bool = False, tools: bool = False) -> httpx.Response:
@@ -192,12 +196,12 @@ async def test_api_version_required_and_dated_at_least_2024_10_21(
 ) -> None:
     body = {"name": f"azure-{uuid4().hex[:8]}", "type": "azure-openai", "baseUrl": ENDPOINT, "keyRef": "AZURE_CLAIMS"}
     body |= {"apiVersion": "2024-10-21", "region": "swedencentral"}
-    r = await azure.client.post("/v1/models/providers", json=body | changes, headers=SERVICE)
+    r = await azure.client.post("/v1/models/providers", json=body | changes, headers=ADMIN)
     assert r.status_code == 400 and field in r.text, r.text
     # A rebind is held to the same rule as a create.
     pid = await azure.connect()
     moved = {"baseUrl": ENDPOINT, "keyRef": "AZURE_CLAIMS", "apiVersion": "2024-10-21", "region": "swedencentral"}
-    rebind = await azure.client.put(f"/v1/models/providers/{pid}", json=moved | changes, headers=SERVICE)
+    rebind = await azure.client.put(f"/v1/models/providers/{pid}", json=moved | changes, headers=ADMIN)
     assert rebind.status_code == 400 and field in rebind.text, rebind.text
 
 

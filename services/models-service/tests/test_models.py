@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ops_models.store import model_aliases, model_keys
 
-from .conftest import LOCAL, SERVICE, Models
+from .conftest import ADMIN, LOCAL, SERVICE, Models, accounts, as_account
 
 
 async def admit(m: Models, key_id: str, **extra: object) -> tuple[int, str | None]:
@@ -94,7 +94,7 @@ async def test_an_image_reaches_only_an_alias_cleared_for_images_and_every_call_
     assert (refused.status_code, refused.json()["error"]["code"]) == (403, "images_not_cleared"), refused.text
     name = f"pages-{uuid4().hex[:8]}"
     alias = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-pages", "clearedSensitivity": "internal"}
-    made = await models.client.post("/v1/models/aliases", json={**alias, "images": True}, headers=SERVICE)
+    made = await models.client.post("/v1/models/aliases", json={**alias, "images": True}, headers=ADMIN)
     assert made.status_code == 201, made.text
     versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [v["images"] for v in versions] == [True]
@@ -156,7 +156,7 @@ async def test_an_alias_name_may_contain_a_dot(models: Models) -> None:
         "modelId": "scripted-standard",
         "clearedSensitivity": "internal",
     }
-    r = await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)
+    r = await models.client.post("/v1/models/aliases", json=body, headers=ADMIN)
     assert r.status_code == 201, r.text
     versions = (await models.client.get("/v1/models/aliases/gpt-5.5/versions", headers=SERVICE)).json()["data"]["data"]
     assert versions[0]["modelId"] == "scripted-standard"
@@ -165,9 +165,9 @@ async def test_an_alias_name_may_contain_a_dot(models: Models) -> None:
 async def test_alias_versions_are_immutable_and_the_newest_serves(models: Models) -> None:
     name = f"bank-test-{datetime.now(UTC).strftime('%H%M%S%f')}"
     body = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-a", "clearedSensitivity": "internal"}
-    assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
+    assert (await models.client.post("/v1/models/aliases", json=body, headers=ADMIN)).status_code == 201
     v2 = {"providerId": "prov_scripted", "modelId": "scripted-b", "clearedSensitivity": "internal"}
-    r = await models.client.post(f"/v1/models/aliases/{name}/versions", json=v2, headers=SERVICE)
+    r = await models.client.post(f"/v1/models/aliases/{name}/versions", json=v2, headers=ADMIN)
     assert r.json()["data"]["version"] == 2
     versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [v["modelId"] for v in versions] == ["scripted-a", "scripted-b"]
@@ -189,13 +189,14 @@ async def test_one_tenant_spending_its_share_of_a_shared_key_leaves_other_tenant
     """Files-service extracts for every tenant on one key; a tenant that spends its share is refused while the
     next tenant still reads, and a call that names no tenant is refused rather than charged to the whole key."""
     key_id, secret = await models.key(budget="1")
+    await accounts(models.engine, "t_a", "t_b")
     async with models.engine.begin() as c:
         # Below one call's cost, as above: the first call by a tenant overshoots its share, the next is refused.
         await c.execute(model_keys.update().where(model_keys.c.id == key_id).values(tenant_budget=Decimal("0.000040")))
     first = await models.complete(secret, **{"X-Tenant-Id": "t_a"})
     again = await models.complete(secret, **{"X-Tenant-Id": "t_a"})
     other = await models.complete(secret, **{"X-Tenant-Id": "t_b"})
-    nobody = await models.complete(secret)
+    nobody = await models.complete(secret, **{"X-Tenant-Id": ""})
     assert first.status_code == 200 and other.status_code == 200, (first.text, other.text)
     assert (again.status_code, again.json()["error"]["code"]) == (429, "tenant_budget_exhausted"), again.text
     assert (nobody.status_code, nobody.json()["error"]["code"]) == (400, "tenant_required"), nobody.text
@@ -205,10 +206,10 @@ async def test_a_new_version_retires_the_one_serving_and_only_one_is_current(mod
     # Shared's chat alias had seven current versions (2026-10-18): which served was the query's order, not a rule.
     name = f"bank-cur-{datetime.now(UTC).strftime('%H%M%S%f')}"
     body = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-a", "clearedSensitivity": "internal"}
-    assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
+    assert (await models.client.post("/v1/models/aliases", json=body, headers=ADMIN)).status_code == 201
     for model in ("scripted-b", "scripted-c"):
         v = {"providerId": "prov_scripted", "modelId": model, "clearedSensitivity": "internal"}
-        assert (await models.client.post(f"/v1/models/aliases/{name}/versions", json=v, headers=SERVICE)).is_success
+        assert (await models.client.post(f"/v1/models/aliases/{name}/versions", json=v, headers=ADMIN)).is_success
     versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [(v["modelId"], v["status"]) for v in versions] == [
         ("scripted-a", "retired"),
@@ -216,5 +217,5 @@ async def test_a_new_version_retires_the_one_serving_and_only_one_is_current(mod
         ("scripted-c", "current"),
     ]
     with pytest.raises(IntegrityError):
-        async with models.engine.begin() as c:
+        async with as_account(models.engine, "local") as c:
             await c.execute(model_aliases.update().where(model_aliases.c.name == name).values(status="current"))

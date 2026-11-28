@@ -321,7 +321,8 @@ def model_alias() -> None:
     from ops_identity import mint_service_token  # noqa: PLC0415
     from ops_identity.service_keys import dev_service_signer  # noqa: PLC0415
 
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
+    tenant = os.environ.get("OPS_BOOTSTRAP_TENANT_ID") or "local"
+    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant)
     with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
         providers = data(m.get("/v1/models/providers", params={"search": DEMO_PROVIDER}), "model providers")["data"]
         found = next((p for p in providers if p["name"] == DEMO_PROVIDER), None)

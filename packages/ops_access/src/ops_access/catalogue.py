@@ -236,8 +236,7 @@ CHAT_USER = BuiltinRole(
 OWNER = BuiltinRole(
     "owner",
     "Owner",
-    "Transfers, closes and restores the workspace, and changes the model aliases every team runs on. One person holds "
-    "it, and only a transfer moves it.",
+    "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
     (("workspace", "manage", "all"), ("install", "manage", "all")),
 )
 BUILTIN_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, SECURITY_ADMIN, CHAT_USER, OWNER)

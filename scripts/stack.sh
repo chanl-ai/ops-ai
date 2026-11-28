@@ -183,7 +183,7 @@ cmd_of() {
     # identity providers send people back to platform-service's public URL and on to the console; reset links
     # go out through Mailpit like every other mail the stack sends (read them at http://localhost:$OPS_MAILPIT_HTTP_PORT).
     # OPS_TOOLS_PUBLIC_URL is where a team's MCP address lives, so platform-service issues an assistant's token for it.
-    platform) echo "env OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_TOOLS_PUBLIC_URL=http://localhost:$TOOLS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
+    platform) echo "env OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_TOOLS_PUBLIC_URL=http://localhost:$TOOLS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
     # Agents call tools through tools-service's gateway and are seeded with agents granted its operations.
     # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail.
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;

@@ -596,7 +596,8 @@ class Settings(BaseSettings):
             # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
             # workspace closed. connections:delete: a member removed from a team has their own accounts on its
             # apps deleted in tools-service. tools:create, agents:create: a new team's defaults are written
-            # by each service when platform-service reports the team.
+            # by each service when platform-service reports the team. In dev only it also gains settings:manage
+            # (`_dev_platform_scopes`).
             "platform": ["workflows:view", "connections:delete", "tools:create", "agents:create"],
         }
     )
@@ -758,6 +759,16 @@ class Settings(BaseSettings):
         """Whether this install has any plugin: one in the plugins folder, a developer's plugin path, or an installed
         plugin package. With none, no plugin is read, no plugin route is mounted and kb-service calls no tool."""
         return bool(self.plugin_folders) or _installed_plugins()
+
+    @model_validator(mode="after")
+    def _dev_platform_scopes(self) -> Settings:
+        # models-service writes a new account's dev models, `default` among them, when platform-service reports the
+        # account's first team; outside dev no account is seeded, so a platform token never holds the admin cell.
+        if self.environment == "dev" and "service_scopes" not in self.model_fields_set:
+            platform = self.service_scopes.get("platform", [])
+            if "settings:manage" not in platform:
+                self.service_scopes = {**self.service_scopes, "platform": [*platform, "settings:manage"]}
+        return self
 
     @model_validator(mode="after")
     def _plugin_scopes(self) -> Settings:

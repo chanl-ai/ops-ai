@@ -7,9 +7,12 @@ operator binds it to a real provider with a credential."""
 
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 
+from ops_identity.fastapi import DEV_TENANT
 from ops_service_kit.ids import now_iso
+from ops_store import isolation
 from ops_store.database import Database
 
 from .app import secret_hash
@@ -90,12 +93,50 @@ async def seed(
     fake_openai_url: str | None = None,
     install: InstallConnection | None = None,
     *,
+    tenant: str = DEV_TENANT,
     kb_daily_cap: float = 50.0,
 ) -> None:
-    providers, aliases, keys = Providers(db), Aliases(db), ModelKeys(db)
+    """Seeds `tenant`, the install's account, with its connections and aliases (`seed_account`), and the install's
+    keys."""
+    await seed_account(db, tenant, install_tenant=tenant, fake_openai_url=fake_openai_url, install=install)
+    await _keys(db, kb_daily_cap)
+
+
+def connection_id(base: str, tenant: str, install_tenant: str) -> str:
+    """The id of a seeded connection in `tenant`. A connection id is unique across the install, so another account's
+    copy of `scripted` or `openai-local` gets its own; the install's account keeps the plain ids its scripts name."""
+    if tenant == install_tenant:
+        return base
+    return f"{base}_{hashlib.sha256(tenant.encode()).hexdigest()[:12]}"
+
+
+async def seed_account(
+    db: Database,
+    tenant: str,
+    *,
+    install_tenant: str,
+    fake_openai_url: str | None,
+    install: InstallConnection | None,
+) -> int:
+    """`tenant`'s dev connections and aliases, `default` among them when there is an OpenAI-compatible model, written
+    as that account; rows it already holds are left alone. Returns how many aliases it made."""
+    with isolation.scope(tenant, None):
+        return await _connections_and_aliases(
+            db,
+            fake_openai_url,
+            install,
+            connection_id(SCRIPTED, tenant, install_tenant),
+            connection_id(OPENAI_LOCAL, tenant, install_tenant),
+        )
+
+
+async def _connections_and_aliases(
+    db: Database, fake_openai_url: str | None, install: InstallConnection | None, scripted: str, openai_local: str
+) -> int:
+    providers, aliases = Providers(db), Aliases(db)
     await providers.ensure(
         {
-            "id": SCRIPTED,
+            "id": scripted,
             "name": "scripted",
             "type": "scripted",
             "base_url": None,
@@ -103,13 +144,13 @@ async def seed(
             "created_at": now_iso(),
         }
     )
-    bound = {name: (SCRIPTED, *row) for name, row in ALIASES.items()}
+    bound = {name: (scripted, *row) for name, row in ALIASES.items()}
     if install is not None:
         # The settings win over whatever the row held, type included, so setting OPENAI_API_TYPE moves the stack's
         # default model on the next start; the fake is not used.
         await providers.ensure(
             {
-                "id": OPENAI_LOCAL,
+                "id": openai_local,
                 "name": OPENAI_LOCAL,
                 "type": install["type"],
                 "base_url": install["base_url"],
@@ -119,12 +160,12 @@ async def seed(
                 "created_at": now_iso(),
             }
         )
-        await providers.rebind(OPENAI_LOCAL, install)
-        bound |= {name: (OPENAI_LOCAL, *row) for name, row in OPENAI_ALIASES.items()}
+        await providers.rebind(openai_local, install)
+        bound |= {name: (openai_local, *row) for name, row in OPENAI_ALIASES.items()}
     elif fake_openai_url:
         await providers.ensure(
             {
-                "id": OPENAI_LOCAL,
+                "id": openai_local,
                 "name": OPENAI_LOCAL,
                 "type": "openai-compatible",
                 "key_ref": None,
@@ -135,10 +176,11 @@ async def seed(
         # The fake's URL wins over whatever a dev database kept (an old port, a provider with no credential), so
         # `default` does not reach a real provider by accident. A row with a credential name was bound to a real
         # provider on purpose (`make demo-model`, the shared stack's make up) and keeps it. Dev only.
-        await providers.follow_url(OPENAI_LOCAL, fake_openai_url)
-        bound |= {name: (OPENAI_LOCAL, *row) for name, row in OPENAI_ALIASES.items()}
+        await providers.follow_url(openai_local, fake_openai_url)
+        bound |= {name: (openai_local, *row) for name, row in OPENAI_ALIASES.items()}
+    made = 0
     for name, (provider, kind, model, ceiling, price_in, price_out) in bound.items():
-        await aliases.create(
+        created = await aliases.create(
             name,
             kind,
             {
@@ -149,6 +191,12 @@ async def seed(
                 "output_per_million": Decimal(price_out),
             },
         )
+        made += created is True
+    return made
+
+
+async def _keys(db: Database, kb_daily_cap: float) -> None:
+    keys = ModelKeys(db)
     identities = [(f"agent:{a}", "agent", dev_secret(a)) for a in AGENTS] + [
         (RUNTIME_KEY, "purpose", RUNTIME_SECRET),
         (EXTRACT_KEY, "purpose", EXTRACT_SECRET),

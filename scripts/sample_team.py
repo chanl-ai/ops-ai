@@ -1114,7 +1114,7 @@ def local(admin: Session) -> bool:
     return httpx.URL(admin.urls["platform"]).host in {"127.0.0.1", "localhost"}
 
 
-def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
+def ensure_fake_aliases(fakes: dict[str, Any], tenant: str) -> None:
     """The alias the team's agents name, served by the stack's fake model (its committed rules answer each alias by
     name), through models-service's own admin routes with a dev service token. The aliases the guardrail checks,
     memory and document reads use join it only when MODEL is `fake` (make sample-team passes make up's DEMO_MODEL), so
@@ -1122,7 +1122,8 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
     model = os.environ.get("MODEL") or "fake"
     port = os.environ.get("OPS_MODELS_PORT", "8730")
     fake_url = f"http://127.0.0.1:{os.environ.get('OPS_FAKE_OPENAI_PORT', '8746')}/v1"
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
+    # As the admin's own account: connections and aliases are each account's.
+    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant)
     with httpx.Client(base_url=f"http://127.0.0.1:{port}", headers={"Authorization": f"Bearer {token}"}) as m:
         # The connections this needs, by id or by name, rather than one page of them all.
         asked = ({"ids": FAKE_PROVIDER}, {"search": FAKE_PROVIDER}, {"search": "openai-local"})
@@ -1197,7 +1198,7 @@ def ensure_fakes(admin: Session, lead: Session, fakes: dict[str, Any]) -> None:
     if not local(admin):
         say("SKIP", "model aliases and egress", "not a local stack")
         return
-    ensure_fake_aliases(fakes)
+    ensure_fake_aliases(fakes, str(data(admin("platform").get("/v1/me"))["tenantId"]))
     ensure_egress(admin, fakes)
 
 

@@ -1,8 +1,8 @@
 """Every table that holds or points at a credential is held by the database (the proof for C1-C4): another
 team or tenant reads none of a row the owner wrote, through any SQL, as the service's own login or as its tenant role
-scoped elsewhere; only the service's tenant role, scoped to the row's team or tenant, reads it. The two install tables
-(an install's model connections, and model keys spent for many tenants) name no tenant and hold no secret value, so
-there is nothing of a tenant's in them to hide; they are checked to stay that way.
+scoped elsewhere; only the service's tenant role, scoped to the row's team or tenant, reads it. The install table
+(model keys, spent for many tenants) names no tenant and holds no secret value, so there is nothing of a tenant's in it
+to hide; it is checked to stay that way.
 
 Runs on a scratch database of the server OPS_TEST_DATABASE_URL names, with the tools and models chains migrated and
 each chain's runtime login made as a deploy makes it (no superuser, no BYPASSRLS); skipped without PostgreSQL."""
@@ -54,8 +54,8 @@ TOOLS = (
     connection_audit,
     secret_audit,
 )
-MODELS_LOCKED = (models_tables.provider_keys, models_tables.model_key_tenants)
-MODELS_INSTALL = (models_tables.provider_connections, models_tables.model_keys)
+MODELS_LOCKED = (models_tables.provider_keys, models_tables.model_key_tenants, models_tables.provider_connections)
+MODELS_INSTALL = (models_tables.model_keys,)
 ROLES = {"tools": "ops_tools_tenant", "models": "ops_models_tenant"}
 
 

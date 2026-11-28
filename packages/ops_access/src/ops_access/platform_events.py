@@ -13,12 +13,11 @@ from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_identity import CurrentService
 from ops_service_kit.errors import ValidationFailed
-from ops_service_kit.http import Envelope, Json, Out, error_responses, ok
+from ops_service_kit.http import Envelope, In, Json, Out, error_responses, ok
 
 from .check import can
 
@@ -40,9 +39,7 @@ class Handler:
     act: Callable[[str, str, Json], Awaitable[int]]
 
 
-class PlatformEventIn(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
+class PlatformEventIn(In):
     name: str = Field(min_length=1, max_length=120)
     key: str = Field(min_length=1, max_length=200)
     team_id: str = Field(min_length=1, max_length=64)

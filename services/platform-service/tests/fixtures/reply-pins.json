@@ -12919,7 +12919,7 @@
       {
         "assignmentCount": 0,
         "builtin": true,
-        "description": "Transfers, closes and restores the workspace, and changes the model aliases every team runs on. One person holds it, and only a transfer moves it.",
+        "description": "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
         "id": "owner",
         "name": "Owner",
         "permissionCount": 2

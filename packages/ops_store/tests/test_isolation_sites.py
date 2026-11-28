@@ -146,11 +146,8 @@ WIDENINGS: dict[str, set[str]] = {
     "PURGE_WITHDRAWN": {"services/kb-service/src/ops_kb/schedule.py"},
     "FIND_PENDING": {"services/kb-service/src/ops_kb/embedding.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
-    # The install's model provider connections, read by every tenant's calls (`Store.install_tx`, no tenant).
-    "CONNECTIONS": {"services/models-service/src/ops_models/store/providers.py"},
-    # Its aliases, model keys and their spend, read by a completion that authenticates by a model key and names no
-    # tenant; a call that names none is written there too.
-    "ALIASES": {"services/models-service/src/ops_models/store/aliases.py"},
+    # The install's model keys and their spend, read by a completion that authenticates by a model key before its
+    # tenant is known; a call that names none is written there too.
     "MODEL_KEYS": {"services/models-service/src/ops_models/store/keys.py"},
     "KEY_SPEND": {"services/models-service/src/ops_models/store/calls.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
@@ -229,6 +226,8 @@ ENTRIES: dict[str, set[str]] = {
         "services/tools-service/src/ops_tools/store/send_policies.py",
         # A model call reads its tenant's provider key, or the deployment's when it names none.
         "services/models-service/src/ops_models/provider_keys.py",
+        # The dev seed writes the install account's connections and aliases as that account.
+        "services/models-service/src/ops_models/seed.py",
         # A per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).
         "services/models-service/src/ops_models/app.py",
     },

@@ -82,7 +82,9 @@ def main() -> int:
         print(__doc__)
         return 2
     to_fake = model == "fake"
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
+    # As the install's account, which holds the connection and the aliases this moves.
+    tenant = os.environ.get("OPS_BOOTSTRAP_TENANT_ID") or "local"
+    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant)
     with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
         # PROVIDER is a connection's id or its name: `ids` finds the one, `search` the other.
         listed = data(m.get("/v1/models/providers", params={"ids": PROVIDER}))["data"]

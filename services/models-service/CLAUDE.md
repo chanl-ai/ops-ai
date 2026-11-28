@@ -24,7 +24,7 @@ runs it with `OPS_MODELS_FAKE_OPENAI_URL` pointing at the fake OpenAI (`scripts/
 | `scripts/sync_catalog.py` | Refreshes the catalog snapshot (model facts only, no ranges) from models.dev and LiteLLM (`make catalog-sync`); review and commit the diff |
 | `src/ops_models/provider_keys.py` | Account provider keys, sealed, never returned |
 | `src/ops_models/seed.py` | The dev seed: scripted connection, `bank-*` aliases, model keys `mk_dev_agents`, `mk_dev_extract`, `mk_dev_tools_check` and one per agent |
-| `src/ops_models/store/` | All database code; `store/provider_keys.py:20` names the tenant role `ops_models_tenant` |
+| `src/ops_models/store/` | All database code; `store/provider_keys.py:20` names the tenant role `ops_models_tenant`, which provider keys, connections and alias reads run as |
 | `scripts/fake_openai/` | A keyless stand-in for OpenAI's chat API, driven by `seed/demo-fake-openai/script.json` |
 | `migrations/` | Its own chain, version table `alembic_version_models` |
 | `tests/` | Admission, keys, providers, Azure, the fake OpenAI's rules, row isolation; no real model call |
@@ -74,8 +74,9 @@ gets 401 there; aliases also answer an account admin. Reference:
 
 - A billed call whose settle fails twice => log the whole charge with a replay command; the call's row stays and one charge per call is tested
 - A migration that adds an index a later revision also adds => guard the create and the drop with exists checks; a database that ran the first lacks it going down
-- An alias write => it needs `install.manage`, held by Owner; a test acting as another role gets a refusal
+- An alias write => it needs `settings.manage` from the roles matrix, as connections do; a test acting as a viewer gets 403 `admin_only`
 - A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/test_statement_budget.py` fails any route without a row
+- A new read of provider connections or aliases => run it in `self.tx()` with `providers.mine()` or `aliases.ours()` in the query; an install-wide read lets one account see, re-point or call another account's connection
 - A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/models-service -q <tests>` before the push
 
 ## Reference docs

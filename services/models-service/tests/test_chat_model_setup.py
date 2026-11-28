@@ -12,11 +12,11 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from ops_identity.fastapi import current_principal
+from ops_identity.fastapi import current_principal, current_tenant_caller
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
 
-from .conftest import SERVICE, Models
+from .conftest import Models
 from .test_provider_keys import people
 
 AZURE = "https://contoso.openai.azure.com"
@@ -51,11 +51,11 @@ def _provider(seen: list[tuple[str, str, str]]) -> httpx.AsyncClient:
 async def rig(models: Models) -> AsyncIterator[Rig]:
     seen: list[tuple[str, str, str]] = []
     tenant = f"t_{uuid4().hex[:8]}"
-    # Aliases are install-wide; fresh names stand in for `default` and `assistant` so tests do not share them.
+    # Fresh names stand in for `default` and `assistant`, which the seeded account holds.
     names = (f"chat-{uuid4().hex[:8]}", f"assist-{uuid4().hex[:8]}")
     app = create_models_app(models.engine, upstream=_provider(seen), chat_aliases=names)
-    # The install's first admin chooses the chat model: an account admin who is also the workspace's Owner.
-    app.dependency_overrides[current_principal] = people(tenant, owner=True)
+    # The account admin chooses the chat model, with settings.manage as for any alias.
+    app.dependency_overrides[current_principal] = app.dependency_overrides[current_tenant_caller] = people(tenant)
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://models", event_hooks=hooks
@@ -94,7 +94,7 @@ async def test_a_second_choice_moves_chat_without_a_second_connection(rig: Rig) 
     assert again.status_code == 200, again.text
     assert (await rig.complete(rig.aliases[0])).status_code == 200
     assert rig.seen[-1][2] == "gpt-4.1"
-    versions = await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)
+    versions = await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions")
     assert [v["version"] for v in versions.json()["data"]["data"]] == [1, 2]
     assert len({v["providerId"] for v in versions.json()["data"]["data"]}) == 1
 
@@ -105,7 +105,7 @@ async def test_only_an_account_admin_with_a_saved_key_sets_the_chat_model(rig: R
     assert (await rig.client.put("/v1/models/chat-model", json=body, headers=member)).status_code == 403
     missing = await rig.client.put("/v1/models/chat-model", json={**body, "keyName": "NOT_SAVED"})
     assert missing.status_code == 404, missing.text
-    assert (await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)).status_code == 404
+    assert (await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions")).status_code == 404
 
 
 async def test_an_azure_endpoint_outside_openai_azure_com_is_refused(rig: Rig) -> None:
@@ -118,11 +118,11 @@ async def test_a_new_chat_model_keeps_the_prices_the_alias_had(rig: Rig) -> None
     first = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
     assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
     url = f"/v1/models/aliases/{rig.aliases[0]}/versions"
-    held = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
+    held = (await rig.client.get(url)).json()["data"]["data"][-1]
     price = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
     body = {"providerId": held["providerId"], "modelId": held["modelId"], "clearedSensitivity": "confidential", **price}
-    assert (await rig.client.post(url, json=body, headers=SERVICE)).status_code in (200, 201)
+    assert (await rig.client.post(url, json=body)).status_code in (200, 201)
     again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-4.1"})
     assert again.status_code == 200, again.text
-    now = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
+    now = (await rig.client.get(url)).json()["data"]["data"][-1]
     assert (now["modelId"], float(now["inputPerMillion"]), float(now["outputPerMillion"])) == ("gpt-4.1", 2.5, 10.0)

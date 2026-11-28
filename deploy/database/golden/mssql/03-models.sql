@@ -1,8 +1,9 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at 20261122_2017_list_sort_indexes
+-- models-service, stamped at 20261128_0015_conn_per_account
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
 	type VARCHAR(32) NOT NULL, 
 	base_url VARCHAR(400) NULL, 
@@ -12,7 +13,7 @@ CREATE TABLE provider_connections (
 	observed_region VARCHAR(64) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT provider_connections_pkey PRIMARY KEY (id), 
-	CONSTRAINT provider_connections_name_key UNIQUE (name)
+	CONSTRAINT uq_provider_connections_tenant_name UNIQUE (tenant_id, name)
 );
 GO
 CREATE INDEX ix_provider_connections_type ON provider_connections (type);
@@ -137,6 +138,7 @@ CREATE TABLE model_key_spend (
 );
 GO
 CREATE TABLE model_aliases (
+	tenant_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
 	version INTEGER NOT NULL, 
 	kind VARCHAR(16) NOT NULL, 
@@ -149,11 +151,11 @@ CREATE TABLE model_aliases (
 	created_at VARCHAR(32) NOT NULL, 
 	reasoning_effort VARCHAR(16) NULL, 
 	images BIT NOT NULL DEFAULT 0, 
-	CONSTRAINT model_aliases_pkey PRIMARY KEY (name, version), 
+	CONSTRAINT model_aliases_pkey PRIMARY KEY (tenant_id, name, version), 
 	CONSTRAINT model_aliases_provider_id_fkey FOREIGN KEY(provider_id) REFERENCES provider_connections (id)
 );
 GO
-CREATE UNIQUE INDEX ux_model_aliases_current ON model_aliases (name) WHERE status = 'current';
+CREATE UNIQUE INDEX ux_model_aliases_current ON model_aliases (tenant_id, name) WHERE status = 'current';
 GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
@@ -164,6 +166,12 @@ GO
 CREATE FUNCTION ops_security.models_tenant_write (@tenant_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
 SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+GO
+CREATE SECURITY POLICY ops_security.provider_connections_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.provider_connections,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.provider_connections AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.provider_connections AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.provider_keys_tenant
     ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.provider_keys,
@@ -183,10 +191,16 @@ CREATE SECURITY POLICY ops_security.model_call_log_tenant
     ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_call_log AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.model_aliases_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.model_aliases,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_aliases AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_aliases AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_models (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('20261122_2017_list_sort_indexes');
+INSERT INTO alembic_version_models (version_num) VALUES ('20261128_0015_conn_per_account');
 GO

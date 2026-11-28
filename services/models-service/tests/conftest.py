@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from uuid import uuid4
 
 import httpx
@@ -18,33 +18,123 @@ import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from fastapi import Header, Request
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_identity import dev_service_signer, mint_service_token
+from ops_access import builtin_roles_for
+from ops_identity import Principal, dev_service_signer, mint_service_token
+from ops_identity.fastapi import current_principal, current_tenant_caller
 from ops_models.app import create_models_app
-from ops_models.seed import seed
+from ops_models.seed import seed, seed_account
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
+from ops_store import isolation
 from ops_store.database import open_database
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 ROOT = Path(__file__).parents[1]
-# agents-service's Ed25519 token for models-service's internal routes (dev key, dev only), naming its tenant.
+# agents-service's Ed25519 token for models-service's internal routes (dev key, dev only), naming its tenant. It holds
+# settings:view, as agents-service's model picker claims it, so it reads the account's connections and aliases; only an
+# account admin (ADMIN) changes them.
+READS = ["settings:view"]
 SERVICE = {
     "Authorization": "Bearer "
-    + mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="local", ttl_s=3600)
+    + mint_service_token(
+        dev_service_signer(), service="agents", audience="models", tenant_id="local", ttl_s=3600, scopes=READS
+    )
 }
+# The seeded account's admin, signed in (`people`): the one who connects providers and makes aliases.
+ADMIN = {"X-Test-Person": "admin"}
+
+
+def admin_as(tenant: str) -> dict[str, str]:
+    """`tenant`'s account admin, signed in."""
+    return {**ADMIN, "X-Tenant-Id": tenant}
 
 
 # A caller's own tenant, as every real caller names it: the call log is that tenant's, read by its service token.
 LOCAL = {"X-Tenant-Id": "local"}
 
 
-def _service(tenant: str) -> dict[str, str]:
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant, ttl_s=3600)
+async def accounts(engine: Any, *tenants: str) -> None:
+    """Each of `tenants` with the seeded account's connections and aliases as its own, as a new account gets them."""
+    for tenant in tenants:
+        await seed_account(engine, tenant, install_tenant="local", fake_openai_url=None, install=None)
+
+
+@asynccontextmanager
+async def as_account(engine: AsyncEngine, tenant: str) -> AsyncGenerator[AsyncConnection]:
+    """One transaction as `tenant`'s service reads and writes: on SQL Server the tenant policy hides and refuses
+    another account's rows even for the database owner, so raw SQL on a per-account table runs here."""
+    with isolation.scope(tenant, None):
+        async with isolation.isolated_tx(engine, role="ops_models_tenant") as c:
+            yield c
+
+
+def service_as(tenant: str) -> dict[str, str]:
+    token = mint_service_token(
+        dev_service_signer(), service="agents", audience="models", tenant_id=tenant, ttl_s=3600, scopes=READS
+    )
     return {"Authorization": f"Bearer {token}"}
+
+
+def people(tenant: str) -> Any:
+    """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
+    is the account admin). A request with a bearer token (a service) is resolved as usual."""
+
+    async def as_person(
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+        x_team_id: Annotated[str | None, Header()] = None,
+        x_role: Annotated[str | None, Header()] = None,
+    ) -> Principal:
+        if authorization:
+            return await current_principal(request, authorization=authorization)
+        team = x_team_id or "team_security"
+        held = list(builtin_roles_for(x_role or "admin", security_team=team == "team_security"))
+        p = Principal(
+            kind="person",
+            sub="usr_nadia",
+            email="nadia@harborpine.example",
+            name="nadia",
+            tenant_id=tenant,
+            team_id=team,
+            team_ids=[team],
+            roles={team: x_role or "admin"},
+            access={team: held},
+            scopes=[],
+            auth_method="session",
+            # The workspace's Security team, which platform-service names in every person's token.
+            security_team="team_security",
+        )
+        # As the real dependency does: the request acts in the person's tenant and team, which the database holds
+        # provider keys to.
+        isolation.enter_caller(p, dev=False)
+        return p
+
+    return as_person
+
+
+def admins(real: Any) -> Any:
+    """`real` (a caller dependency), except that a request marked X-Test-Person is that role, signed in to the account
+    X-Tenant-Id names (default the seeded one), as `people` resolves it."""
+
+    async def caller(
+        request: Request,
+        *,
+        authorization: Annotated[str | None, Header()] = None,
+        x_api_key: Annotated[str | None, Header()] = None,
+        x_team_id: Annotated[str | None, Header()] = None,
+        x_test_person: Annotated[str | None, Header()] = None,
+        x_tenant_id: Annotated[str | None, Header()] = None,
+    ) -> Principal:
+        if x_test_person is None:
+            return await real(request, authorization=authorization, x_api_key=x_api_key, x_team_id=x_team_id)
+        return await people(x_tenant_id or "local")(request, None, x_team_id, x_test_person)
+
+    return caller
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -121,7 +211,10 @@ class Models:
             "messages": [{"role": "user", "content": "Summarise the dispute for case DSP-2210 please"}],
         }
         return await self.client.post(
-            "/v1/models/chat/completions", json=body, headers={"Authorization": f"Bearer {secret}", **headers}
+            "/v1/models/chat/completions",
+            json=body,
+            # As the seeded account unless a test names another: every alias is an account's.
+            headers={"Authorization": f"Bearer {secret}", **LOCAL, **headers},
         )
 
     async def calls(self, key_id: str, tenant: str = "local") -> list[dict[str, Any]]:
@@ -130,7 +223,7 @@ class Models:
         page = 1
         while True:
             params = {"keyId": key_id, "page": page}
-            r = await self.client.get("/v1/models/calls", params=params, headers=_service(tenant))
+            r = await self.client.get("/v1/models/calls", params=params, headers=service_as(tenant))
             body = r.json()["data"]
             found += body["data"]
             if not body["pagination"]["hasNext"]:
@@ -149,6 +242,8 @@ async def models(database_url: str) -> AsyncIterator[Models]:
     engine = open_database(database_url)
     await seed(engine)
     app = create_models_app(engine, overlap_seconds=2)
+    app.dependency_overrides[current_principal] = admins(current_principal)
+    app.dependency_overrides[current_tenant_caller] = admins(current_tenant_caller)
     # Every JSON response is checked against the app's own OpenAPI document.
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)

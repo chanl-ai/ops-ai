@@ -1,7 +1,7 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
 """uc-792 An admin connects Anthropic and an agent's model settings reach its chat, api layer:
-docs/usecases/models-service/an-admin-connects-anthropic-and-an.md, steps 1-7 and 16.
+docs/usecases/models-service/an-admin-connects-anthropic-and-an.md, steps 1-7, 4a and 16.
 
 The run's own models-service and the fake OpenAI (services/models-service/scripts/fake_openai), standing in for
 Anthropic's OpenAI-compatible endpoint: it answers only the key in FAKE_OPENAI_API_KEY and keeps the settings of each
@@ -70,6 +70,16 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc792-fake-"))) as fake_v1:
         version = {"providerId": pid, "modelId": MODEL, "clearedSensitivity": "confidential"}
         mapped = m.post("/v1/models/aliases", json={"name": ALIAS, **version}, headers=ADMIN)
         check("4 the admin maps alias fast to Claude Haiku 4.5 on it", mapped.status_code == 201, mapped.text[:300])
+
+        # The account admin re-points the alias with no owner rule in between. Dev sign-in carries no roles, so the
+        # member's refusal (403 admin_only) is the ui layer's step 15, on platform sign-in.
+        repointed = m.post(f"/v1/models/aliases/{ALIAS}/versions", json=version, headers=ADMIN)
+        versions = [v.get("version") for v in (data(m.get(f"/v1/models/aliases/{ALIAS}/versions", headers=ADMIN)) or {}).get("data", [])]
+        check(
+            "4a the admin re-points alias fast: it now has versions 1 and 2",
+            repointed.status_code == 201 and versions == [1, 2],
+            {"repointed": repointed.text[:200], "versions": versions},
+        )
 
         with agents(models_url=models_url, models_key="mk_dev_agents") as api:
             knobs = data(api.get(f"/v1/model-aliases/{ALIAS}/knobs", headers=BUILDER)) or {}

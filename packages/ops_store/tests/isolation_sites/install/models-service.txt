@@ -1,8 +1,5 @@
 # models-service: install-wide blocks by reason and declared tables, and blocks that declare none
 # (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
-2 ALIASES model_aliases,provider_connections
-3 ALIASES model_aliases
-7 CONNECTIONS provider_connections
 2 KEY_SPEND model_key_spend
 1 KEY_SPEND model_calls_untenanted,model_key_spend
 9 MODEL_KEYS model_keys

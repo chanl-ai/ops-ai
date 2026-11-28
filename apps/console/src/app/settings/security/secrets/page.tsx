@@ -13,7 +13,7 @@ export default function OldSecretsPage() {
     router.replace('/data/secrets?tab=secrets');
   }, [router]);
   return (
-    <PageLayout title="Opening Credentials">
+    <PageLayout title="Opening Credentials" preview={false}>
       <RecordSkeleton />
     </PageLayout>
   );
