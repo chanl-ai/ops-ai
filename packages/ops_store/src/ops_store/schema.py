@@ -354,7 +354,9 @@ def role_ddl(name: str, *, bypass: bool = False) -> str:
     """PostgreSQL: a role with no login a migration grants tables to; `bypass` makes it a system role that row-level
     security does not apply to. Roles are cluster-wide, so one made by another database is left as it is."""
     attrs = "NOLOGIN BYPASSRLS" if bypass else "NOLOGIN"
-    return f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+    return (
+        f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$"
+    )
 
 
 def member_ddl(role: str, login: str) -> str:

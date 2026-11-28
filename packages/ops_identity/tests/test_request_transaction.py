@@ -37,7 +37,7 @@ from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
 from ops_store.dialect import dialect_of
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, role_ddl
 from ops_store.store import Store
 
 ISSUER = Ed25519Signer.generate("platform-1")
@@ -111,11 +111,7 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             await c.run_sync(meta.drop_all)
             await c.run_sync(meta.create_all)
             if request.param == "postgresql":
-                await c.execute(
-                    sa.text(
-                        f"DO $$ BEGIN CREATE ROLE {ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
-                    )
-                )
+                await c.execute(sa.text(role_ddl(ROLE)))
                 await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {notes.name} TO {ROLE}"))
         yield e
         async with e.begin() as c:
