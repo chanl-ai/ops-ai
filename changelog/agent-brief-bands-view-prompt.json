@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-21",
-  "title": "One brief card and View prompt",
-  "description": "An agent's brief is one card with a band for each heading: Job, How to answer, Hand off when, Examples and Never. View prompt in its footer shows the exact prompt the model reads, and plain-text mode is gone.",
-  "tag": "improved"
-}

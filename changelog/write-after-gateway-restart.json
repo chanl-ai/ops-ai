@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-22",
-  "title": "A write cut off by a restart waits for a person",
-  "description": "When the service sending a write stops mid-call and nothing says whether the write ran, the run now pauses as Stuck for someone to check, instead of failing. A write marked safe to repeat is sent again.",
-  "tag": "improved"
-}

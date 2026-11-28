@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-20",
-  "title": "One team's runs cannot take every worker",
-  "description": "An install can cap how many workflow runs one team has running at once, so a team at its cap waits while other teams' runs go ahead. A run waiting for a person or a timer does not use up a slot.",
-  "tag": "improved"
-}
