@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-28",
+  "title": "Upgrades from 1.1 finish without a superuser",
+  "description": "Upgrading an install on 1.1 or older now completes when the database user that runs the upgrade owns the tables but is not a superuser.",
+  "tag": "fix"
+}
