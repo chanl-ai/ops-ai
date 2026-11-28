@@ -328,6 +328,9 @@ class Interrupt:
     # By skill id, the step tools a skill stopped before the pause still holds: the resumed turn is the same reply, so
     # they stay off offer in it. Empty on a pause stored without it.
     held: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    # A pause that belongs to another turn this call ran, a helper agent's on its own thread ({threadId,
+    # interruptId}): deciding it decides that turn's call, and this turn goes on once that one has answered.
+    nested: Json | None = None
 
 
 @dataclass(frozen=True)

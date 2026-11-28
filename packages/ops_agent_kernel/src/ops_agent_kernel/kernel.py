@@ -900,7 +900,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             if outcome.needs_review is not None and not ctx.tool_call_approved:
                 # The gateway would not send it without a person: the turn pauses for approval with the reason.
                 rec.status = "gated"
-                raise contract.LoopPause(outcome.needs_review)
+                raise contract.LoopPause(outcome.needs_review, outcome.nested)
             rec.duration_ms = int((time.monotonic() - started) * 1000)
             rec.status = "ok" if outcome.ok else "error"
             if outcome.ok:
@@ -1093,7 +1093,14 @@ def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
 
 
 def _paused(
-    state: _TurnState, *, tool_call_id: str, tool: str, arguments: Json, why: str | None, history: bytes
+    state: _TurnState,
+    *,
+    tool_call_id: str,
+    tool: str,
+    arguments: Json,
+    why: str | None,
+    history: bytes,
+    nested: Json | None = None,
 ) -> Interrupt:
     """The turn's pause at one call, with the loop's own record of the run (`history`) to resume it from."""
     rec = state.record(tool_call_id, tool, arguments)
@@ -1118,6 +1125,7 @@ def _paused(
         plan=state.plan,
         run=state.run.model_copy(deep=True) if state.tracks else None,
         held={k: list(v) for k, v in state.held.items()},
+        nested=nested,
     )
 
 
@@ -1740,6 +1748,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             arguments=output.arguments,
             why=output.reason,
             history=output.state,
+            nested=output.nested,
         )
         yield ToolOutput(state.records[interrupt.pending_call.tool_call_id])
         yield Interrupted(interrupt)

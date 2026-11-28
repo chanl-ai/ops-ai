@@ -61,7 +61,7 @@ class _Run:
         self.events: list[LoopEvent] = []
         self.approved: set[str] = set()
         self.rejected: dict[str, str] = {}
-        self.paused: tuple[str, str, Json, str | None] | None = None
+        self.paused: tuple[str, str, Json, str | None, Json | None] | None = None
         self.purpose = "turn"
         self.offered: list[str] = []
 
@@ -193,7 +193,7 @@ class _KernelTool(AgentTool):
         try:
             said = await self.spec.call(ctx, arguments)
         except LoopPause as e:
-            run.paused = (call_id, self.spec.name, arguments, e.reason)
+            run.paused = (call_id, self.spec.name, arguments, e.reason, e.nested)
             # Raises Strands' interrupt: the run stops here and resumes at this call (driver.run).
             ToolContext(
                 tool_use=tool_use, agent=invocation_state["agent"], invocation_state=invocation_state
@@ -244,7 +244,7 @@ class _Gate(HookProvider):
         if not spec.gated or spec.barred() is not None:
             return
         arguments = cast(Json, dict(use.get("input") or {}))
-        run.paused = (call_id, spec.name, arguments, None)
+        run.paused = (call_id, spec.name, arguments, None, None)
         # On the resumed run this returns the person's answer instead of stopping.
         answer = event.interrupt(APPROVAL)
         if answer == "approved":
@@ -372,7 +372,7 @@ async def _turns(
         loop.events.clear()
         loop.raise_held()
         if result is not None and result.stop_reason == "interrupt" and loop.paused is not None:
-            call_id, name, arguments, reason = loop.paused
+            call_id, name, arguments, reason, nested = loop.paused
             interrupt = result.interrupts[0].to_dict()
             snapshot = agent.take_snapshot(preset="session").to_dict()
             yield LoopPaused(
@@ -382,6 +382,7 @@ async def _turns(
                 reason,
                 encode(PausedRun(snapshot, interrupt["id"], call_id)),
                 _messages(agent),
+                nested,
             )
             return
         problem = check(text) if check is not None else None

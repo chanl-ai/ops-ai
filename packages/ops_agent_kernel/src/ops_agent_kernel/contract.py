@@ -56,9 +56,11 @@ class LoopTool:
 class LoopPause(Exception):
     """Raised by a tool body: the call waits for a person (the gateway would not send it without one)."""
 
-    def __init__(self, reason: str | None = None) -> None:
+    def __init__(self, reason: str | None = None, nested: Json | None = None) -> None:
         super().__init__(reason or "approval needed")
         self.reason = reason
+        # The other turn the pause belongs to (ToolOutcome.nested); None for the call's own.
+        self.nested = nested
 
 
 class StepLimitReached(Exception):
@@ -112,6 +114,7 @@ class LoopPaused:
     reason: str | None
     state: bytes
     messages: list[Json]
+    nested: Json | None = None
 
 
 @dataclass(frozen=True)

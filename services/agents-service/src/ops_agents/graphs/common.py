@@ -214,9 +214,10 @@ class Asker:
 class AgentRunner(Protocol):
     """The API side of specialist agents as tools, so this layer does not import the API."""
 
-    async def offers(self, asker: Asker) -> list[ToolGrant]:
+    async def offers(self, asker: Asker, resuming: str | None = None) -> list[ToolGrant]:
         """`agent__<id>` grants for the agents `asker` may ask on this turn: its own `agent:<id>` grants, every
-        specialist for its team's default agent on a turn with a person, and none its chain refuses."""
+        specialist for its team's default agent on a turn with a person, and none its chain refuses. `resuming` is
+        the key of the paused call a resumed turn goes on with: the agent that call already asked stays offered."""
         ...
 
     async def run(
@@ -253,7 +254,7 @@ class AgentTools:
 
 
 async def ports_with_workflows(
-    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None, version: int = 0
+    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None, version: int = 0, resuming: str | None = None
 ) -> tuple[KernelPorts, list[ToolGrant]]:
     """The ports and extra grants for an agent turn: workflow tools for its granted, published workflows, and the
     specialists the person may ask. `granted` and `version` are those of the definition the turn runs, so a draft
@@ -264,7 +265,7 @@ async def ports_with_workflows(
     ):
         ports, offers = replace(ports, tools=WorkflowTools(ports.tools, deps.workflows)), found
     asker = Asker.of(agent_id, version, granted) if agent_id else None
-    if deps.agents is not None and asker is not None and (specialists := await deps.agents.offers(asker)):
+    if deps.agents is not None and asker is not None and (specialists := await deps.agents.offers(asker, resuming)):
         ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents, asker)), [*offers, *specialists]
     if deps.memory is not None and agent_id and (search := await deps.memory.offers(agent_id)):
         ports, offers = replace(ports, tools=MemoryTools(ports.tools, deps.memory)), [*offers, *search]
@@ -468,12 +469,14 @@ class PendingApproval(TypedDict):
     # before skills had steps.
     run: NotRequired[Json | None]
     held: NotRequired[dict[str, list[str]]]
+    # A helper agent's pause the turn waits on (Interrupt.nested); absent for the turn's own call.
+    nested: NotRequired[Json]
 
 
 def pending_approval(i: Interrupt) -> PendingApproval:
     """An Interrupt as plain data the checkpointer can store."""
     p = i.pending_call
-    return {
+    out: PendingApproval = {
         "interrupt_id": i.interrupt_id,
         "needed": i.needed,
         "tool_call_id": p.tool_call_id,
@@ -490,6 +493,9 @@ def pending_approval(i: Interrupt) -> PendingApproval:
         "run": i.run.model_dump(mode="json", by_alias=True) if i.run is not None else None,
         "held": {k: [*v] for k, v in i.held.items()},
     }
+    if i.nested:
+        out["nested"] = i.nested
+    return out
 
 
 def interrupt_to_state(i: Interrupt) -> Json:
@@ -522,4 +528,5 @@ def interrupt_from_state(d: Json) -> Interrupt:
         v.get("plan"),
         SkillRunState.model_validate(run) if (run := v.get("run")) else None,
         {k: [*held] for k, held in (v.get("held") or {}).items()},
+        v.get("nested"),
     )

@@ -27,6 +27,9 @@ class ToolOutcome:
     for_model: Any = None
     # Whose login of the app the call ran as (the gateway's `signedIn`: the team's or the person's), for the chat card.
     signed_in: SignedIn | None = None
+    # With `needs_review`: the pause belongs to another turn this call ran (a helper agent's, on its own thread), so the
+    # asking turn's interrupt names it ({threadId, interruptId}) and its decision is that turn's.
+    nested: dict[str, Any] | None = None
 
 
 class ToolExecutor(Protocol):

@@ -1,1 +1,1 @@
-{"date": "2026-11-27", "title": "Agent replies run on a new engine", "description": "Agents now answer on Strands Agents. A reply waiting for your approval picks up where it stopped, on any server, without asking the model the same question again, and each conversation's budget still holds.", "tag": "improved"}
+{"date": "2026-11-27", "title": "Agent replies run on a new engine", "description": "Agents now answer on Strands Agents. A reply waiting for approval resumes on any server without asking the model again, inside its budget.", "tag": "improved"}

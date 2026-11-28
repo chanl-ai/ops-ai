@@ -23,6 +23,7 @@ from ops_agents.api.child_runs import ChildRuns, acting_for
 from ops_agents.api.deps import Runtime
 from ops_agents.api.ops_tools import ops_assistant_id
 from ops_agents.api.run_person import person_of_thread
+from ops_agents.api.runs import config, pending, resolve
 from ops_agents.graphs.common import Asker
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
@@ -331,7 +332,11 @@ async def test_an_asked_agents_chain_is_the_same_after_an_approval_pause(budget_
     thread = (await start(c, VIEWER))["id"]
     events = await say(c, thread, ask("ag_fraud", "Place a 24-hour hold on wire W-88213"), VIEWER)
     (asked,) = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
-    assert asked["status"] == "waiting_review", asked
+    assert asked["status"] == "awaiting_approval", asked
+    # The asking turn pauses on the helper's review; its interrupt names the helper's thread.
+    _, graph = await resolve(rt, thread)
+    (waiting,) = pending(await graph.aget_state(config(thread)))
+    asked = {"threadId": cast(dict[str, Any], waiting["payload"])["nested"]["threadId"]}
     assert rt.graph_store is not None and rt.usage is not None
     with tenant_scope(TENANT):
         before = await rt.graph_store.thread_row(asked["threadId"])

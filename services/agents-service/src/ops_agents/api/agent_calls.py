@@ -88,7 +88,7 @@ class AgentCalls:
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
 
-    async def offers(self, asker: Asker) -> list[ToolGrant]:
+    async def offers(self, asker: Asker, resuming: str | None = None) -> list[ToolGrant]:
         try:
             configurable = get_config().get("configurable") or {}
         except RuntimeError:
@@ -96,7 +96,19 @@ class AgentCalls:
         thread_id = str(configurable.get("thread_id") or "")
         if TURN_PERSON.get() is None and thread_id:
             await self._log_withheld(asker, thread_id, configurable.get("run_id"))
-        return await self.offers_in(asker, thread_id)
+        out = await self.offers_in(asker, thread_id)
+        if resuming and (asked := await self._asked(resuming, thread_id)) is not None:
+            # The resumed call reads the answer of the agent it already asked, whoever the resumed turn runs for.
+            a = self.rt.catalog.agent(str(asked.meta_object().get("agentId") or ""))
+            if a is not None and all(g.name != called_as("agent", a.id) for g in out):
+                out.append(self._grant(a))
+        return out
+
+    async def _asked(self, key: str, parent_thread_id: str) -> StoredThread | None:
+        """The helper thread the call with idempotency key `key` opened from `parent_thread_id`; None when it opened
+        none. It was opened only after the call passed every check, so going on with it needs none again."""
+        row = await graph_store(self.rt).thread_by_key(f"tool:{key}")
+        return row if row is not None and row.parent_thread_id == parent_thread_id else None
 
     async def _log_withheld(self, asker: Asker, thread_id: str, run_id: object) -> None:
         """Records, on the turn's thread, the agent grants the rule for a turn with no person withheld, and why."""
@@ -224,12 +236,17 @@ class AgentCalls:
         person = TURN_PERSON.get()
         callee = self.rt.catalog.agent(agent)
         on = self._chain(parent, asker, parent_run_id)
+        asked = await self._asked(key, parent_thread_id)
         try:
             chain = on.extended(agent, callee.version if callee is not None else 0)
         except ChainRefusedError as e:
             return ToolOutcome(ok=False, output={"error": e.message, "code": e.code, "path": [*on.path]})
-        # Checked again here, not only when offered: a model may name a tool it was never given.
-        if called_as("agent", agent) not in {g.name for g in await self.offers_in(asker, parent_thread_id)}:
+        # Checked again here, not only when offered: a model may name a tool it was never given. A call going on
+        # after a pause reads the thread it opened, which passed this check then.
+        offered = asked is not None and asked.meta_object().get("agentId") == agent
+        if not offered and called_as("agent", agent) not in {
+            g.name for g in await self.offers_in(asker, parent_thread_id)
+        }:
             message = "That agent cannot be asked on this turn."
             return ToolOutcome(ok=False, output={"error": message, "code": "specialist_not_offered"})
         assert callee is not None, "offered above"
@@ -271,8 +288,16 @@ class AgentCalls:
         _, graph = await resolve(self.rt, thread_id)
         snap = await graph.aget_state(config(thread_id))
         base = base | {"threadId": thread_id}
-        if pending(snap):
-            return ToolOutcome(ok=True, output=base | {"status": "waiting_review"})
+        if waiting := pending(snap):
+            # The helper waits on a person: the asking turn pauses on the same decision (the interrupt names the
+            # helper's), and goes on once the helper has answered (hitl_facade carries the resume up).
+            needed = str(narrow.an_object(waiting[0].get("payload") or {}, "the helper's pause").get("needed") or "")
+            return ToolOutcome(
+                ok=True,
+                output=base | {"status": "waiting_review"},
+                needs_review=f"{callee.name}: {needed}" if needed else callee.name,
+                nested={"threadId": thread_id, "interruptId": str(waiting[0]["id"])},
+            )
         runs = await store.runs(thread_id)
         if runs and runs[-1].status == "error":
             return ToolOutcome(ok=False, output=base | {"status": "failed"})
