@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at 20261122_2031_list_sort_indexes
+-- kb-service, stamped at 20261127_1200_item_rendition
 -- not on SQL Server yet: table kb_unit_vectors (PostgreSQL only)
 -- not on SQL Server yet: kb_units.tsv (TSVECTOR)
 CREATE TABLE kb_bases (
@@ -151,6 +151,7 @@ CREATE TABLE kb_items (
 	url VARCHAR(max) NULL, 
 	read_with VARCHAR(120) NULL, 
 	indexed_with VARCHAR(32) NULL, 
+	rendition_id VARCHAR(64) NULL, 
 	content_digest VARCHAR(80) NULL, 
 	duplicate_of VARCHAR(64) NULL, 
 	folder VARCHAR(400) NULL, 
@@ -336,5 +337,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('20261122_2031_list_sort_indexes');
+INSERT INTO alembic_version_kb (version_num) VALUES ('20261127_1200_item_rendition');
 GO

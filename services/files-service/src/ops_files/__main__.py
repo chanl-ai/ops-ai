@@ -44,9 +44,9 @@ RETENTION_CLASSES = (
     RetentionClass(id="knowledge", name="Knowledge source", days=None, purposes=["knowledge_source"]),
     RetentionClass(
         id="knowledge-snapshot",
-        name="Knowledge snapshot, 30 days after its source lets it go",
+        name="Knowledge snapshot or drawing, 30 days after its source lets it go",
         days=30,
-        purposes=["knowledge_snapshot"],
+        purposes=["knowledge_snapshot", "knowledge_rendition"],
         after_release=True,
     ),
 )

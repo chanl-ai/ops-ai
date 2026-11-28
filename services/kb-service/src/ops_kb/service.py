@@ -15,7 +15,7 @@ import contextlib
 import dataclasses
 import re
 import time
-from collections.abc import Coroutine, Iterable, Mapping
+from collections.abc import Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict, cast
@@ -1184,9 +1184,12 @@ class KnowledgeService:
         return scopes_of(places, following)
 
     async def remove_source(self, who: Who, source_id: str) -> None:
-        await self._changeable_source(who, source_id, "delete")
+        s = await self._changeable_source(who, source_id, "delete")
+        items = await self.store.items(who.tenant_id, source_ids=[source_id])
         if not await self.store.remove_source(who.tenant_id, source_id):
             raise NotFound("No source with that id.")
+        held = [*s.file_ids, *(f for i in items for f in (i.file_id, i.rendition_id))]
+        await self.let_go(who, s, held, everything=True)
 
     # ── Files and sync ───────────────────────────────────────────────────
 
@@ -1533,6 +1536,7 @@ class KnowledgeService:
                 superseded.add(latest[name].file_id)
             latest[name] = found
         await self.store.drop_files(who.tenant_id, source_id, superseded)
+        await self.let_go(who, s, [*superseded, *(i.rendition_id for i in items.values() if i.file_id in superseded)])
         excluded: list[str] = []
         for name, found in latest.items():
             counts["listed"] += 1
@@ -1862,15 +1866,50 @@ class KnowledgeService:
         if cleaning.site_repeats:
             doc = without(doc, set(repeats_of(s)))
         if rebuild and existing is not None:
-            return await self._reindex(
+            settled = await self._reindex(
                 who, s, existing, name=name, doc=doc, read_with=read_with(answer), title_given=origin.title, lines=lines
             )
-        fetched: ItemFetched = {**origin.extra, "lines": lines}
-        return await self._index(
-            who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
-            digest=found.digest, read_with=read_with(answer), path=origin.path, extra=fetched,
-            title_given=origin.title, allowed=origin.allowed,
-        )  # fmt: skip
+        else:
+            fetched: ItemFetched = {**origin.extra, "lines": lines}
+            settled = await self._index(
+                who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
+                digest=found.digest, read_with=read_with(answer), path=origin.path, extra=fetched,
+                title_given=origin.title, allowed=origin.allowed,
+            )  # fmt: skip
+        await self._keep_rendition(who, s, existing, settled.id, answer.renditionId)
+        return settled
+
+    async def _keep_rendition(
+        self, who: Who, s: SourceRow, existing: ItemRow | None, item_id: str, rendition_id: str | None
+    ) -> None:
+        """Holds a Files reference on the PDF the item's file was drawn into, as the source, and lets go of the one
+        it showed before; a PDF Files no longer has, or has not cleared, is not named."""
+        before = existing.rendition_id if existing is not None else None
+        if rendition_id == before:
+            return
+        if rendition_id is not None:
+            try:
+                await self.files.use(
+                    who.tenant_id, source_team(s), rendition_id, source_id=s.id, source_name=s.name
+                )  # fmt: skip
+            except (FileMissing, FileNotScanned):
+                rendition_id = None
+        await self.store.update_item(who.tenant_id, item_id, {"rendition_id": rendition_id})
+        if before is not None:
+            await self.let_go(who, s, [before])
+
+    async def let_go(self, who: Who, s: SourceRow, file_ids: Sequence[str | None], *, everything: bool = False) -> None:
+        """Releases the source's Files references on `file_ids` (files and the PDFs they were drawn into) that no
+        item or file of the source still uses; `everything` releases them all, for a source being removed. Files
+        keeps a released snapshot or drawing for its retention days, then deletes it."""
+        held: set[str] = set()
+        if not everything:
+            left = await self.store.items(who.tenant_id, source_ids=[str(s.id)])
+            row = await self.store.sources(who.tenant_id, [str(s.id)])
+            held = {i.file_id for i in left} | {i.rendition_id for i in left if i.rendition_id}
+            held |= set(row[0].file_ids) if row else set()
+        for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
+            await self.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s.id))
 
     async def _mark_reading(
         self, who: Who, s: SourceRow, existing: ItemRow | None, *, name: str, found: Stored, origin: Origin

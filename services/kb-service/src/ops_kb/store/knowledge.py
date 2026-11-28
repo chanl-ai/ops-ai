@@ -208,6 +208,9 @@ kb_items = sa.Table(
     sa.Column("read_with", sa.String(120)),
     # The digest of the cleaning, splitting and metadata settings its pieces were built under (index_key).
     sa.Column("indexed_with", sa.String(32)),
+    # The PDF documents-service drew a Word file or deck into; the item holds a Files reference on it as its source,
+    # released with the file (KnowledgeService.let_go).
+    sa.Column("rendition_id", sa.String(64)),
     # The digest of its text after cleaning, and the newer item in a base it reads into that holds the same text:
     # search leaves an item out while it names one.
     sa.Column("content_digest", sa.String(80)),
@@ -758,6 +761,7 @@ class ItemRow(Out):
     url: str | None
     read_with: str | None
     indexed_with: str | None
+    rendition_id: str | None = None
     content_digest: str | None
     duplicate_of: str | None
     folder: str | None
@@ -1007,6 +1011,7 @@ class ItemChanges(ItemFetched, total=False):
     processed_at: datetime | None
     read_with: str | None
     indexed_with: str | None
+    rendition_id: str | None
     content_digest: str | None
     duplicate_of: str | None
 

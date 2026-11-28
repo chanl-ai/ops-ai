@@ -386,26 +386,24 @@ async def sync_tool_source(
         keep = (await service.sync_rules(tenant, str(s.id)))["removedAtSource"] == "keep"
         if gone_now:
             gone_ids = [known[p].id for p in gone_now]
-            gone_files = [known[p].file_id for p in gone_now]
             if keep:
                 await _flag_removed(service, tenant, gone_ids)
                 for p in gone_now:
                     tombstones.pop(p, None)
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
-                await release_snapshots(service, who, s, gone_files)
+                await release_snapshots(service, who, s, [known[p] for p in gone_now])
             done_with = "kept and flagged" if keep else "removed and tombstoned"
             log += [f"{known[p].title}: gone at the source twice, {done_with}" for p in gone_now]
         if removed_at_source:
             # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
             out_ids = [known[p].id for p in removed_at_source if p in known]
             out_ids += [i.id for i in known.values() if i.parent_id in set(out_ids)]
-            files_out = [i.file_id for i in known.values() if i.id in set(out_ids)]
             if keep:
                 await _flag_removed(service, tenant, out_ids)
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, out_ids)
-                await release_snapshots(service, who, s, files_out)
+                await release_snapshots(service, who, s, [i for i in known.values() if i.id in set(out_ids)])
             done_with = "kept and flagged" if keep else "removed"
             log += [f"{known[p].title}: deleted at the source, {done_with}" for p in removed_at_source if p in known]
         if full and not listing.resumes:
@@ -413,12 +411,11 @@ async def sync_tool_source(
             removed_ids = [known[p].id for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
             removed_ids += [i.id for i in known.values() if i.parent_id in set(removed_ids)]
-            gone_files = [i.file_id for i in known.values() if i.id in set(removed_ids)]
             if keep:
                 await _flag_removed(service, tenant, removed_ids)
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, removed_ids)
-                await release_snapshots(service, who, s, gone_files)
+                await release_snapshots(service, who, s, [i for i in known.values() if i.id in set(removed_ids)])
             for p in dropped:
                 log.append(
                     f"{known[p].title}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
@@ -509,7 +506,7 @@ async def _put(
     # The row as written, so a later look at this item in the run (its attachments, gone or removed) reads it.
     known[item_id] = (await service.store.items(tenant, item_id=done.id))[0]
     if ex is not None and ex.file_id and ex.file_id != stored.file_id:
-        await release_snapshots(service, who, s, [ex.file_id])
+        await release_snapshots(service, who, s, [ex])
     if done.status == "failed":
         counts["failed"] += 1
         errors.append(parse_error(done))
@@ -522,11 +519,10 @@ async def _put(
         counts["upserted"] += 1
 
 
-async def release_snapshots(service: KnowledgeService, who: Who, s: SourceRow, file_ids: list[str]) -> None:
-    """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
-    held = {i.file_id for i in await service.store.items(who.tenant_id, source_ids=[str(s.id)])}
-    for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
-        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s.id))
+async def release_snapshots(service: KnowledgeService, who: Who, s: SourceRow, gone: list[ItemRow]) -> None:
+    """Lets go of the snapshots, and the PDFs they were drawn into, that no item of the source uses any more;
+    files-service keeps each for its retention days."""
+    await service.let_go(who, s, [f for i in gone for f in (i.file_id, i.rendition_id)])
 
 
 # What a kept item says once its source has removed it.
