@@ -70,6 +70,8 @@ def main() -> None:
         again,
     )
 
+    # Composition 2 starts the workflow this Example saves; run alone, its setup stops with 'no normalize_support_request'.
+    _setup(ROOT / "examples/workflows/01-normalize-a-request")
     w1_first = _setup(C2)
     check(
         "4 first composition 2 setup prints READY and not MADE",

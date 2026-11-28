@@ -31,8 +31,8 @@ console offers nothing about it. Install docs: `docs/deploy/install.md`, "Featur
 | 1 (api) | tools-service and platform-service start with `OPS_FLAGS=mcp_gatway` | Each exits at start with "unknown flag mcp_gatway in OPS_FLAGS; known flags: …" |
 | 2 (api) | Both start with `OPS_FLAGS` empty; Priya reads `GET /v1/me`; an anonymous caller posts `tools/list` to `/mcp/test/team_ops` | `flags` lists `mcp_gateway` and every flag off; `/mcp` is 404 `feature_off` |
 | 3 (api) | Both start with `OPS_FLAGS=mcp_gateway`; the same reads | `mcp_gateway` is on; `/mcp` is 401 `unauthorized` (the adapter serves and asks for sign-in). uc-410 lists and refuses with the flag on |
-| 1 (ui) | No flags: Priya opens ⌘K and searches "mcp", opens Channels and its Connect channel menu, `/channels/mcp`, and Tools › Workflows | No "Connect your assistant" or "Copy MCP URL"; no MCP tab or card; the menu says "Slack and Teams are coming soon"; `/channels/mcp` is not found; no "Manage exposure on the MCP tab" |
-| 2 (ui) | `OPS_FLAGS=mcp_gateway`: the same walk | Both ⌘K entries, the MCP tab and card, the MCP channel page and the Tools link show |
+| 1 (ui) | No flags: Priya opens ⌘K and searches "mcp", opens Channels and its Connect channel menu, `/channels/mcp`, and Tools › Workflows | No "MCP links" entry in ⌘K; no MCP tab or card; the menu says "Slack and Teams are coming soon"; `/channels/mcp` is not found; no "Manage exposure on the MCP tab" |
+| 2 (ui) | `OPS_FLAGS=mcp_gateway`: the same walk | The ⌘K entry "MCP links", the MCP tab (the gallery has no MCP card), the MCP channel page and the Tools link show |
 
 ## Acceptance layers
 

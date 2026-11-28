@@ -52,6 +52,7 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | A pass needs evidence | A script prints one `PASS <name>` or `FAIL <name>: <detail>` line per check. The runner passes a use case only when the script exits 0, printed no FAIL line and printed at least one PASS line |
 | Every use case names its non-vacuous check | The check that fails when the behaviour breaks, often a refusal paired with the success it guards. Each doc says which check that is |
 | The status column is not evidence | It records the last state someone saw; only `make usecase-test` decides |
+| Status words that move a run | `manual` (needs the standing stack, runs in the nightly `examples` job), `needs-plugins` (reads the sibling plugins checkout), `needs-key` (reads a real provider key): a hosted run leaves these rows out. Each carries `owner=<who>` and `until=<YYYY-MM-DD>`, a Gaps row carries Owner and Until cells, and `scripts/check_usecase_needs.py` fails a script that needs one without its word, a row without the two tags, and a date that has passed |
 | A ui stack runs the real stack's sign-in | `withUiStack` starts platform-service unless the script passes `platform: false`, so the console signs in and lists teams through it as on the shared stack (`resolveStack` in `packages/usecase-runner/src/harness.ts`). A script that leaves `platform` unset gets the dev builder (James) signed in for it: each browser context starts with his session, and each call to the run's services that carries no `Authorization` or `X-Api-Key` is sent as him. `signedInAs: '<dev role>'` names another seeded person, for a page whose rows another team owns. A script that sets `platform: true` signs in on `/login` itself. A page that reads tool modules also needs `tools` |
 | The console is a production build | A ui run serves the console with `next start` on a build made once per source hash and stack shape (`packages/usecase-runner/src/console-build.ts`, cached in `apps/console/node_modules/.cache/console-build-<hash>`, pruned after three days). A run copies the build and swaps its placeholder service URLs for its own ports, so a cold build costs one run and later runs start in seconds. `OPS_USECASE_CONSOLE=dev` runs `next dev` instead. Dev-only pages (`/dev`, `/preview`) answer because the run sets `OPS_ALLOW_PREVIEW_PAGES=1` |
 | Layers | `sdk` scripts call the SDK in `sdk/python` or `sdk/typescript`; `cli` scripts run a command a person runs, today the sample team installer (`scripts/sample_team.py`) and later `ops` from `packages/ops_plugins`. A layer whose provider is missing reports "not available yet; run LAYER=api" and exits 3 when nothing else ran |
@@ -300,17 +301,17 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-561 | agents-service | Memory follows a person across a team's agents and they take it back | api | api passing |
 | uc-562 | console | Every list, record and settings page reads well on a phone and on a desktop: no preselected decision, phone lists show the name, search boxes and descriptions read in full, tab strips scroll with a cue, a way back on record pages | ui | passing |
 | uc-563 | platform-service | A developer installs the sample team with one command, and a second run makes nothing | cli | passing |
-| uc-564 | tools-service | A team turns on the Salesforce plugin, and its agents work cases and cite its articles | api, sdk, cli, ui | draft |
+| uc-564 | tools-service | A team turns on the Salesforce plugin, and its agents work cases and cite its articles | api, sdk, cli, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-565 | agents-service | A SQL Server install migrates agents to the head | api | api passing |
-| uc-581 | tools-service | An agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query | api, ui, cli | draft |
+| uc-581 | tools-service | An agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query | api, ui, cli | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-566 | agents-service | Agents starts and a chat turn saves its checkpoint | api | api failing |
 | uc-567 | agents-service | Every workflow run ends with a clear outcome: a run nothing is working on shows Stuck with the reason and Retry, and an email whose run will not start is set aside with Run again | api,ui | passing |
 | uc-568 | agents-service | Document workflows: a builder reads any document as full text or proposed fields, shares a workflow as a form, runs it once per row of a CSV, and builds a two-source workflow from a description | api, ui, cli | passing |
 | uc-580 | console | Superseded by uc-607: connecting systems from one grid and one large dialog; its steps moved to uc-607 and its script is removed | ui | superseded |
 | uc-588 | tools-service | A developer's plugin signs in every way a system asks, and its agents call it | api, sdk, cli, ui | draft |
-| uc-607 | console | A team connects apps from one catalog: a catalog of apps, Connect in a small window, an app's page where a person connects their own account and a tool runs with it | api, sdk, cli, ui | draft |
+| uc-607 | console | A team connects apps from one catalog: a catalog of apps, Connect in a small window, an app's page where a person connects their own account and a tool runs with it | api, sdk, cli, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-583 | tools-service | A team connects a system that allows only certificate sign-in, and its agents call it | api | draft |
-| uc-584 | tools-service | A plugin sends the headers, forms, sign-in steps and limits a system needs | api, cli | draft |
+| uc-584 | tools-service | A plugin sends the headers, forms, sign-in steps and limits a system needs | api, cli | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-609 | tools-service | A team reviews a plugin update before its tools change | api, ui | draft |
 | uc-590 | agents-service | A team installs a plugin's agent, skill, workflow and document type as its own copies, through the checks a person's create goes through | api, sdk, cli, ui | passing |
 | uc-605 | models-service | A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region | api, cli, ui | passing |
@@ -325,43 +326,43 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-618 | tools-service | Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key | api | draft |
 | uc-619 | agents-service | A new team's assistant answers from its knowledge and files | api | passing |
 | uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api, ui | draft |
-| uc-621 | agents-service | A builder runs the three foundation Examples | sdk | current |
-| uc-622 | agents-service | A builder asks the first three published agents | sdk | current |
+| uc-621 | agents-service | A builder runs the three foundation Examples | sdk | manual owner=ops-release until=2026-12-26 |
+| uc-622 | agents-service | A builder asks the first three published agents | sdk | manual owner=ops-release until=2026-12-26 |
 | uc-623 | agents-service | Test-run a workflow from a file | sdk, cli | current |
-| uc-624 | agents-service | A builder runs the two composition Examples | sdk | current |
-| uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | draft |
+| uc-624 | agents-service | A builder runs the two composition Examples | sdk | manual owner=ops-release until=2026-12-26 |
+| uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | draft |
-| uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft |
-| uc-628 | tools-service | An admin turns an app on in one window and everyone can use it | api, ui | draft |
+| uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
+| uc-628 | tools-service | An admin turns an app on in one window and everyone can use it | api, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-629 | files-service | A file's page shows its preview or says why not | ui | draft |
-| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current |
-| uc-671 | tools-service | Connectors for people: one row per app, an app off for the team, a per-chat connector set | api, ui | current |
+| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-671 | tools-service | Connectors for people: one row per app, an app off for the team, a per-chat connector set | api, ui | current needs-plugins owner=ops-release until=2026-12-12 |
 | uc-672 | documents-service | A scan, a half scan and a filled form are each read once by documents-service and cited from a knowledge base by the OCR'd page | api, sdk | passing |
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
-| uc-674 | tools-service | An app's page shows one state and its next action | ui | current |
-| uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing |
+| uc-674 | tools-service | An app's page shows one state and its next action | ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing needs-plugins owner=ops-release until=2026-12-12 |
 | uc-676 | kb-service | Push knowledge from another system | api, sdk, cli, ui | passing |
 | uc-677 | kb-service | Turn on rerank and query rewrite | api, sdk, cli, ui | passing |
-| uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, sdk, cli, ui | passing |
-| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current |
-| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current |
-| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
-| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current |
-| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current |
-| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | current |
-| uc-697 | agents-service | A chat uses the account picked for it, and a new chat starts on the default | ui | current |
-| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current |
-| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current |
-| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
-| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current |
-| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current |
-| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current |
-| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current |
-| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |
-| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current |
-| uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current |
-| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current |
-| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
+| uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, sdk, cli, ui | passing needs-plugins owner=ops-release until=2026-12-12 |
+| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-697 | agents-service | A chat uses the account picked for it, and a new chat starts on the default | ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current needs-plugins owner=ops-release until=2026-12-12 |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
 | uc-721 | tools-service | A connected app writes at once: every tool on and writes run without asking until a team admin turns asking on, per team or per app; a turned-off tool says how to turn it on | api, sdk | passing |
@@ -384,7 +385,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli | passing |
 | uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | passing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
-| uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |
+| uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft needs-key owner=ops-release until=2026-12-26 |
 | uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | works |
 | uc-753 | tools-service | An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode | api, sdk, cli, ui | works |
 | uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | works |
@@ -407,7 +408,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-772 | kb-service | Search a long document's pieces on the server | api | draft |
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | current |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
-| uc-779 | files-service | A watched folder brings files in | api, ui | draft |
+| uc-779 | files-service | A watched folder brings files in | api, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | draft |
 | uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | current |
 | uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | current |

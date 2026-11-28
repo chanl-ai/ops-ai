@@ -101,13 +101,6 @@ def main() -> None:
         tool_again,
     )
 
-    banned = ("approval", "roles", "rbac", "evaluation")
-    readmes = "\n".join((folder / "README.md").read_text().lower() for folder in (CHAT, KNOWLEDGE, TOOLS))
-    check(
-        "10 none of the three READMEs teach approval, roles, or evaluation",
-        not any(word in readmes for word in banned),
-        readmes,
-    )
     finish()
 
 

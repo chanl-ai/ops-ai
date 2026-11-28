@@ -28,6 +28,10 @@ AUTH = {
     "OPS_AUTH_MODE": "platform",
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
     "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+    # Without a public address for the MCP service and its sign-in issuer, an anonymous caller gets 503, not the 401
+    # step 3 asserts (ops_tools/mcp_server.py); an install names both.
+    "OPS_TOOLS_PUBLIC_URL": f"http://127.0.0.1:{TOOLS_PORT}",
+    "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
 }
 MCP = f"http://127.0.0.1:{TOOLS_PORT}/mcp/test/team_ops"
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}

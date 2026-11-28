@@ -28,7 +28,7 @@ CHECKS = \
   tests-typecheck-self-test tests-typecheck-commits \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
-  ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards known-traps \
+  ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards known-traps usecase-needs \
   downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
   staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test md-images md-images-self-test
@@ -120,6 +120,11 @@ check-paths.console-standards = ^apps/console/
 # Each folder guide's "Known traps" section: at most 12 lines, each `trigger => fix`, with the plants that prove it can fail.
 check-run.known-traps = node scripts/check-known-traps.mjs && node scripts/check-known-traps.mjs --self-test
 check-paths.known-traps = (^|/)CLAUDE\.md$$|^scripts/check-known-traps\.mjs$$
+
+# A use case that reads OPS_BASE_URL, runs an Example's setup, reads OPS_PLUGINS_REPO or a provider key from the environment
+# says so in its registry status (manual, needs-plugins, needs-key), with a plant of each that must be caught.
+check-run.usecase-needs = $(PY) scripts/check_usecase_needs.py && $(PY) scripts/check_usecase_needs.py --self-test
+check-paths.usecase-needs = ^docs/usecases/(README\.md|[^/]+/scripts/)|^scripts/check_usecase_needs\.py$$
 
 # A migration whose downgrade() does nothing, beyond scripts/downgrades-waiting.txt, which only shrinks.
 check-run.downgrades = $(PY) scripts/check_downgrades.py --all

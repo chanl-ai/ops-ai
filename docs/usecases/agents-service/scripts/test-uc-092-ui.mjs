@@ -3,7 +3,7 @@
 // tools-service as the gateway so the tool form lists real operations, publish requests left pending for a second
 // person, and workflow workers this script starts and stops. No model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { publishReviewOn, versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { publishReviewOn, twoPersonRuleOn, until, waitForSaved } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -17,6 +17,8 @@ await withUiStack(
   async (consoleUrl, stack) => {
     // A new workspace publishes at once; Priya turns review on for the team's workflows before anyone signs in.
     await publishReviewOn({ workflows: 'always' });
+    // The two-person rule is off by default, and the page's steps 6 and 7 need the requester refused.
+    await twoPersonRuleOn();
     const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
     const H = as(await tokenFor(JAMES));
     const M = as(await tokenFor(MAYA));
@@ -85,11 +87,17 @@ await withUiStack(
       await raw.fill(JSON.stringify({ ...JSON.parse(await raw.inputValue()), outcome: 'refunded', output: '$.input.amount' }, null, 2));
       await output.getByTestId('field-chip').waitFor({ timeout: 10_000 });
       await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const v2 = await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
-      const stored = (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
-      const done = stored.definition.nodes.find((n) => n.id === 'done');
+      // The editor's header reads Saved before the edit is dirty, so waiting on it can make the version from the copy as it
+      // was before the edit. The copy the platform holds is read until it carries both typed settings, then versioned.
+      const readStored = async () => (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
+      const typed = (d) => d.workingCopy?.definition?.nodes?.find((n) => n.id === 'done')?.parameters;
+      await until(async () => { const p = typed(await readStored()); return p?.outcome === 'refunded' && p?.output === '$.input.amount' ? p : undefined; }, 30);
+      await waitForSaved(page);
+      // Editing makes no version: the typed settings sit in the working copy over version 1, and publishing (step 6) makes version 2.
+      const stored = await readStored();
+      const done = typed(stored);
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'draft', null, { timeout: 30_000 }).catch(() => undefined);
-      check('4 Save stores the form as version 2, a draft, with the outcome and a path as output', v2?.version === 2 && stored.stage === 'draft' && done?.parameters?.outcome === 'refunded' && done?.parameters?.output === '$.input.amount', { v2, stage: stored.stage, done: done?.parameters });
+      check('4 Save keeps the form in the working copy over version 1, a draft, with the outcome and a path as output', stored.version === 1 && stored.stage === 'draft' && done?.outcome === 'refunded' && done?.output === '$.input.amount', { version: stored.version, stage: stored.stage, done });
 
       // 4. Non-vacuous half: a draft starts no live run, from the API or the editor.
       const early = await api('/v1/runs', { method: 'POST', body: JSON.stringify({ workflowId: id, input: { amount: 42 } }) });
@@ -153,8 +161,14 @@ await withUiStack(
       const paused = await api('/v1/runs', { method: 'POST', body: JSON.stringify({ workflowId: id, input: { amount: 42 } }) });
       const pausedCode = (await paused.json()).error?.code;
       const stagePaused = await stage();
-      await page.getByTestId('definition-resume').click();
-      await page.getByTestId('definition-pause-confirm').click();
+      // The Pause dialog closes as the stage flips; a Resume pressed while it still holds the page is lost, so press it
+      // again until the Resume dialog (the same confirm button) opens.
+      await pauseConfirm.waitFor({ state: 'hidden', timeout: 30_000 });
+      for (let tries = 0; tries < 5 && !(await pauseConfirm.isVisible()); tries++) {
+        await page.getByTestId('definition-resume').click();
+        await pauseConfirm.waitFor({ timeout: 4_000 }).catch(() => undefined);
+      }
+      await pauseConfirm.click();
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'live', null, { timeout: 30_000 }).catch(() => undefined);
       check('9 paused, a live start is refused (409 workflow_paused); resumed, the version is live again', stagePaused === 'paused' && paused.status === 409 && pausedCode === 'workflow_paused' && (await stage()) === 'live', { stagePaused, status: paused.status, pausedCode, after: await stage() });
 

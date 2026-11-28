@@ -253,23 +253,38 @@ export async function openHeldChatWrite(page, consoleUrl, thread) {
 }
 
 /**
- * Makes the next version from what the editor on `page` saved: waits for its working copy to read "Saved", makes the
- * version through `POST …/versions` as a builder would by publishing, and reloads the page so it edits on top of that
- * version. The editor saves itself and has no Save version button. Returns the version made (`created` false when the
- * copy equals a stored version).
+ * Waits for the editor on `page` to read "Saved", then reloads it so the script goes on from what the platform kept.
+ * The editor saves itself into the working copy and has no Save version button; a version exists only after
+ * publishing (POST .../publish-requests). The header also reads Saved while the copy is clean, so a script that needs
+ * a particular edit stored reads it back with `workingCopyOf` instead of trusting this alone.
  */
-export async function versionFromEditor(page, workflowId, headers) {
+export async function waitForSaved(page) {
   const state = page.getByTestId('save-state');
   await state.getByText(/Saved/).waitFor({ timeout: 60_000 }).catch(async (e) => {
     throw new Error(`the working copy did not save: the header reads "${await state.innerText().catch(() => 'nothing')}" (${e.message.split('\n')[0]})`);
   });
-  const path = `${agents}/v1/workflows/definitions/${encodeURIComponent(workflowId)}`;
-  const base = (await (await fetch(path, { headers })).json()).data.saveBase;
-  const made = await (await fetch(`${path}/versions`, { method: 'POST', headers, body: JSON.stringify({ baseVersion: base.version, baseDigest: base.digest }) })).json();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
   // The canvas fits itself once its steps are measured; a canvas key pressed before then is lost.
   await page.waitForFunction(() => document.querySelector('[data-testid="definition-node"]')?.getBoundingClientRect().width > 0, null, { timeout: 30_000 });
   await page.waitForTimeout(1_000);
-  return made.data;
+}
+
+/**
+ * The newest stored version of a workflow, its definition, and the working copy over it: `{ version, definition, copy }`,
+ * `copy` null while the editor holds no unpublished change.
+ */
+export async function workingCopyOf(workflowId, headers) {
+  const view = (await (await fetch(`${agents}/v1/workflows/definitions/${encodeURIComponent(workflowId)}`, { headers })).json()).data;
+  return { version: view.version, definition: view.definition, copy: view.workingCopy ?? null };
+}
+
+/** Polls `workingCopyOf` until `ready(result)` holds (or `seconds` pass) and returns the last result. */
+export async function workingCopyWhen(workflowId, headers, ready, seconds = 30) {
+  let last = await workingCopyOf(workflowId, headers);
+  for (const end = Date.now() + seconds * 1000; !ready(last) && Date.now() < end; ) {
+    await new Promise((r) => setTimeout(r, 500));
+    last = await workingCopyOf(workflowId, headers);
+  }
+  return last;
 }

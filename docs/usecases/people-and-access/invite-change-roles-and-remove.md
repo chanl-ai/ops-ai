@@ -153,15 +153,15 @@ Expected: 401 at once; the removed person's API keys are refused the same way.
 
 This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
 
-| Product fix | Step | Tab | What is missing | Where |
-|---|---|---|---|---|
-| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
-| People verbs in both SDKs and the CLI | 1, 4, 5 | Python, TypeScript | `people.invite`, `people.list`, `people.remove` | `sdk/python/src/ops_ai/_words.py:262-266`, `sdk/typescript/src/words.ts:200-205` |
-| People verbs in both SDKs and the CLI | 2, 4 | Python, TypeScript | `me.get`, `people.change_role` | as above |
-| People verbs in both SDKs and the CLI | 3 | Python, TypeScript | `OpsAI.accept_invite` | as above |
-| People verbs in both SDKs and the CLI | 2, 4 | CLI | `opsai people role-change` | `sdk/python/src/ops_ai/_cli/people.py:21-30` |
-| People verbs in both SDKs and the CLI | 3 | CLI | `opsai login --invite` | `sdk/python/src/ops_ai/_cli/login.py` |
-| People verbs in both SDKs and the CLI | 5 | CLI | `opsai people remove` | `sdk/python/src/ops_ai/_cli/people.py:21-30` |
+| Product fix | Step | Tab | What is missing | Where | Owner | Until |
+|---|---|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` | ops-release | 2026-12-26 |
+| People verbs in both SDKs and the CLI | 1, 4, 5 | Python, TypeScript | `people.invite`, `people.list`, `people.remove` | `sdk/python/src/ops_ai/_words.py:262-266`, `sdk/typescript/src/words.ts:200-205` | ops-release | 2026-12-26 |
+| People verbs in both SDKs and the CLI | 2, 4 | Python, TypeScript | `me.get`, `people.change_role` | as above | ops-release | 2026-12-26 |
+| People verbs in both SDKs and the CLI | 3 | Python, TypeScript | `OpsAI.accept_invite` | as above | ops-release | 2026-12-26 |
+| People verbs in both SDKs and the CLI | 2, 4 | CLI | `opsai people role-change` | `sdk/python/src/ops_ai/_cli/people.py:21-30` | ops-release | 2026-12-26 |
+| People verbs in both SDKs and the CLI | 3 | CLI | `opsai login --invite` | `sdk/python/src/ops_ai/_cli/login.py` | ops-release | 2026-12-26 |
+| People verbs in both SDKs and the CLI | 5 | CLI | `opsai people remove` | `sdk/python/src/ops_ai/_cli/people.py:21-30` | ops-release | 2026-12-26 |
 
 ## What proves it
 

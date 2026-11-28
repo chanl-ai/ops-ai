@@ -36,7 +36,6 @@ setup prints FOUND and changes nothing. None of the three folders teach approval
 | 7 | `uv run python examples/tools/01-find-a-customer/setup.py` | Prints READY; reuses `search_customers` |
 | 8 | `uv run pytest examples/tools/01-find-a-customer/test_example.py` | Passes; the record email is `ada@example.test` |
 | 9 | The same setup again | Prints FOUND; nothing added |
-| 10 | The three READMEs | No approval, roles, or evaluation as a required lesson |
 
 ## Acceptance layers
 

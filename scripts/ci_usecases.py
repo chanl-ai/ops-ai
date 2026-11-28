@@ -41,16 +41,29 @@ import usecase_batch  # noqa: E402
 
 REGISTRY = ROOT / "docs/usecases/README.md"
 ROW = re.compile(r"^\|\s*(uc-[a-z0-9]+(?:-[a-z0-9]+)*)\s*\|[^|]*\|[^|]*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
-# Rows the runner has nothing to run for: a page is documentation, draft has no script yet.
-NOT_RUN = ("retired", "superseded", "draft", "page")
+# Rows the runner has nothing to run for: a page is documentation, draft has no script yet, and manual needs the
+# standing stack (`make up`, `make sample-team`) a hosted runner never starts, so it runs by hand.
+NOT_RUN = ("retired", "superseded", "draft", "page", "manual", "needs-plugins", "needs-key")
 
 
-def runnable(registry: str) -> list[str]:
-    """Ids of the registry rows with at least one layer and a status other than the ones above, in id order."""
+def manual(registry: str) -> list[str]:
+    """Ids of the rows with a layer and status manual: they need a standing stack (the nightly's `examples` job)."""
     ids = []
     for line in registry.splitlines():
         m = ROW.match(line)
-        if m and m.group(2) and not any(w in m.group(3).lower().split() for w in NOT_RUN):
+        if m and m.group(2) and "manual" in m.group(3).lower().split():
+            ids.append(m.group(1))
+    return ids
+
+
+def runnable(registry: str, plugins: bool = False) -> list[str]:
+    """Ids of the registry rows with at least one layer and a status other than the ones above, in id order."""
+    # The nightly clones ops-ai-plugins beside the checkout, so it also runs the needs-plugins rows (`plugins`).
+    skip = tuple(w for w in NOT_RUN if not (plugins and w == "needs-plugins"))
+    ids = []
+    for line in registry.splitlines():
+        m = ROW.match(line)
+        if m and m.group(2) and not any(w in m.group(3).lower().split() for w in skip):
             ids.append(m.group(1))
     # Numbered ids first in number order, then the named ones (uc-workflows-1) in name order.
     return sorted(ids, key=lambda s: (0, int(s.split("-")[1]), "") if s.split("-")[1].isdigit() else (1, 0, s))
@@ -184,12 +197,28 @@ def self_test() -> int:
         named == ["uc-007", "uc-workflows-2"],  # a named id runs too, after the numbered ones
         cap(["uc-1", "uc-2", "uc-3"], 5) == (["uc-1", "uc-2", "uc-3"], ""),
         cap(["uc-1", "uc-2", "uc-3"], 2)[0] == [] and "nightly" in cap(["uc-1", "uc-2", "uc-3"], 2)[1],
+        runnable("| uc-5 | s | A | api | current needs-plugins owner=a |\n| uc-6 | s | A | api | current |\n")
+        == ["uc-6"]
+        and runnable("| uc-5 | s | A | api | current needs-plugins owner=a |\n", plugins=True)
+        == ["uc-5"],  # a need status leaves the shards; the check script makes it carry an owner and a date
+        manual(
+            "| uc-5 | s | A | sdk | manual owner=a |\n| uc-6 | s | A | sdk | current |\n| uc-7 | s | A |  | manual |\n"
+        )
+        == ["uc-5"],  # the nightly's stack job runs the manual rows that have a layer
         shard(["a", "b", "c", "d", "e"], "2/3") == ["b", "e"],
         sorted(x for i in (1, 2, 3) for x in shard(list("abcdefg"), f"{i}/3")) == list("abcdefg"),
     ]
     rep = report_md(results, 1, 2)
     ok.append(rep.count("FAILED uc-") == 2 and "quarantined uc-010:ui" in rep and "FAILED shards: only 1 of 2" in rep)
     ok.append("FAILED" not in report_md([{"id": "uc-1", "status": "passed", "log": ""}], 2, 2))
+    with tempfile.TemporaryDirectory() as tmp:
+        for n in range(1, 9):
+            (Path(tmp) / f"s{n}").mkdir()
+            (Path(tmp) / f"s{n}" / "shard.json").write_text(json.dumps({"results": []}), encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            main(["report", tmp])
+        ok.append("only 8 of 9" in buf.getvalue())  # eight shards without the stack job's file is a red night
     try:
         shard(["a"], "4/3")
         ok.append(False)
@@ -253,6 +282,10 @@ def main(argv: list[str]) -> int:
     p.add_argument("--head", default="HEAD")
     a = sub.add_parser("all")
     a.add_argument("--shard", default="1/1")
+    a.add_argument(
+        "--with-plugins", action="store_true", help="include needs-plugins rows (the nightly has the plugins checkout)"
+    )
+    sub.add_parser("manual")
     r = sub.add_parser("run")
     r.add_argument("--shard", default="1/1")
     r.add_argument("--slots", type=int, default=3)
@@ -264,7 +297,7 @@ def main(argv: list[str]) -> int:
     r.add_argument("ids", nargs="*")
     n = sub.add_parser("report")
     n.add_argument("dir")
-    n.add_argument("--expected", type=int, default=8)
+    n.add_argument("--expected", type=int, default=9, help="the eight shards and the stack job")
     n.add_argument("--run-url", default="")
     args = ap.parse_args(argv)
     known = runnable(REGISTRY.read_text(encoding="utf-8"))
@@ -278,8 +311,12 @@ def main(argv: list[str]) -> int:
         if chosen:
             print("\n".join(chosen))
         return 0
+    if args.cmd == "manual":
+        print("\n".join(manual(REGISTRY.read_text(encoding="utf-8"))))
+        return 0
     if args.cmd == "all":
-        print("\n".join(shard(known, args.shard)))
+        both = runnable(REGISTRY.read_text(encoding="utf-8"), plugins=args.with_plugins)
+        print("\n".join(shard(both, args.shard)))
         return 0
     if args.cmd == "report":
         files = sorted(Path(args.dir).glob("**/shard.json"))

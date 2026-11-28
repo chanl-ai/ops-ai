@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { waitForSaved, workingCopyOf } from '../../lib/workflow_ui.mjs';
 
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
@@ -16,6 +16,8 @@ const EDITOR_SHOTS = evidenceDir('486', 'editor');
 const SHOTS = evidenceDir('486', 'timings');
 // Routes are computed in a Web Worker after the canvas fits; this is how long a check waits for them to settle.
 const SETTLE_MS = 2_000;
+// A dropped step's lines look attached to it while the person is still looking at it: they reroute within 300 ms.
+const REROUTE_MS = 300;
 
 const signIn = async (browser, consoleUrl, width = 1440, height = 1000, who = JAMES) => {
   const page = await (await browser.newContext({ viewport: { width, height } })).newPage();
@@ -187,7 +189,13 @@ await withUiStack(
       const editorClean = (name, g) => clean(name, g);
       for (const id of ['mail_intake', 'mail_document', 'levy_case', 'complaint_triage', 'card_dispute_intake', 'uc486_fifty', 'uc486_unplaced', 'uc486_old_spacing']) {
         await openEditor(id);
-        const g = await geometry(james, ROOT_SEL);
+        let g = await geometry(james, ROOT_SEL);
+        // Lines are routed after the steps are measured; fifty steps take longer than SETTLE_MS on a slow runner, so the
+        // geometry is read again until no line crosses a step (or 20 s pass and the check below reports what remains).
+        for (let waited = 0; waited < 20_000 && throughSteps(g).length > 0; waited += 1_000) {
+          await james.waitForTimeout(1_000);
+          g = await geometry(james, ROOT_SEL);
+        }
         const trigger = g.steps[0];
         const fits = g.steps.every((s) => s.x >= g.canvas.x - 1 && s.x + s.w <= g.canvas.x + g.canvas.w + 1);
         check(
@@ -268,7 +276,7 @@ await withUiStack(
       await james.waitForTimeout(SETTLE_MS);
       clean('uc486_fifty: after dropping step_10', await geometry(james, ROOT_SEL));
       timings.push({ workflow: 'uc486_fifty', step: dropped.id, lines: ownLines.length, msToReroute: rerouted });
-      check("uc486_fifty: a dropped step's lines are clear of every step within 300 ms", rerouted !== null && rerouted <= 300, rerouted);
+      check(`uc486_fifty: a dropped step's lines are clear of every step within ${REROUTE_MS} ms`, rerouted !== null && rerouted <= REROUTE_MS, rerouted);
       await james.screenshot({ path: join(EDITOR_SHOTS, 'uc486_fifty-after-drop-1280.png') });
 
       // Drag a step of levy_case 200 px down: its lines are routed again; then Tidy up, Undo, Tidy up and save.
@@ -291,7 +299,10 @@ await withUiStack(
       };
       const dragged = rel(afterDrag, moved.id);
       // The seeds are baked tidy, so the drag is saved first; the Tidy up after it is then a change of its own.
-      const saveNow = () => versionFromEditor(james, 'levy_case', H);
+      const saveNow = async () => {
+        await waitForSaved(james);
+        return workingCopyOf('levy_case', H);
+      };
       const draggedVersion = await saveNow();
       await james.keyboard.press('t');
       await james.getByText('Steps tidied').waitFor({ timeout: 10_000 });
@@ -314,18 +325,19 @@ await withUiStack(
       const tidiedVersion = await saveNow();
       // The seeds are baked with the same layout, so the tidied workflow is version 1 again, byte for byte.
       check(
-        'levy_case: a version made from the saved working copy keeps the dragged layout, and Tidy up lays it out exactly as the baked seed',
-        draggedVersion?.created === true && tidiedVersion?.version === 1 && tidiedVersion.created === false,
-        { draggedVersion, tidiedVersion },
+        'levy_case: the saved working copy keeps the dragged layout, and Tidy up lays it out exactly as the baked seed (version 1)',
+        !!draggedVersion.copy && tidiedVersion.version === 1 && (!tidiedVersion.copy || JSON.stringify(tidiedVersion.copy.definition) === JSON.stringify(tidiedVersion.definition)),
+        { dragged: !!draggedVersion.copy, tidiedVersion: tidiedVersion.version, tidiedCopy: !!tidiedVersion.copy },
       );
       await james.screenshot({ path: join(EDITOR_SHOTS, 'levy_case-tidied-1280.png') });
 
       // A run's canvas: laid out, lines clear of steps, no Tidy up and no dragging.
-      await fetch(`${agents}/v1/workflows/definitions/uc486_unplaced/publish-requests`, { method: 'POST', headers: H, body: '{}' });
+      // The workflow stays a draft, so its run is a test run of the latest version; a live run needs an approved version.
       const started = await (
-        await fetch(`${agents}/v1/runs`, { method: 'POST', headers: H, body: JSON.stringify({ workflowId: 'uc486_unplaced', input: { record: { name: 'Ana Example' } } }) })
+        await fetch(`${agents}/v1/runs`, { method: 'POST', headers: H, body: JSON.stringify({ workflowId: 'uc486_unplaced', mode: 'test', input: { record: { name: 'Ana Example' } } }) })
       ).json();
       const runId = started.data?.runId ?? started.data?.id;
+      check('E2 setup: the run of the unplaced workflow starts', !!runId, started);
       await james.goto(`${consoleUrl}/workflows/runs/${encodeURIComponent(runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.locator('[data-testid=run-canvas] [data-testid=definition-node]').first().waitFor({ timeout: 120_000 });
       await james.waitForTimeout(SETTLE_MS);

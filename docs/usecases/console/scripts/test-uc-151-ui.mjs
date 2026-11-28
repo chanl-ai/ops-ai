@@ -3,7 +3,7 @@
 // settings. A draft whose trigger is Email received is saved through the API; James opens its trigger in the canvas,
 // picks the mailbox the server offers, sets the folder and filters, and saves a version that keeps them.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { workingCopyWhen, waitForSaved } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -79,16 +79,10 @@ await withUiStack(
         await page.locator('[data-field="node-start-fromContains"]').fill('@court.example');
         await page.locator('[data-field="node-start-subjectContains"]').fill('garnishment');
         await page.locator('#node-start-hasAttachment').click();
-        await versionFromEditor(page, WORKFLOW.id, J);
-        let params = {};
-        for (let i = 0; i < 30; i++) {
-          const latest = await (await fetch(`${agents}/v1/workflows/definitions/${WORKFLOW.id}`, { headers: J })).json();
-          if (latest.data?.version === 2) {
-            params = latest.data.definition.nodes.find((n) => n.id === 'start').parameters;
-            break;
-          }
-          await page.waitForTimeout(500);
-        }
+        await waitForSaved(page);
+        // Editing makes no version: the settings are kept in the working copy until a publish makes version 2.
+        const saved = await workingCopyWhen(WORKFLOW.id, J, (r) => r.copy?.definition.nodes.find((n) => n.id === 'start')?.parameters.mailbox === MAILBOX);
+        const params = saved.copy?.definition.nodes.find((n) => n.id === 'start')?.parameters ?? {};
         const kept = params.mailbox === MAILBOX && params.folder === 'Levies' && params.fromContains === '@court.example' && params.subjectContains === 'garnishment' && params.hasAttachment === true;
         check('3 the mailbox picker offers the team mailbox; folder and filters are set and saved', offered.some((o) => o.includes(MAILBOX)) && kept, { offered, params });
       });

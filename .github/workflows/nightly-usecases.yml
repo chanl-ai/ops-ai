@@ -71,12 +71,20 @@ jobs:
           node: "true"
           browser: "true"
           infra: "true"
+      - name: Clone the plugins repository beside the checkout
+        # needs-plugins use cases read it through OPS_PLUGINS_REPO (docs/usecases/README.md); the repository is public.
+        run: |
+          git clone --depth 1 https://github.com/chanl-ai/ops-ai-plugins "$RUNNER_TEMP/ops-ai-plugins"
+          echo "OPS_PLUGINS_REPO=$RUNNER_TEMP/ops-ai-plugins" >> "$GITHUB_ENV"
+      - name: Install the OCR engine
+        # uc-250, 672 and 673 read a scanned page with tesseract (ops_ingest reading/images.py); the runner image has none.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends tesseract-ocr
       - name: Run this shard
         env:
           SHARD: ${{ matrix.shard }}/8
         run: |
           scripts/ensure-sdk-ts-built.sh
-          mapfile -t ids < <(python3 scripts/ci_usecases.py all --shard "$SHARD")
+          mapfile -t ids < <(python3 scripts/ci_usecases.py all --with-plugins --shard "$SHARD")
           # --no-gate: the job records failures in its result file and the report job below turns them into the issue.
           python3 scripts/ci_usecases.py run --shard 1/1 --no-gate --out "$RUNNER_TEMP/shard.json" "${ids[@]}"
       - if: always()
@@ -89,8 +97,46 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  examples:
+    # The use cases whose registry status is manual (scripts/ci_usecases.py leaves them out of the shards) run against one
+    # standing stack with the sample team, as their pages say: `make up DEMO_MODEL=fake`, which installs it on a new database.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          infra: "true"
+      - name: Start the stack and run the stack-bound use cases
+        env:
+          # The stack `make up` starts on this runner; the Examples' setup reads it to find the services.
+          OPS_BASE_URL: http://127.0.0.1
+        run: |
+          make up AUTH=platform DEMO_MODEL=fake
+          mapfile -t ids < <(python3 scripts/ci_usecases.py manual)
+          python3 scripts/ci_usecases.py run --shard 1/1 --no-gate --out "$RUNNER_TEMP/shard.json" "${ids[@]}"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-usecases-stack
+          path: |
+            ${{ runner.temp }}/shard.json
+            .logs/usecases
+          if-no-files-found: ignore
+          retention-days: 14
+
   report:
-    needs: usecases
+    needs: [usecases, examples]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -108,12 +154,12 @@ jobs:
       - name: Record the failures
         env:
           GH_TOKEN: ${{ github.token }}
-          SHARDS_RESULT: ${{ needs.usecases.result }}
+          SHARDS_RESULT: ${{ needs.usecases.result }}${{ needs.examples.result }}
         run: |
           python3 scripts/ci_usecases.py report shards --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           # A shard that died before writing its result file is a red night too.
-          if grep -q '^FAILED' report.md || [ "$SHARDS_RESULT" != success ]; then
+          if grep -q '^FAILED' report.md || [ "$SHARDS_RESULT" != successsuccess ]; then
             gh issue create --title "nightly use cases red on develop, $(date -u +%F)" --label nightly --body-file report.md \
               || gh issue create --title "nightly use cases red on develop, $(date -u +%F)" --body-file report.md
             exit 1

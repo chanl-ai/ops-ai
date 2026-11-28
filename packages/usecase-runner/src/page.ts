@@ -37,19 +37,22 @@ export interface Page {
   steps: PageStep[];
   /** Saved sign-in profiles the page's people use, from "Who is in it". */
   profiles: string[];
-  /** Open rows of the Gaps table; a page with one does not pass. */
-  gaps: { line: number; text: string }[];
+  /** Rows of the Gaps table. A row with an owner and an unexpired Until date is skipped; any other row fails the run. */
+  gaps: { line: number; text: string; allOf?: string; owner?: string; until?: string }[];
   /** The "Services the run starts" row of Details, as written. */
   services: string;
+  /** Files the page names with a fenced block titled `title="name"` and no tab: written beside the code before it runs. */
+  files: Record<string, string>;
 }
 
 const FENCE = /^```\w*.*\btab="([^"]+)"/;
 
 export function parsePage(text: string, path: string): Page {
   const lines = text.split('\n');
-  const page: Page = { path, setup: [], steps: [], profiles: [], gaps: [], services: '' };
+  const page: Page = { path, setup: [], steps: [], profiles: [], gaps: [], services: '', files: {} };
   let section = '';
   let step: PageStep | undefined;
+  let gapHeader: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     const h2 = /^## (.+)/.exec(line);
@@ -62,6 +65,14 @@ export function parsePage(text: string, path: string): Page {
     if (h3 && section === 'steps') {
       step = { n: Number(h3[1]), title: h3[2]!.trim(), line: i + 1, blocks: [] };
       page.steps.push(step);
+      continue;
+    }
+    const file = /^```\w*\s+title="([^"]+)"/.exec(line);
+    if (file && !FENCE.test(line)) {
+      const end = lines.findIndex((l, j) => j > i && l.startsWith('```'));
+      if (end < 0) throw new Error(`${path}:${i + 1}: code block never closes`);
+      page.files[file[1]!] = `${lines.slice(i + 1, end).join('\n')}\n`;
+      i = end;
       continue;
     }
     const fence = FENCE.exec(line);
@@ -82,8 +93,19 @@ export function parsePage(text: string, path: string): Page {
     if (section === 'who is in it') {
       const profile = /`([^`]+)` profile/.exec(cells[2] ?? '');
       if (profile) page.profiles.push(profile[1]!);
-    } else if (section === 'gaps' && cells[0] !== 'Product fix') {
-      page.gaps.push({ line: i + 1, text: cells.join(' | ') });
+    } else if (section === 'gaps' && cells[0] === 'Product fix') {
+      gapHeader = cells;
+    } else if (section === 'gaps') {
+      const at = (name: string) => cells[gapHeader.indexOf(name)] || undefined;
+      const owner = at('Owner');
+      const until = at('Until');
+      page.gaps.push({
+        line: i + 1,
+        text: cells.join(' | '),
+        ...(cells[1] === 'All' && cells[2] ? { allOf: cells[2] } : {}),
+        ...(owner ? { owner } : {}),
+        ...(until ? { until } : {}),
+      });
     } else if (section === 'details' && cells[0] === 'Services the run starts') {
       page.services = cells[1] ?? '';
     }
@@ -252,6 +274,32 @@ function startStack(root: string, page: Page, config: string, env: NodeJS.Proces
   });
 }
 
+/** True when the gap row names an owner and an Until date that has not passed, so a skip is somebody's to end. */
+export function gapIsOwned(g: Page['gaps'][number], today: string): boolean {
+  return !!g.owner && !!g.until && /^\d{4}-\d{2}-\d{2}$/.test(g.until) && g.until >= today;
+}
+
+/**
+ * Writes the files the page names into `work` and reports its gaps. A gap is a product change tracked on its own: an
+ * owned, unexpired row is a SKIP (and an All row skips its tab); a row without an owner or past its Until date is a
+ * FAIL, so a gap cannot hide a tab for good.
+ */
+export function prepareWork(page: Page, work: string, say: (line: string) => void, today = new Date().toISOString().slice(0, 10)): { failed: boolean; skippedTabs: Set<string> } {
+  let failed = false;
+  const skippedTabs = new Set<string>();
+  for (const g of page.gaps) {
+    if (gapIsOwned(g, today)) {
+      say(`SKIP gap open (${page.path}:${g.line}): ${g.text}`);
+      if (g.allOf) skippedTabs.add(g.allOf);
+    } else {
+      say(`FAIL gap has no owner or its Until date has passed (${page.path}:${g.line}): ${g.text}`);
+      failed = true;
+    }
+  }
+  for (const [name, body] of Object.entries(page.files)) writeFileSync(join(work, name), body);
+  return { failed, skippedTabs };
+}
+
 /** Runs one layer of a page: its stack, then one program per tab in order. Output follows report.ts's contract. */
 export async function runPage(root: string, path: string, layer: Layer, env: NodeJS.ProcessEnv): Promise<{ code: number | null; output: string }> {
   const page = parsePage(readFileSync(join(root, path), 'utf8'), path);
@@ -264,9 +312,14 @@ export async function runPage(root: string, path: string, layer: Layer, env: Nod
     output += `${line}\n`;
     console.log(line);
   };
-  for (const g of page.gaps) say(`FAIL gap open (${page.path}:${g.line}): ${g.text}`);
-  let code: number | null = 0;
+  const prepared = prepareWork(page, work, say);
+  let code: number | null = prepared.failed ? 1 : 0;
+  const skipped = prepared.skippedTabs;
   for (const [k, tab] of tabs.entries()) {
+    if (skipped.has(tab)) {
+      say(`SKIP ${tab} tab: an open gap blocks it (see the Gaps table)`);
+      continue;
+    }
     // Each tab is its own run of the story: a fresh stack and, after the first, a fresh database, so the second tab
     // does not meet the first tab's knowledge base under the same name.
     const db = k ? runDatabaseName() : undefined;

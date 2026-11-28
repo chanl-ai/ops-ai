@@ -60,12 +60,17 @@ function libraryNeedsPlugins(source: string, scriptPath: string): boolean {
     });
 }
 
+/** True when a script, or a shared module under docs/usecases/lib it imports, reads the plugins repository path. */
+export function scriptNeedsPlugins(scriptPath: string): boolean {
+  const source = readFileSync(scriptPath, 'utf8');
+  return needsPlugins(source) || libraryNeedsPlugins(source, scriptPath);
+}
+
 /** The one line a run stops with when a script reads OPS_PLUGINS_REPO and the repo is not where it defaults to. */
 export function pluginsRepoRefusal(env: NodeJS.ProcessEnv, scriptPath: string): string | undefined {
   const repo = env.OPS_PLUGINS_REPO;
   if (!repo || existsSync(repo)) return undefined;
-  const source = readFileSync(scriptPath, 'utf8');
-  if (!needsPlugins(source) && !libraryNeedsPlugins(source, scriptPath)) return undefined;
+  if (!scriptNeedsPlugins(scriptPath)) return undefined;
   return `FAIL the plugins repository is not at ${repo}; clone ops-ai-plugins there or set OPS_PLUGINS_REPO to its folder`;
 }
 

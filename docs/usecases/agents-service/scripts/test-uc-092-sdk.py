@@ -74,6 +74,9 @@ with platform(), agents(env=AUTH):
         "'workflows': 'always'" in str(on.get("value")),
         on,
     )
+    # The two-person rule is off by default, and check 12 needs the requester refused.
+    two_person = priya.raw.platform.policies_set_policy("requesterMayDecide", {"value": False})
+    check("0 Priya turns the two-person rule on", two_person.get("value") == {"team_ops": False}, two_person)
     james = OpsAI.sign_in(JAMES, PASSWORD, team="team_ops", **CONN)
     maya = OpsAI.sign_in(MAYA, PASSWORD, team="team_ops", **CONN)
     wf = DEFINITION["id"]
