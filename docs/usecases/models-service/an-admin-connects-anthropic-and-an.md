@@ -61,6 +61,7 @@ tokens. It assumes the committed model catalog; nothing is fetched at run time.
 | 9 | Sam closes the dialog | The list shows the connection as Anthropic with its endpoint and the key name; no page shows the key |
 | 10 | Sam opens the row's Models | The catalog's Claude models show with what each can do |
 | 11 | Sam makes alias `fast-…` from the connection's catalog, cleared for Confidential | The Aliases list shows it with connection, model and clearance |
+| 11b | On a phone, 390 wide, Sam opens Aliases and Connections | Each row stacks its details under the name; neither the page nor a table scrolls sideways |
 | 12 | James picks the alias in the agent's Model dialog | Exactly Temperature, Top p, Top k, Thinking budget and Longest answer show, each marked Default |
 | 13 | James sets 0.4, top k 99 then resets it and sets 30, a 2,000 thinking budget, then 1.6 and Done, then 0.4 and Done | Reset empties its field; 1.6 keeps the dialog open and saves nothing; the agent then saves exactly those three settings |
 | 14 | James tests the agent | The fake received the saved settings |

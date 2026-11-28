@@ -121,12 +121,19 @@ function connectionColumns(labels: Record<string, string>, actions: { onModels: 
         <div className="min-w-0">
           <div className="text-sm font-medium">{row.original.name}</div>
           <div className="text-xs text-muted-foreground">{labels[row.original.type] ?? row.original.type}</div>
+          {/* On a phone the row stacks: the endpoint and key sit under the name, so the table keeps to the screen. */}
+          <div className="text-xs text-muted-foreground md:hidden">
+            <code className="font-mono"><TextCell>{row.original.baseUrl ?? 'No endpoint'}</TextCell></code>
+            <div>{row.original.keyRef ? <code className="font-mono">{row.original.keyRef}</code> : 'No key'}</div>
+          </div>
         </div>
       ),
+      meta: { kind: 'name' },
       enableHiding: false,
     },
     {
       accessorKey: 'baseUrl',
+      meta: { className: 'max-md:hidden' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Endpoint" />,
       cell: ({ row }) => (
         <div className="min-w-0">
@@ -137,11 +144,13 @@ function connectionColumns(labels: Record<string, string>, actions: { onModels: 
     },
     {
       accessorKey: 'region',
+      meta: { className: 'max-md:hidden' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Region" />,
       cell: ({ row }) => <Region c={row.original} />,
     },
     {
       accessorKey: 'keyRef',
+      meta: { className: 'max-md:hidden' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Signs in with" />,
       cell: ({ row }) => (row.original.keyRef ? <code className="font-mono text-sm">{row.original.keyRef}</code> : <span className="text-sm text-muted-foreground">No key</span>),
     },
@@ -169,11 +178,22 @@ function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey)
     {
       accessorKey: 'name',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
-      cell: ({ row }) => <code className="font-mono text-sm">{row.original.name}</code>,
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <code className="font-mono text-sm">{row.original.name}</code>
+          {/* On a phone when it was saved and replaced sit under the name. */}
+          <div className="text-xs text-muted-foreground md:hidden">
+            Saved {relativeTime(row.original.createdAt)} by {row.original.createdBy}
+            {row.original.rotatedAt ? `, replaced ${relativeTime(row.original.rotatedAt)}` : ''}
+          </div>
+        </div>
+      ),
+      meta: { kind: 'name' },
       enableHiding: false,
     },
     {
       accessorKey: 'createdAt',
+      meta: { className: 'max-md:hidden' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Saved" />,
       cell: ({ row }) => (
         <span className="text-sm whitespace-nowrap text-muted-foreground">
@@ -183,6 +203,7 @@ function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey)
     },
     {
       accessorKey: 'rotatedAt',
+      meta: { className: 'max-md:hidden' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Last replaced" />,
       cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{row.original.rotatedAt ? `${relativeTime(row.original.rotatedAt)} (version ${row.original.version})` : 'Never'}</span>,
     },

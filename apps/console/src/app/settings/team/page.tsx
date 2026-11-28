@@ -43,16 +43,6 @@ export default function GeneralSettingsPage() {
 
   return (
     <SettingsPageLayout sample={false} section="General" description="Choices that apply to everyone in this team.">
-      <SampleData>
-        <SettingCard id="name" title="Team name" description="Shown in the team switcher and on everything the team owns." help="Please use 32 characters at maximum." onSave={() => undefined}>
-          <Input value={name} maxLength={32} onChange={(e) => setName(e.target.value)} aria-label="Team name" className="w-full bg-card sm:w-1/2" />
-        </SettingCard>
-        <SettingCard id="owner" title="Owner" description="The group that answers for what this team runs." onSave={() => undefined}>
-          <div className="w-full sm:w-1/2">
-            <SearchSelect source={OWNERS} value={owner ? { id: owner, label: OWNER_LABEL[owner] ?? owner } : null} onChange={setOwner} placeholder="Pick a group" searchPlaceholder="Search groups…" ariaLabel="Owner" className="w-full" />
-          </div>
-        </SettingCard>
-      </SampleData>
       <Section title="Default agent" description="New chats start on this agent. It answers itself or asks the team's other agents, and anyone can switch to a specialist with @.">
         {current.isPending || agents.isPending ? (
           <Skeleton className="h-9 w-72" />
@@ -87,6 +77,16 @@ export default function GeneralSettingsPage() {
           </FormField>
         )}
       </Section>
+      <SampleData>
+        <SettingCard id="name" title="Team name" description="Shown in the team switcher and on everything the team owns." help="Please use 32 characters at maximum." onSave={() => undefined}>
+          <Input value={name} maxLength={32} onChange={(e) => setName(e.target.value)} aria-label="Team name" className="w-full bg-card sm:w-1/2" />
+        </SettingCard>
+        <SettingCard id="owner" title="Owner" description="The group that answers for what this team runs." onSave={() => undefined}>
+          <div className="w-full sm:w-1/2">
+            <SearchSelect source={OWNERS} value={owner ? { id: owner, label: OWNER_LABEL[owner] ?? owner } : null} onChange={setOwner} placeholder="Pick a group" searchPlaceholder="Search groups…" ariaLabel="Owner" className="w-full" />
+          </div>
+        </SettingCard>
+      </SampleData>
       <MakeDefaultAgentDialog agent={picked} open={!!picked} onOpenChange={(o) => !o && setPicked(undefined)} />
     </SettingsPageLayout>
   );

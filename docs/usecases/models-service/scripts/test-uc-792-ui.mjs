@@ -111,6 +111,20 @@ await withUiStack(
         check('11 the Aliases list shows the new alias with its connection, model and clearance', [ALIAS, CONNECTION, MODEL, 'Confidential'].every((t) => shown.includes(t)), shown);
       });
 
+      await step('11b on a phone (390 wide) the Aliases and Connections pages fit the screen: no sideways scroll of the page or a table', async () => {
+        const wide = admin.viewportSize();
+        await admin.setViewportSize({ width: 390, height: 844 });
+        const over = {};
+        for (const [path, name] of [['model-aliases', ALIAS], ['model-providers', CONNECTION]]) {
+          await admin.goto(`${consoleUrl}/settings/workspace/${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await admin.locator('tr', { hasText: name }).first().waitFor({ timeout: 60_000 });
+          await admin.screenshot({ path: join(SHOTS, `${path}-390.png`) });
+          over[path] = await admin.evaluate(() => [document.scrollingElement, ...document.querySelectorAll('table')].map((e) => (e.tagName === 'TABLE' ? e.scrollWidth - e.parentElement.clientWidth : e.scrollWidth - innerWidth)).filter((d) => d > 1));
+        }
+        if (wide) await admin.setViewportSize(wide);
+        check('11b at 390 neither page nor any of its tables is wider than the screen', Object.values(over).every((d) => d.length === 0), over);
+      });
+
       const builder = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
       builder.setDefaultTimeout(30_000);
       const saved = async () => (await (await fetch(`${agentsUrl}/v1/agents/${agentId}`, { headers: J })).json()).data;

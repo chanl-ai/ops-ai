@@ -48,3 +48,13 @@ test('no settings page falls to the catch-all route and shows the sample banner 
     .sort();
   assert.deepEqual(falseBanner, [], `these settings pages fall to the catch-all /settings route and show the sample banner: ${falseBanner.join(', ')}`);
 });
+
+// On a page that is live with one sample section, the sample note belongs to that section. When the section comes
+// first, its note sits straight under the page title and reads as a banner over the whole page, real cards included.
+test('no live settings page opens with its sample section, where the note reads as a page banner', () => {
+  const pageBanner = pages(here)
+    .filter((file) => /<SettingsPageLayout\b[^>]*>\s*<SampleData>/s.test(readFileSync(file, 'utf8')))
+    .map(routeOf)
+    .sort();
+  assert.deepEqual(pageBanner, [], `these live settings pages open with their sample section, so its note reads as a page banner: ${pageBanner.join(', ')}`);
+});

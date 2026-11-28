@@ -21,11 +21,12 @@ import { useCan } from '@/hooks/me-queries';
 import { useModelAliasList } from '@/hooks/model-queries';
 import { useProviderConnections } from '@/hooks/provider-connection-queries';
 import { useListParams } from '@/hooks/use-list-params';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { modelSetupOnly, usedByLabel } from '@/lib/model-forms';
 import type { ModelAliasRow } from '@/lib/types/models';
 
 const SORT = { name: 'name' };
+
+const sensitivityLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function columns(onEdit: ((a: ModelAliasRow) => void) | null): ColumnDef<ModelAliasRow>[] {
   return [
@@ -36,6 +37,12 @@ function columns(onEdit: ((a: ModelAliasRow) => void) | null): ColumnDef<ModelAl
         <div className="min-w-0">
           <code className="font-mono text-sm">{row.original.name}</code>
           <div className="text-xs text-muted-foreground">Version {row.original.version}</div>
+          {/* On a phone the row stacks: where the alias goes and what it is cleared for sit under the name, so the
+              table keeps to the screen with the menu in reach. */}
+          <div className="text-xs text-muted-foreground md:hidden">
+            {row.original.providerName ?? 'Unknown connection'} · <code className="font-mono">{row.original.modelId}</code>
+          </div>
+          <Badge variant="secondary" className="mt-1 md:hidden">{sensitivityLabel(row.original.clearedSensitivity)}</Badge>
         </div>
       ),
       meta: { kind: 'name' },
@@ -44,7 +51,7 @@ function columns(onEdit: ((a: ModelAliasRow) => void) | null): ColumnDef<ModelAl
     {
       id: 'goesTo',
       header: 'Goes to',
-      meta: { kind: 'description' },
+      meta: { kind: 'description', className: 'max-md:hidden' },
       cell: ({ row }) => (
         <div className="min-w-0 text-sm">
           {row.original.providerName ?? 'Unknown connection'}
@@ -57,19 +64,19 @@ function columns(onEdit: ((a: ModelAliasRow) => void) | null): ColumnDef<ModelAl
     {
       accessorKey: 'clearedSensitivity',
       header: 'Cleared for',
-      meta: { kind: 'status' },
-      cell: ({ row }) => <Badge variant="secondary">{row.original.clearedSensitivity.charAt(0).toUpperCase() + row.original.clearedSensitivity.slice(1)}</Badge>,
+      meta: { kind: 'status', className: 'max-md:hidden' },
+      cell: ({ row }) => <Badge variant="secondary">{sensitivityLabel(row.original.clearedSensitivity)}</Badge>,
     },
     {
       id: 'usedBy',
       header: 'Used by',
-      meta: { kind: 'status' },
+      meta: { kind: 'status', className: 'max-md:hidden' },
       cell: ({ row }) => <span className="text-sm whitespace-nowrap" data-testid="alias-used-by">{usedByLabel(row.original.usedBy)}</span>,
     },
     {
       id: 'price',
       header: 'Price per 1M tokens',
-      meta: { kind: 'money' },
+      meta: { kind: 'money', className: 'max-md:hidden' },
       cell: ({ row }) => <span className="text-xs whitespace-nowrap">{`$${row.original.inputPerMillion} / $${row.original.outputPerMillion}`}</span>,
     },
     {
@@ -101,7 +108,6 @@ export default function ModelAliasesPage() {
   const cols = React.useMemo(() => columns(admin ? (a) => setDialog({ editing: a }) : null), [admin]);
   const noConnections = connections.data?.pagination.total === 0;
   // On a phone the usage and price wait under View (both are on the edit dialog), so Cleared for shows in full.
-  const mobile = useIsMobile();
 
   return (
     <SettingsPageLayout
@@ -145,7 +151,6 @@ export default function ModelAliasesPage() {
             serverPagination={serverPagination(list, aliases)}
             serverSorting={list.serverSort}
             hideViewSwitcher
-            initialColumnVisibility={mobile ? { usedBy: false, price: false } : undefined}
             emptyState={
               <ListEmpty
                 icon={Tag}
