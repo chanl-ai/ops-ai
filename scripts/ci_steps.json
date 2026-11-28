@@ -52,6 +52,7 @@
       {"step": "Commit the generated files to the branch", "no_local_twin": "Pushes the regenerated files to the pull request's branch; locally `make openapi` and a commit do the same."}
     ],
     "ready": [
+      {"step": "The base revision's copy of the gate", "no_local_twin": "Takes develop's scripts/pr_flow.py inside the merge queue's run on GitHub."},
       {"step": "Ready for the queue", "no_local_twin": "Reads the other jobs' results, CodeQL's check runs on GitHub; `python3 scripts/pr_flow.py --self-test` proves the decisions."}
     ],
     "staging-scan": [

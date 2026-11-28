@@ -608,7 +608,7 @@ jobs:
 
   ready:
     # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head; in the
-    # queue's own run also that each pull request of the group was labelled `reviewed` by a maintainer after its last push. The
+    # queue's own run also that the entry's pull request was labelled `reviewed` by a maintainer after its last push. The
     # queue tests the pull request on develop's tip, so a stale base does not matter. A queue group and
     # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
     # scripts/pr_flow.py ready; its --self-test is in make checks.
@@ -623,6 +623,16 @@ jobs:
       checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The base revision's copy of the gate
+        # The queue's run judges the review with scripts/pr_flow.py; the pull request being merged must not be able to
+        # edit the check that judges it, so the queue run uses develop's copy (as maintainer-review does for its gate).
+        if: github.event_name == 'merge_group'
+        env:
+          BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          git fetch -q --depth=1 origin "$BASE"
+          git show "$BASE:scripts/pr_flow.py" > scripts/pr_flow.py
+          echo "scripts/pr_flow.py taken from $BASE"
       - name: Ready for the queue
         env:
           NEEDS: ${{ toJSON(needs) }}
@@ -630,10 +640,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # A pull request that changes no file runs no CodeQL; only then does ready not wait for it.
           TRIVIAL: ${{ needs.plan.outputs.trivial }}
-          # In the merge queue, every pull request of the group must carry a valid `reviewed` label (pr_flow.py review_problems).
+          # In the merge queue, the pull request of this entry must carry a valid `reviewed` label (pr_flow.py review_problems).
           GROUP_REF: ${{ github.event.merge_group.head_ref }}
-          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
-          GROUP_HEAD: ${{ github.event.merge_group.head_sha }}
         run: python3 scripts/pr_flow.py ready
 
   ci-ok:

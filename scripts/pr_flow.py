@@ -228,66 +228,55 @@ def permission_of(actor: str) -> str:
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
+def pushed_at(branch: str, sha: str) -> str:
+    """When `sha` was pushed to `branch`: the timestamp of the newest repository activity entry for that branch whose
+    `after` is the sha (GET /repos/{owner}/{repo}/activity lists pushes newest first, force pushes included). A commit
+    first pushed to a side branch counts from its push to this one. No entry for the sha, or any API error, raises."""
+    raw = gh(
+        "api", f"repos/{repo()}/activity?ref=refs/heads/{branch}&per_page=100", "--jq", "[.[] | {after, timestamp}]"
+    )
+    for entry in json.loads(raw):
+        if entry["after"] == sha:
+            return str(entry["timestamp"])
+    raise ValueError(f"no push of {sha[:8]} to {branch} among its latest 100")
+
+
 def review_facts(number: int) -> tuple[dict, list[dict], str]:
-    """One pull request's facts: the pull request, the timeline events that matter, and when its head was pushed. GitHub
-    shows no push time, so it is the later of the newest force-push event on the timeline and the earliest check suite
-    of the head commit (created by the push that brought the commit; a commit cannot be reviewed before it exists on
-    GitHub). A commit's own dates are the pusher's to choose and are not read."""
+    """One pull request's facts: the pull request, the timeline events of the `reviewed` label, and when its head was
+    pushed to its branch."""
     info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
     raw = gh(
         "api",
         "--paginate",
         f"repos/{repo()}/issues/{number}/timeline?per_page=100",
         "--jq",
-        '[.[] | select(.event | IN("labeled","unlabeled","head_ref_force_pushed"))'
+        '[.[] | select(.event | IN("labeled","unlabeled"))'
         ' | {event, label: (.label.name // ""), actor: (.actor.login // ""), at: .created_at}]',
     )
     events = [e for line in raw.splitlines() if line.strip() for e in json.loads(line)]
-    suites = json.loads(
-        gh(
-            "api",
-            f"repos/{repo()}/commits/{info['head']['sha']}/check-suites?per_page=100",
-            "--jq",
-            "[.check_suites[].created_at]",
-        )
-    )
-    if not suites:
-        raise ValueError(f"no check suite for the head of #{number}")
-    pushed = max([min(suites), *(e["at"] for e in events if e["event"] == "head_ref_force_pushed")])
     pr = {
+        "base": info["base"]["ref"],
         "labels": [x["name"] for x in info["labels"]],
         "head": info["head"]["ref"],
         "author": info["user"]["login"],
         "fork": info["head"]["repo"] is None or info["head"]["repo"]["full_name"] != info["base"]["repo"]["full_name"],
     }
-    return pr, events, pushed
-
-
-def group_prs(head_ref: str, base_sha: str, head_sha: str) -> list[int]:
-    """The pull requests of a merge queue group: the one the queue branch names and every `Merge pull request #n`
-    commit between the group's base and head."""
-    found = {n for n in [queue_pr(head_ref.removeprefix("refs/heads/"))] if n}
-    lines = gh(
-        "api", f"repos/{repo()}/compare/{base_sha}...{head_sha}", "--jq", '.commits[].commit.message | split("\n")[0]'
-    )
-    found |= {int(m.group(1)) for ln in lines.splitlines() if (m := re.match(r"Merge pull request #(\d+) ", ln))}
-    return sorted(found)
+    return pr, events, pushed_at(info["head"]["ref"], info["head"]["sha"])
 
 
 def queue_review_reasons() -> list[str]:
-    """In the queue's run, every pull request of the group must hold a valid review; a failure to read any of it fails.
-    A pull request's own run cannot judge this: a label starts no run, so it would stay red until a push."""
+    """In a queue entry's run, the pull request that entry is (named by its branch, gh-readonly-queue/develop/pr-N-sha)
+    must hold a valid review. Every entry of a group has its own run and the queue merges only when each is green, so
+    judging only the named pull request covers the group. A failure to read any of it fails. A pull request's own run
+    cannot judge this: a label starts no run, so it would stay red until a push."""
     try:
-        numbers = group_prs(
-            os.environ.get("GROUP_REF", ""), os.environ.get("GROUP_BASE", ""), os.environ.get("GROUP_HEAD", "")
-        )
-        if not numbers:
-            return ["no pull request found in the queue group"]
-        reasons = []
-        for n in numbers:
-            pr, events, pushed = review_facts(n)
-            reasons += [f"#{n}: {why}" for why in review_problems(pr, events, pushed, permission_of)]
-        return reasons
+        number = queue_pr(os.environ.get("GROUP_REF", "").removeprefix("refs/heads/"))
+        if number is None:
+            return ["the queue branch names no pull request"]
+        pr, events, pushed = review_facts(number)
+        reasons = [] if pr["base"] == "develop" else [f"its base is {pr['base']}, not develop"]
+        reasons += review_problems(pr, events, pushed, permission_of)
+        return [f"#{number}: {why}" for why in reasons]
     except (SystemExit, KeyError, ValueError, TypeError) as err:
         return [f"the review could not be checked ({err}); the queue run fails closed"]
 

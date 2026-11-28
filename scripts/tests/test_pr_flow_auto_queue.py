@@ -22,6 +22,9 @@ class FakeGh:
     ) -> None:
         self.calls: list[str] = []
         self.fail, self.permission, self.armed, self.head = fail, permission, armed, head
+        self.base = "develop"
+        # Repository activity, newest first; the head of pull request 7 is "headsha".
+        self.pushes = [{"after": "headsha", "timestamp": "2026-11-28T09:00:00Z"}]
 
     def __call__(self, cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         line = " ".join(cmd[1:])
@@ -34,10 +37,16 @@ class FakeGh:
             return subprocess.CompletedProcess(cmd, 0, self.permission + "\n", "")
         if "auto_merge != null" in line:
             return subprocess.CompletedProcess(cmd, 0, str(self.armed).lower() + "\n", "")
+        if "/activity?" in line:
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(self.pushes), "")
+        if "/timeline" in line:
+            marks = [{"event": "labeled", "label": "reviewed", "actor": "maint", "at": "2026-11-28T10:00:00Z"}]
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(marks) + "\n", "")
         if line.startswith("api repos/o/r/pulls/7"):
             info = {
-                "base": {"ref": "develop", "repo": {"full_name": "o/r"}},
-                "head": {"ref": "fix/x", "repo": {"full_name": "o/r"}},
+                "base": {"ref": self.base, "repo": {"full_name": "o/r"}},
+                "head": {"ref": "fix/x", "sha": "headsha", "repo": {"full_name": "o/r"}},
+                "user": {"login": "dev"},
                 "labels": [{"name": "reviewed"}],
                 "draft": False,
                 "auto_merge": {"x": 1} if self.armed else None,
@@ -104,11 +113,27 @@ def test_the_queue_takes_only_a_pull_request_reviewed_by_a_maintainer_after_its_
     assert (pr_flow.review_problems(pr, events, "2026-11-28T09:00:00Z", lambda _a: access) == []) is passes
 
 
-def test_the_queue_run_fails_closed_when_the_review_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
-    def broken(*_a: Any, **_k: Any) -> str:
-        raise SystemExit("gh api: 502")
-
+def test_the_queue_run_judges_the_pull_request_its_own_branch_names(
+    fake: FakeGh, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("GROUP_REF", "refs/heads/gh-readonly-queue/develop/pr-7-abc123")
-    monkeypatch.setattr(pr_flow, "gh", broken)
-    reasons = pr_flow.queue_review_reasons()
-    assert reasons and "fails closed" in reasons[0], reasons
+    assert pr_flow.queue_review_reasons() == []
+    fake.base = "feat/stacked"
+    assert any("not develop" in why for why in pr_flow.queue_review_reasons())
+    monkeypatch.setenv("GROUP_REF", "refs/heads/gh-readonly-queue/develop/other")
+    assert pr_flow.queue_review_reasons() == ["the queue branch names no pull request"]
+
+
+def test_the_push_time_is_the_activity_entry_for_the_head_and_a_missing_entry_or_error_fails_closed(
+    fake: FakeGh, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert pr_flow.pushed_at("fix/x", "headsha") == "2026-11-28T09:00:00Z"
+    monkeypatch.setenv("GROUP_REF", "refs/heads/gh-readonly-queue/develop/pr-7-abc123")
+    # The head was pushed to another branch first; this branch's activity never shows it.
+    fake.pushes = [{"after": "older", "timestamp": "2026-11-28T08:00:00Z"}]
+    with pytest.raises(ValueError, match="no push"):
+        pr_flow.pushed_at("fix/x", "headsha")
+    assert "fails closed" in pr_flow.queue_review_reasons()[0]
+    fake.pushes = [{"after": "headsha", "timestamp": "2026-11-28T09:00:00Z"}]
+    fake.fail = ("/activity?",)
+    assert "fails closed" in pr_flow.queue_review_reasons()[0]
