@@ -65,7 +65,6 @@ jobs:
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
       code: ${{ steps.plan.outputs.code }}
       mssql: ${{ steps.plan.outputs.mssql }}
-      store: ${{ steps.plan.outputs.store }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
     steps:

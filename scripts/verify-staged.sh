@@ -212,5 +212,5 @@ PY
   fi
 fi
 # Slower checks that build each service (OpenAPI documents, the generated SDKs, import directions, strict types, the
-# SQL Server DDL and store tests) run in CI on every pull request and in `make verify`, not on each commit. After a route
+# SQL Server DDL and store tests) run in CI (the SQL Server ones in the merge queue) and in `make verify`, not on each commit. After a route
 # or DTO change, `make openapi` regenerates every service's document and the SDKs in one step.
