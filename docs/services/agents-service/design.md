@@ -25,9 +25,9 @@ decide forms (`components/reviews/task-decision.tsx`) read the routes below.
 
 | Method and path | Does | Who may | File | State |
 |---|---|---|---|---|
-| GET `/reviews?view=&group=case&page=&pageSize=` | One page of a view (open, mine, overdue, resolved, all) with view counts, facets and stats; `group=case` orders it by case and adds `caseTitle` from the reader's teams | signed in, the team's reviews | `api/routers/reviews.py` | built, with `group` |
+| GET `/reviews?view=&group=case&search=&page=&pageSize=` | One page of a view (open, mine, overdue, resolved, all) with view counts, facets and stats; `group=case` orders it by case and adds `caseTitle` from the reader's teams; `search` matches the title and id, and the customer and the case's name where the reader reads the task's real values | signed in, the team's reviews | `api/routers/reviews.py` | built, with `group` |
 | GET `/reviews/{id}/place?view=&group=case` | Its position, the total and the reviews either side, in the order the list uses | signed in | `api/routers/reviews.py` | built, with `group` |
-| GET `/reviews/{id}` | One review with `canDecide` | signed in | `api/routers/reviews.py` | built |
+| GET `/reviews/{id}` | One review with what the caller may do (`canDecide`, `canAssign`, `canReassign`, `canReturn`, each by its route's own check, `hitl_facade.with_rights`), the step in words (`actionLabel`), the call's own currency (null when it names none), `approvalsNeeded` and `viewerApproved`; list rows carry the same | signed in | `api/routers/reviews.py` | built |
 | POST `/reviews/{id}/decision` | Decide: a decision or an option, reason, inputs, step-up token; 409 `already_decided` | reviews.decide in the review's team | `api/routers/reviews.py` | built |
 | POST `/reviews/assign` | Assign reviews to a person | reviews.decide | `api/routers/reviews.py` | built |
 

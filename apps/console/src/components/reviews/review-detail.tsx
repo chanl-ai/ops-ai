@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { BookOpen, Bot, Clock, ShieldCheck, Users, Wrench } from 'lucide-react';
 
@@ -22,6 +23,7 @@ import { AgentPublishBody } from '@/components/agents/agent-publish-review-body'
 
 import { DocumentReadSection, type ReadChecks, type ReadEdits, ReplySection } from './document-read';
 import { ModelValidationBody, PublishEvalSection } from './model-validation';
+import { DecisionBarContext } from './decision-bar';
 import { isOpen } from './review-columns';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -235,7 +237,7 @@ export function ReviewDetailBody({
         <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
           <p className="text-sm font-medium leading-relaxed">{review.proposal}</p>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-            {review.amount != null && <span className="font-semibold text-foreground tabular-nums">{money(review.amount, review.currency)}</span>}
+            {review.amount != null && <span className="font-semibold text-foreground tabular-nums">{money(review.amount, review.currency ?? null)}</span>}
             <span className="flex items-center gap-1.5">
               <Wrench className="size-3.5" /> Runs <code className="font-mono text-foreground">{review.actionTool}</code> on approval
             </span>
@@ -257,7 +259,7 @@ export function ReviewDetailBody({
             </dd>
             {policy.fourEyes && (
               <dd className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <ShieldCheck className="size-3.5" /> Two approvers · {review.approvals.length} of 2 so far
+                <ShieldCheck className="size-3.5" /> {review.approvalsNeeded ?? 2} approvers · {review.approvals.length} of {review.approvalsNeeded ?? 2} so far
               </dd>
             )}
           </div>
@@ -391,10 +393,13 @@ export function ReviewDecisionForm({
   const [missing, setMissing] = React.useState(false);
   // On by default: a rejected action is the cheapest test case the suite will ever get.
   const [addTestCase, setAddTestCase] = React.useState(true);
+  // Return chosen from the task bar's More menu: the reason box opens with its own Return and Cancel, one step.
+  const [returning, setReturning] = React.useState(false);
   React.useEffect(() => {
     setReason('');
     setMissing(false);
     setAddTestCase(true);
+    setReturning(false);
   }, [review.id]);
 
   const gate = review.kind === 'publish_request' ? review.publish?.evalGate : undefined;
@@ -405,9 +410,10 @@ export function ReviewDecisionForm({
     setMissing(false);
     onDecide(decision, reason.trim(), decision !== 'approved' && !!review.testTarget && addTestCase);
   };
-  const needsSecond = review.policy.fourEyes && review.approvals.length === 0;
+  const needed = review.approvalsNeeded ?? (review.policy.fourEyes ? 2 : 1);
+  const needsSecond = needed > 1;
   const mine = (who?: string) => !!who && !!currentUser?.includes(who);
-  const alreadyApproved = review.approvals.some(mine);
+  const alreadyApproved = review.viewerApproved ?? review.approvals.some(mine);
   const ownPublish =
     (review.kind === 'publish_request' && mine(review.publish?.requestedBy)) || (review.kind === 'skill_publish' && mine(review.skillPublish?.requestedBy)) || (review.kind === 'template_submission' && mine(review.templateSubmission?.submittedBy)) ||
     // Maker-checker on agents covers whoever saved the version as well as whoever requested it.
@@ -417,8 +423,18 @@ export function ReviewDecisionForm({
   // A host request is allowed or refused; a refusal's reason is what the person who set the address reads.
   const isHost = review.kind === 'egress_host';
   // The page footer is one row until an action needs a reason (or one is being typed); the sheet always shows the box.
-  const showReason = layout === 'sheet' || missing || !!reason || reasonToApprove;
+  const showReason = layout === 'sheet' || missing || !!reason || reasonToApprove || returning;
   const platformOnly = isTemplate && !platformTeam;
+  // In Human Tasks the buttons sit in the task's pinned bar and Return in its More menu; the reason they check stays
+  // here, so the form is still the one source of what each button does.
+  const bar = React.useContext(DecisionBarContext);
+  const inBar = layout === 'footer' && !!bar?.slot && !platformOnly;
+  const barReturn = inBar && review.canReturn === true;
+  React.useEffect(() => {
+    if (!bar) return;
+    bar.setReturn(barReturn ? () => setReturning(true) : null);
+    return () => bar.setReturn(null);
+  }, [bar, barReturn]);
   if (platformOnly)
     return (
       <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground" data-testid="review-decision-platform-only">
@@ -426,6 +442,16 @@ export function ReviewDecisionForm({
       </p>
     );
 
+  const decideButtons = (
+    <>
+          <LoadingButton variant="outline" size="sm" isLoading={pending === 'rejected'} disabled={!!pending} onClick={() => submit('rejected')} data-testid="review-reject">
+            {isHost ? 'Refuse' : 'Reject'}
+          </LoadingButton>
+          <LoadingButton size="sm" isLoading={pending === 'approved'} disabled={!!pending || alreadyApproved || ownPublish || blocked || !!approveBlocked} onClick={() => submit('approved')} data-testid="review-approve">
+            {approveBlocked ? `Approve · ${approveBlocked}` : blocked ? 'Blocked by evals' : ownPublish ? (isTemplate ? 'Another platform member approves' : 'Another publisher approves') : alreadyApproved ? 'Waiting on second approver' : needsSecond ? `Approve · ${review.approvals.length + 1} of ${needed}` : isTemplate ? 'Approve and publish template' : isPublish ? 'Approve and publish' : 'Approve'}
+          </LoadingButton>
+    </>
+  );
   return (
     <div
       className={cn(
@@ -476,20 +502,37 @@ export function ReviewDecisionForm({
             {consequence}
           </p>
         )}
+        {returning && (
+          <div className="flex gap-2" data-testid="return-confirm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setReturning(false);
+                setMissing(false);
+              }}
+              data-testid="return-cancel"
+            >
+              Cancel
+            </Button>
+            <LoadingButton variant="outline" size="sm" isLoading={pending === 'returned'} disabled={!!pending} onClick={() => submit('returned')} data-testid="return-submit">
+              Return
+            </LoadingButton>
+          </div>
+        )}
         {/* A workflow's own step has no agent or requester to return it to: it is approved or rejected. */}
-        {(isPublish || !review.runId) && !isHost && (
+        {!inBar && review.canReturn === true && (
           <Button variant="ghost" size="sm" disabled={!!pending} onClick={() => submit('returned')}>
             {isTemplate ? 'Return to submitter' : isPublish ? 'Return to requester' : 'Return to agent'}
           </Button>
         )}
-        <div className={cn('ml-auto flex gap-2', layout === 'footer' && 'max-sm:w-full max-sm:*:flex-1')}>
-          <LoadingButton variant="outline" size="sm" isLoading={pending === 'rejected'} disabled={!!pending} onClick={() => submit('rejected')} data-testid="review-reject">
-            {isHost ? 'Refuse' : 'Reject'}
-          </LoadingButton>
-          <LoadingButton size="sm" isLoading={pending === 'approved'} disabled={!!pending || alreadyApproved || ownPublish || blocked || !!approveBlocked} onClick={() => submit('approved')} data-testid="review-approve">
-            {approveBlocked ? `Approve · ${approveBlocked}` : blocked ? 'Blocked by evals' : ownPublish ? (isTemplate ? 'Another platform member approves' : 'Another publisher approves') : alreadyApproved ? 'Waiting on second approver' : needsSecond ? 'Approve · 1 of 2' : isTemplate ? 'Approve and publish template' : isPublish ? 'Approve and publish' : 'Approve'}
-          </LoadingButton>
-        </div>
+        {inBar
+          ? createPortal(<div className="flex flex-wrap justify-end gap-2" data-testid="task-bar-decide">{decideButtons}</div>, bar!.slot!)
+          : (
+            <div className={cn('ml-auto flex gap-2', layout === 'footer' && 'max-sm:w-full max-sm:*:flex-1')}>
+              {decideButtons}
+            </div>
+          )}
       </div>
     </div>
   );

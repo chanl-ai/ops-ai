@@ -122,6 +122,15 @@ type ReviewSeed = {
   reasoning: string[];
   evidence: Evidence[];
   decisionReason?: string;
+  /** The case the run is on and its name, as the service groups and names it. */
+  caseId?: string;
+  caseTitle?: string;
+  /** What approving runs and sends, in the service's words. */
+  actionLabel?: string;
+  consequence?: string;
+  actionFields?: { label: string; value: string }[];
+  approvalsNeeded?: number;
+  approvals?: string[];
 };
 
 export const REVIEWS: ReviewSeed[] = [
@@ -129,6 +138,10 @@ export const REVIEWS: ReviewSeed[] = [
     id: 'REV-3018', title: 'Hold outbound wire to new payee', customer: 'Hartwell Dental Corp', workflowId: 'wf_wire', agentSlug: 'fraud-sentinel', kind: 'approval', risk: 'critical', confidence: 0.91,
     proposal: 'Place a 24-hour hold on wire W-88213 and call the account holder on the number on file', amount: 127800, policyId: 'gp_1', slaMinutes: -32, assignee: 'Maya Okafor', status: 'in_review', createdMinutesAgo: 62,
     reasoning: ['Payee was added 19 hours ago from a device not seen before.', 'Four wire attempts in 12 minutes; three failed MFA.', 'Amount is 340% above the 90-day rolling average.'],
+    caseId: 'case_wire_hartwell', caseTitle: 'Wire fraud check · Hartwell Dental Corp',
+    actionLabel: 'Place a wire hold', consequence: 'The wire stays in the bank for 24 hours and the account holder gets a call.',
+    actionFields: [{ label: 'Wire', value: 'W-88213' }, { label: 'Amount', value: '127,800.00 CAD' }, { label: 'Hold for', value: '24 hours' }, { label: 'Then', value: 'Call the account holder on the number on file' }],
+    approvalsNeeded: 2, approvals: ['Anika Singh'],
     evidence: [{ kind: 'tool', label: 'get_wire_history', detail: '4 attempts · 3 MFA failures' }, { kind: 'tool', label: 'device_fingerprint', detail: 'New device · foreign IP' }, { kind: 'source', label: 'Wire Fraud Playbook §4.2', detail: 'Holds required for new-payee wires over $50k' }],
   },
   {
@@ -141,12 +154,18 @@ export const REVIEWS: ReviewSeed[] = [
     id: 'REV-3021', title: 'Release wire after callback', customer: 'Lin & Moreau LLP', workflowId: 'wf_wire', agentSlug: 'fraud-sentinel', kind: 'approval', risk: 'high', confidence: 0.62,
     proposal: 'Release wire W-88240; the client confirmed it on a callback', amount: 48200, policyId: 'gp_2', slaMinutes: 18, status: 'pending', createdMinutesAgo: 42,
     reasoning: ['Callback reached the registered number and the client confirmed the payment.', 'Payee bank is new for this client but on the trusted correspondent list.'],
+    caseId: 'case_wire_hartwell', caseTitle: 'Wire fraud check · Hartwell Dental Corp',
+    actionLabel: 'Release the wire', consequence: 'The wire leaves today.',
+    actionFields: [{ label: 'Wire', value: 'W-88240' }, { label: 'Amount', value: '48,200.00 CAD' }],
     evidence: [{ kind: 'tool', label: 'callback_log', detail: 'Confirmed 09:38 · 2m 14s' }, { kind: 'source', label: 'Correspondent Bank List', detail: 'Payee bank listed, tier 1' }],
   },
   {
     id: 'REV-3009', title: 'Approve pre-approval above the auto limit', customer: 'Sarah Chen', workflowId: 'wf_mortgage', agentSlug: 'mortgage-intake', kind: 'approval', risk: 'medium', confidence: 0.88,
     proposal: 'Issue a pre-approval for $612,000 at 5.24% fixed, 5-year term', amount: 612000, policyId: 'gp_3', slaMinutes: 46, assignee: 'James Richardson', status: 'in_review', createdMinutesAgo: 194,
     reasoning: ['Credit score 742, DTI 31%, employment verified at 4 years.', 'Down payment of 20% from verified savings.'],
+    caseId: 'case_mortgage_chen', caseTitle: 'Mortgage application · Sarah Chen',
+    actionLabel: 'Issue the pre-approval', consequence: 'Sarah Chen gets a pre-approval letter by email.',
+    actionFields: [{ label: 'Amount', value: '612,000.00 CAD' }, { label: 'Rate', value: '5.24% fixed' }, { label: 'Term', value: '5 years' }],
     evidence: [{ kind: 'tool', label: 'run_credit_check', detail: 'Score 742 · 0 delinquencies' }, { kind: 'tool', label: 'verify_employment', detail: 'Confirmed · $168k salary' }, { kind: 'source', label: 'Mortgage Underwriting Guide v4.2', detail: 'GDS ≤ 39%, TDS ≤ 44%' }],
   },
   {
@@ -165,6 +184,9 @@ export const REVIEWS: ReviewSeed[] = [
     id: 'REV-3020', title: 'Provisional credit on a duplicate charge', customer: 'Priya Natarajan', workflowId: 'wf_dispute', agentSlug: 'dispute-resolver', kind: 'approval', risk: 'low', confidence: 0.94,
     proposal: 'Issue a provisional credit of $1,240.18 and open a chargeback', amount: 1240.18, policyId: 'gp_7', slaMinutes: 380, status: 'pending', createdMinutesAgo: 50,
     reasoning: ['Two identical settlements from the same merchant 41 seconds apart.'],
+    caseId: 'case_dispute_natarajan', caseTitle: 'Card dispute · Priya Natarajan',
+    actionLabel: 'Give a provisional credit', consequence: 'The credit posts today and a chargeback opens with the merchant.',
+    actionFields: [{ label: 'Amount', value: '1,240.18 CAD' }, { label: 'Reason code', value: '12.6 duplicate processing' }],
     evidence: [{ kind: 'tool', label: 'get_transactions', detail: '2 matching settlements' }, { kind: 'source', label: 'Dispute Rights Guide', detail: 'Duplicate processing · reason 12.6' }],
   },
   {
