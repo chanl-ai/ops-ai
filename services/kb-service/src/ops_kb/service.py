@@ -2283,10 +2283,11 @@ class KnowledgeService:
         """How many of the base's units have a vector of the environment's model; None without one."""
         if self.embedder is None or self.vectors is None or not await self.vectors.ready():
             return None
-        embedded, total = await self.vectors.coverage(
-            who.tenant_id, [kb_id], model=self.embedder.model, width=self.embedder.width
-        )
-        return {"model": self.embedder.model, "width": self.embedder.width, "embedded": embedded, "units": total}
+        # Read with no model call: the model last heard from, else the one the stored vectors were made by.
+        width = self.embedder.width
+        model = self.embedder.model or await self.vectors.stored_model(who.tenant_id, width=width)
+        embedded, total = await self.vectors.coverage(who.tenant_id, [kb_id], model=model, width=width)
+        return {"model": model, "width": width, "embedded": embedded, "units": total}
 
     # ── Runs, source settings, refresh ───────────────────────────────────
 

@@ -183,13 +183,51 @@ def index_key(s: SourceSettings, repeats: list[str] | None = None) -> str:
 
 
 Rebuild = Literal["none", "split", "read"]
+Effect = Literal["read", "split", "sync", "kept", "label"]
+
+# What each setting a source keeps does once saved, the one place that says so: `read` reads every file again, `split`
+# splits the stored readings again (both a rebuild in the background, which rebuild_for starts), `sync` is read by the
+# next sync, `kept` is stored with nothing reading it yet, so the console offers no control for it, and `label` is read
+# from other settings, so a save of it alone changes nothing. Every field of SourceSettings is listed, and
+# test_source_settings checks each effect against what the code does with a change.
+EFFECTS: dict[str, Effect] = {
+    "parsing.ocr": "read",
+    "parsing.tables": "kept",
+    "parsing.vision": "kept",
+    "cleaning.furniture": "split",
+    "cleaning.main_content": "split",
+    "cleaning.site_repeats": "split",
+    "cleaning.duplicates": "split",
+    "ingest.preset": "label",
+    "ingest.strategies": "split",
+    "ingest.size": "split",
+    "ingest.overlap": "split",
+    "ingest.child_size": "split",
+    "ingest.questions_per_section": "split",
+    "ingest.columns": "split",
+    "ingest.model": "split",
+    "ingest.approval": "split",
+    "rules": "sync",
+    "metadata_mapping": "split",
+    "schedule": "sync",
+    "ai_ceiling": "sync",
+}
+
+
+def setting(s: SourceSettings, path: str) -> object:
+    """The value at an EFFECTS path, as JSON."""
+    value: object = s
+    for name in path.split("."):
+        value = getattr(value, name)
+    return value.model_dump(mode="json") if isinstance(value, BaseModel) else value
 
 
 def rebuild_for(before: SourceSettings, after: SourceSettings) -> Rebuild:
-    """What a settings change runs again: a new OCR mode reads the files again (a new reading per file), a split,
-    cleaning or metadata change splits the stored readings again, and rules or anything else rebuilds nothing now
-    (the next sync takes in or removes what the rules allow)."""
-    if before.parsing.ocr != after.parsing.ocr:
+    """What a settings change runs again: a reading again when a setting it changes is `read` in EFFECTS, a split
+    again when what the pieces are built from changed (index_key, made of the `split` settings; an AI step not yet
+    approved changes nothing), else nothing now."""
+    changed = {EFFECTS[path] for path in EFFECTS if setting(before, path) != setting(after, path)}
+    if "read" in changed:
         return "read"
     if index_key(before) != index_key(after):
         return "split"

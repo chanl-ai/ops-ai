@@ -26,9 +26,12 @@ from typing import Any, cast
 # Longer than the longest pattern that may contain a space (a spaced card number, a spaced phone number).
 HOLD = 32
 
-# The name before the @ is read up to 64 characters, the longest a mailbox name may be: with no bound, the search
-# takes time that grows with the square of a long run of such characters that has no @ after it.
-_EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# Every part is bounded so the search stays linear in long text with no address in it: the name before the @ reads up to
+# 64 characters (the longest a mailbox name may be), each domain label up to 63, at most 8 labels and a top level of 24
+# letters, and the whole domain at most 255 characters (RFC 5321, RFC 1035).
+_EMAIL = re.compile(
+    r"[A-Za-z0-9._%+-]{1,64}@(?=[A-Za-z0-9.-]{1,255}(?![A-Za-z0-9.-]))(?:[A-Za-z0-9-]{1,63}\.){1,8}[A-Za-z]{2,24}"
+)
 _SSN = re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")
 _CARD = re.compile(r"(?<![\w-])(?:\d[ -]?){12,18}\d(?![\w-])")
 _PHONE = re.compile(r"(?<![\d+])(?:\+\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}(?!\d)")
@@ -47,10 +50,12 @@ _OPEN_RECORD = re.compile(_RECORD_WORDS + r"$")
 # The same words still waiting for their digits at the end of released text: a cut must come before them.
 _OPEN_TAIL = re.compile(_WORDS + _BETWEEN + r"$")
 # A field name still waiting for its value at the end of released text ("ssnLast4": , Tax ID ).
+# A bare field name reads up to 64 characters: an unbounded \w* is tried from every letter of a long word with no
+# separator after it, which takes time that grows with the square of its length.
 # An unquoted value after a field name: a dashed SSN, a lettered id, or digits in groups as a card number is written.
 _BARE = r"-?[A-Za-z]{0,6}-?\d[\w.-]*(?: \d[\d-]*)*"
 _OPEN_KEYED = re.compile(
-    r"""(?:(["'])([A-Za-z][\w ]*?)\1|()([A-Za-z]\w*))(?:\s*(?:[:=|]|->|=>|→)\s*|\t+)"""
+    r"""(?:(["'])([A-Za-z][\w ]*?)\1|()([A-Za-z]\w{0,63}))(?:\s*(?:[:=|]|->|=>|→)\s*|\t+)"""
     r"""(?:["']?|\[[^\[\]{}\n]*|""" + _BARE + r""" ?|[A-Za-z][\w.-]* ?)$"""
 )
 _OPEN_LABELLED = re.compile(
@@ -120,7 +125,7 @@ _GLUED = sorted({"ssn", *_KINDS, *_ID_WORDS}, key=len, reverse=True)
 _SEP = r"(?:\s*(?:[:=|]|->|=>|→)\s*|\t+)"
 _WORD_VALUE = r"(?!(?i:null|none|true|false|undefined)\b)[A-Za-z][\w.-]*"
 _KEYED = re.compile(
-    r"""(?:(["'])([A-Za-z][\w ]*?)\1|()([A-Za-z]\w*))("""
+    r"""(?:(["'])([A-Za-z][\w ]*?)\1|()([A-Za-z]\w{0,63}))("""
     + _SEP
     + r""")(?:(["'])([^"'\n]*)\6|("""
     + _BARE

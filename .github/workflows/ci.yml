@@ -22,11 +22,13 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels its older run. A push to develop or main never cancels one: that run may be
-# deploying staging, and a deploy stopped halfway leaves the machine between two releases. Its group holds the commit,
-# because a group with one slot also drops a queued run when a newer one queues, even with cancel-in-progress off.
+# A newer push to a pull request cancels its older run. A run already going for develop, main or a release branch is
+# never cancelled (it may be deploying staging, and a deploy stopped halfway leaves the machine between two releases),
+# but a run still waiting for a runner is replaced by the next push to that branch: the group is the branch, so a burst
+# of merges queues one waiting run, not one per commit, and the next run plans from the last green commit
+# (scripts/ci-last-green.sh), so the replaced commit is checked with it. A merge queue entry has its own ref.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
