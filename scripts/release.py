@@ -101,9 +101,17 @@ def version_problem(branch: str, ref: str, want: str | None = None) -> str | Non
     return None
 
 
+def changelog_fold(sha: str, v: str) -> dict[str, Any]:
+    """The plan folding the changelog fragments at sha into changelog/releases/<v>.json (changelog-fold.mjs)."""
+    out = run("node", str(Path(__file__).with_name("changelog-fold.mjs")), "--release", v, "--ref", sha)
+    return json.loads(out)
+
+
 def with_version(sha: str, v: str) -> str:
-    """sha itself when its version file says v, else a new commit on sha that sets it, made without a checkout."""
-    if file_version(sha) == v:
+    """sha itself when its version file says v and no changelog fragment is left, else a new commit on sha that sets the
+    version and folds the fragments into the release's changelog file, made without a checkout."""
+    fold = changelog_fold(sha, v)
+    if file_version(sha) == v and not fold["remove"]:
         return sha
     if subprocess.run(["git", "var", "GIT_COMMITTER_IDENT"], capture_output=True, check=False).returncode != 0:
         raise Refusal("no git identity; set git user.name and user.email")
@@ -112,6 +120,11 @@ def with_version(sha: str, v: str) -> str:
         env = {**os.environ, "GIT_INDEX_FILE": os.path.join(tmp, "index")}
         run("git", "read-tree", sha, env=env)
         run("git", "update-index", "--add", "--cacheinfo", f"100644,{blob},{VERSION_FILE}", env=env)
+        for path, text in fold["files"].items():
+            folded = run("git", "hash-object", "-w", "--stdin", stdin=text).strip()
+            run("git", "update-index", "--add", "--cacheinfo", f"100644,{folded},{path}", env=env)
+        for path in fold["remove"]:
+            run("git", "update-index", "--force-remove", path, env=env)
         tree = run("git", "write-tree", env=env).strip()
     return run("git", "commit-tree", tree, "-p", sha, "-m", f"chore(release): set the version to {v}").strip()
 
@@ -352,14 +365,18 @@ def set_version(dry: bool) -> int:
         raise Refusal(f"{branch} is not on origin")
     run("git", "fetch", "--quiet", "--no-tags", "origin", branch)
     sha = run("git", "rev-parse", f"origin/{branch}").strip()
-    if file_version(sha) == v:
-        print(f"release: {VERSION_FILE} on {branch} already says {v}")
+    commit = with_version(sha, v)
+    if commit == sha:
+        print(f"release: {VERSION_FILE} on {branch} already says {v} and no changelog fragment is left")
         return 0
-    print(f"release: {VERSION_FILE} on {branch} says {file_version(sha)}; one commit on {sha[:8]} sets it to {v}")
+    print(
+        f"release: {VERSION_FILE} on {branch} says {file_version(sha)}; one commit on {sha[:8]} sets it to {v}"
+        f" and folds the changelog fragments into changelog/releases/{v}.json"
+    )
     if dry:
         print("release: dry run, nothing pushed (DRY=0 does it)")
         return 0
-    push(with_version(sha, v), branch)
+    push(commit, branch)
     print("release: pushed; update the checkout with git pull --ff-only before make release-pr")
     return 0
 

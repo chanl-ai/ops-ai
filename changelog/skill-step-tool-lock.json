@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-19",
-  "title": "Keep a look-up to one step of a skill",
-  "description": "A skill builder can now mark a step's tool as only for that step, so the agent cannot use it outside the skill even when it only reads.",
-  "tag": "new"
-}

@@ -199,6 +199,7 @@ export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';
 // The commit this console was built from and its release tag, if it has one (next.config.ts; lib/version.ts words them).
 export const buildTag = process.env.NEXT_PUBLIC_OPS_VERSION;
 export const buildCommit = process.env.NEXT_PUBLIC_OPS_COMMIT;
+export const buildBranch = process.env.NEXT_PUBLIC_OPS_BRANCH;
 /** NEXT_PUBLIC_OPS_CACHE=off: the console saves nothing to the browser (lib/query-cache.ts). */
 export const cacheSetting = process.env.NEXT_PUBLIC_OPS_CACHE;
 /** Every console call is answered for a team, so its queries wait for one (hooks/team-query.ts); the embed has none. */

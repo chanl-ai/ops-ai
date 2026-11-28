@@ -1,0 +1,161 @@
+{
+  "version": "1.2.0",
+  "date": "2026-11-26",
+  "entries": [
+    {
+      "title": "Add an agent's tools by app",
+      "description": "An agent's tools are now grouped by app, and Add tools opens a picker where you search apps and tools, see what is connected, and add all of an app's tools at once.",
+      "tag": "new"
+    },
+    {
+      "title": "Connect more model providers and tune each agent's model",
+      "description": "Admins can connect OpenAI, Anthropic, Google Gemini, Amazon Bedrock or any OpenAI-compatible address and name models for builders. An agent's model settings now offer only what its model supports, with the model's defaults, and its chats use them.",
+      "tag": "new"
+    },
+    {
+      "title": "See how many agents use each model alias",
+      "description": "The model aliases list now says how many agents run on each alias, so you know who a change affects before you re-point one.",
+      "tag": "new"
+    },
+    {
+      "title": "Add Tone, Context and your own sections to a brief",
+      "description": "An agent's brief can hold sections such as Personality, Tone, Environment, Context, Tool use, Error handling and Escalation wording, plus up to five of your own. Each is placed where it belongs in the prompt, and the never rules stay last.",
+      "tag": "new"
+    },
+    {
+      "title": "Schedule changes appear in the audit log",
+      "description": "Saving or clearing a workflow's schedule now adds an audit entry that shows the old and new schedule in words and who made the change.",
+      "tag": "new"
+    },
+    {
+      "title": "Set a workflow's schedule from its trigger",
+      "description": "The Schedule trigger's sheet now has the schedule form: how often, the days and hours, and a time zone you can search, with the next three runs shown before you save. An agent's Channels tab can also put the agent on a schedule.",
+      "tag": "new"
+    },
+    {
+      "title": "Split a skill's parts into skills",
+      "description": "A skill with parts now has a Split skills button that makes one skill of each part, ready to edit and publish on its own. Cards with a hand-built look are also held to the one Section shape by a check.",
+      "tag": "new"
+    },
+    {
+      "title": "Watch a SharePoint folder from Files",
+      "description": "Files has a Watched folders tab where admins and builders pick a connected app's folders and press Check now. Everyone who reads Files sees each check's result and its failed files.",
+      "tag": "new"
+    },
+    {
+      "title": "Workflows can run on a schedule",
+      "description": "A workflow's Schedule trigger can run every few minutes, hours or days, on the weekdays you choose and between set hours, in your time zone. A change applies at once to the live version, and a time skipped or repeated by a clock change runs once.",
+      "tag": "new"
+    },
+    {
+      "title": "Agent history shows model settings changes",
+      "description": "When you change only an agent's model settings, its version history says so. Agents saved before model settings existed show no change until you set one.",
+      "tag": "improved"
+    },
+    {
+      "title": "A file too large for a watched folder is listed once",
+      "description": "A watched folder takes files up to 25 MB. A larger file is listed once under Failed files with its size and the limit, and listed again only if the file changes.",
+      "tag": "improved"
+    },
+    {
+      "title": "A schedule shows who changed it and why a run was skipped",
+      "description": "The schedule view now carries the name of the person who saved it, the reason the last slot did not run, the last run and a code for why it is idle, and the time zones a schedule may use can be searched.",
+      "tag": "improved"
+    },
+    {
+      "title": "A stopped schedule shows why, and Enter works in the sheet",
+      "description": "Next runs now show in the time zone you chose, and a schedule's panel shows an error when it cannot load. Resume needs only the right to edit the workflow.",
+      "tag": "improved"
+    },
+    {
+      "title": "The agent brief and editor headers take fewer rows",
+      "description": "The model, what the agent uses, Draft and View prompt share one row on the brief card, empty optional sections are one line with an Add link, and on a phone the editors keep Save and the main action and move the rest into the menu.",
+      "tag": "improved"
+    },
+    {
+      "title": "The agent test panel stays in view",
+      "description": "On a wide screen the test panel fills the page height and stays beside the settings as you scroll. Connectors is there before the first message and starts the test chat when you press it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Workflow steps read in plain words everywhere",
+      "description": "Lists inside a step now show step names and words like Equal to or At least, never type ids or codes. Problems name the step, Human review says it waits for a person, and opening a step no longer zooms the canvas.",
+      "tag": "improved"
+    },
+    {
+      "title": "Steps explain themselves",
+      "description": "A workflow step now says what it does in plain words and shows what it receives from the steps before it, with the values your team's last run gave them. Pick a value by name instead of typing a path.",
+      "tag": "improved"
+    },
+    {
+      "title": "Only the install owner changes model aliases",
+      "description": "Model aliases apply to every team in the install, so only the workspace owner creates or re-points them, and chooses the chat model. Other admins still see every alias.",
+      "tag": "fix"
+    },
+    {
+      "title": "Safer model connections",
+      "description": "A connection whose address is not a web address is refused, and adding one can no longer replace the key another connection signs in with. The Models aliases list now names each alias's connection.",
+      "tag": "fix"
+    },
+    {
+      "title": "The demo workspace owner can sign in",
+      "description": "On a new local stack the workspace owner is a demo person who signs in with the demo password, so model aliases can be changed there.",
+      "tag": "fix"
+    },
+    {
+      "title": "A schedule saved shortly before its time runs that time",
+      "description": "A schedule saved in the minute before a slot runs that slot, while a resumed schedule waits for its next slot. A weekday schedule no longer runs Friday's slot late on Saturday evening, and the workflow view says when a schedule is idle.",
+      "tag": "fix"
+    },
+    {
+      "title": "A schedule shows only its own skipped-run reason",
+      "description": "When a workflow has more than one schedule, each now shows the reason for its own last run. Schedule changes also reach the audit log reliably, and wait there when the audit log is not connected.",
+      "tag": "fix"
+    },
+    {
+      "title": "A schedule with a misspelled field is refused",
+      "description": "A schedule saved with a field its kind does not have, such as at instead of time, is refused with the field named and the ones allowed. Before, it saved with the default time.",
+      "tag": "fix"
+    },
+    {
+      "title": "Knowledge syncs keep running for sources with older times",
+      "description": "A knowledge source saved with a time like 2 or 2:5 still syncs at that time, and a source whose schedule cannot be read, for any reason, no longer stops the others from syncing.",
+      "tag": "fix"
+    },
+    {
+      "title": "Long lists in tables no longer widen them",
+      "description": "A table cell with many values now shows the first few and a +N more link that opens the full list, and long text is cut to its column with the whole text on hover. Document type fields, tool access, model findings and members stay readable on a phone.",
+      "tag": "fix"
+    },
+    {
+      "title": "Run pages show the workflow's name",
+      "description": "A run's title shows the workflow's name from the first moment, and a run that ended without a value says so instead of showing an empty Result card.",
+      "tag": "fix"
+    },
+    {
+      "title": "Run tabs name the workflow",
+      "description": "The browser tab of a run page now names the workflow, and after Split skills the page says the skill keeps its own parts.",
+      "tag": "fix"
+    },
+    {
+      "title": "Safer saves and clearer publish blockers",
+      "description": "A template update and the team assistant no longer overwrite a skill draft saved a moment before, and an update to a shipped workflow waits until the publish policy can be read. A workflow copy that cannot be read still shows its open review, and only people who may view workflows can list the step types.",
+      "tag": "fix"
+    },
+    {
+      "title": "Take back an agent version waiting for review",
+      "description": "An agent version that waits for a reviewer now shows its review, so the person who sent it can withdraw it, edit it and send it again from the agent page.",
+      "tag": "fix"
+    },
+    {
+      "title": "Where an agent is live lists only your teams' workflows",
+      "description": "The live view of an agent or a workflow named other teams' workflows and their steps. It now lists only the workflows of teams you may view.",
+      "tag": "fix"
+    },
+    {
+      "title": "Withdrawing a waiting agent version works",
+      "description": "Withdraw on an agent version that waits for review now reaches the server, so the version leaves review and can be edited and sent again.",
+      "tag": "fix"
+    }
+  ]
+}

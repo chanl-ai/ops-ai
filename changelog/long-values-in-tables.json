@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "Long lists in tables no longer widen them",
-  "description": "A table cell with many values now shows the first few and a +N more link that opens the full list, and long text is cut to its column with the whole text on hover. Document type fields, tool access, model findings and members stay readable on a phone.",
-  "tag": "fix"
-}

@@ -1,1 +1,0 @@
-{"date": "2026-11-25", "title": "Safer model connections", "description": "A connection whose address is not a web address is refused, and adding one can no longer replace the key another connection signs in with. The Models aliases list now names each alias's connection.", "tag": "fix"}

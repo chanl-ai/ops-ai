@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChangelog } from '@/hooks/use-changelog';
-import { type ChangelogEntry, isMajor } from '@/lib/changelog';
+import { type ChangelogEntry, type ChangelogRelease, groupByRelease } from '@/lib/changelog';
 import { dateOnly } from '@/lib/format';
 
 const TAG: Record<ChangelogEntry['tag'], { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
@@ -29,18 +29,42 @@ function WhatsNewMark() {
   );
 }
 
-/** How many of the newest major changes show before the rest are folded away. */
-const MAJOR_SHOWN = 8;
-
 function EntryRow({ entry: e }: { entry: ChangelogEntry }) {
   return (
     <li className="flex flex-col gap-1.5" data-testid="whats-new-entry">
       <div className="flex items-center gap-2">
         <Badge variant={TAG[e.tag].variant}>{TAG[e.tag].label}</Badge>
-        <span className="text-xs text-muted-foreground tabular-nums">{dateOnly(e.date)}</span>
       </div>
       <p className="text-sm font-medium leading-tight">{e.title}</p>
       {e.description && <p className="text-xs leading-relaxed text-muted-foreground">{e.description}</p>}
+    </li>
+  );
+}
+
+/** One release: its heading, its new and improved entries as rows, and its fixes as one line that opens to the list. */
+function ReleaseSection({ release: r }: { release: ChangelogRelease }) {
+  const [showFixes, setShowFixes] = React.useState(false);
+  return (
+    <li className="flex flex-col gap-4" data-testid="whats-new-release">
+      <p className="text-xs font-semibold tabular-nums">
+        {r.version === '' ? 'Coming in the next release' : r.version === 'earlier' ? 'Earlier' : `Version ${r.version}`}
+        {r.version !== '' && r.version !== 'earlier' && <span className="font-normal text-muted-foreground"> · {dateOnly(r.date)}</span>}
+      </p>
+      {r.changes.map((e) => <EntryRow key={e.id} entry={e} />)}
+      {r.fixes.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <button
+            type="button"
+            className="self-start text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+            aria-expanded={showFixes}
+            onClick={() => setShowFixes((v) => !v)}
+            data-testid="whats-new-fixes-toggle"
+          >
+            {r.fixes.length === 1 ? '1 fix' : `${r.fixes.length} fixes`}
+          </button>
+          {showFixes && <ol className="flex flex-col gap-4">{r.fixes.map((e) => <EntryRow key={e.id} entry={e} />)}</ol>}
+        </div>
+      )}
     </li>
   );
 }
@@ -55,9 +79,7 @@ export function WhatsNew() {
   const { entries, roadmap, unseen, markSeen, version } = useChangelog();
   const [open, setOpen] = React.useState(false);
   const [pulsing, setPulsing] = React.useState(false);
-  const [showMinor, setShowMinor] = React.useState(false);
-  const major = entries.filter(isMajor).slice(0, MAJOR_SHOWN);
-  const minor = entries.filter((e) => !major.includes(e));
+  const releases = React.useMemo(() => groupByRelease(entries), [entries]);
   // An attention pulse: once after three seconds, then every eighteen, never while the popover is open.
   React.useEffect(() => {
     if (open) return;
@@ -101,23 +123,7 @@ export function WhatsNew() {
                   {entries.length === 0 ? (
                     <li className="py-4 text-center text-xs text-muted-foreground">Nothing new yet.</li>
                   ) : (
-                    <>
-                      {major.map((e) => <EntryRow key={e.id} entry={e} />)}
-                      {minor.length > 0 && (
-                        <li className="flex flex-col gap-4">
-                          <button
-                            type="button"
-                            className="self-start text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
-                            aria-expanded={showMinor}
-                            onClick={() => setShowMinor((v) => !v)}
-                            data-testid="whats-new-minor-toggle"
-                          >
-                            {showMinor ? 'Hide earlier and smaller changes' : `Earlier and smaller changes (${minor.length})`}
-                          </button>
-                          {showMinor && <ol className="flex flex-col gap-4">{minor.map((e) => <EntryRow key={e.id} entry={e} />)}</ol>}
-                        </li>
-                      )}
-                    </>
+                    releases.map((r) => <ReleaseSection key={r.version} release={r} />)
                   )}
                 </ol>
               </ScrollArea>
