@@ -24,7 +24,6 @@ from ops_contracts.field_values import DATE_ORDERS, DEFAULT_DATE_ORDER, normalis
 from ops_documents.errors import CreateNotAllowedError, DocumentTypeMissingError, InvalidRequestError, StateError
 from ops_documents.extraction import (
     ALIAS,
-    FALLBACK_ALIAS,
     FIELD,
     PATH_TEMPLATE,
     TEMPLATE,
@@ -60,6 +59,7 @@ from ops_pii import masked as mask_json
 from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.model_calls import FALLBACK_ALIAS
 from ops_service_kit.narrow import a_list, an_object, entries, json_list, json_object, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
