@@ -27,7 +27,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
-from .conftest import SERVICE, Models, service_as
+from .conftest import SERVICE, Models, as_account, service_as
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -169,7 +169,7 @@ async def test_a_value_is_never_read_back_nor_stored_in_the_clear(rig: Rig) -> N
     listed = await rig.client.get("/v1/provider-keys")
     assert "sk-do-not-show" not in saved.text + listed.text
     assert [k["name"] for k in listed.json()["data"]["data"]] == [rig.key_name]
-    async with rig.models.engine.connect() as c:
+    async with as_account(rig.models.engine, rig.tenant) as c:
         stored = await c.scalar(
             sa.select(provider_keys.c.ciphertext).where(
                 provider_keys.c.tenant_id == rig.tenant, provider_keys.c.name == rig.key_name

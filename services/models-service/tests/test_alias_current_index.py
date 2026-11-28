@@ -20,7 +20,7 @@ from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 
-from .conftest import Models
+from .conftest import Models, as_account
 
 FIELDS: AliasFields = {
     "provider_id": SCRIPTED,
@@ -56,10 +56,10 @@ async def test_two_versions_leave_one_current_and_a_second_current_is_refused(
     engine = create_async_engine(database_url)
     try:
         with pytest.raises(IntegrityError):
-            async with engine.begin() as c:
+            async with as_account(engine, "local") as c:
                 await c.execute(sa.insert(model_aliases).values(**row))
         # A third retired version is no conflict: the index covers current rows only.
-        async with engine.begin() as c:
+        async with as_account(engine, "local") as c:
             await c.execute(sa.insert(model_aliases).values(**{**row, "status": "retired"}))
     finally:
         await engine.dispose()

@@ -27,6 +27,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
+from ops_store import isolation
 from ops_store.database import open_database
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
@@ -46,6 +47,15 @@ async def accounts(engine: Any, *tenants: str) -> None:
     """Each of `tenants` with the seeded account's connections and aliases as its own, as a new account gets them."""
     for tenant in tenants:
         await seed_account(engine, tenant, install_tenant="local", fake_openai_url=None, install=None)
+
+
+@asynccontextmanager
+async def as_account(engine: AsyncEngine, tenant: str) -> AsyncGenerator[AsyncConnection]:
+    """One transaction as `tenant`'s service reads and writes: on SQL Server the tenant policy hides and refuses
+    another account's rows even for the database owner, so raw SQL on a per-account table runs here."""
+    with isolation.scope(tenant, None):
+        async with isolation.isolated_tx(engine, role="ops_models_tenant") as c:
+            yield c
 
 
 def service_as(tenant: str) -> dict[str, str]:

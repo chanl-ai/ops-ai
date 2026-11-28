@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ops_models.store import model_aliases, model_keys
 
-from .conftest import LOCAL, SERVICE, Models, accounts
+from .conftest import LOCAL, SERVICE, Models, accounts, as_account
 
 
 async def admit(m: Models, key_id: str, **extra: object) -> tuple[int, str | None]:
@@ -217,5 +217,5 @@ async def test_a_new_version_retires_the_one_serving_and_only_one_is_current(mod
         ("scripted-c", "current"),
     ]
     with pytest.raises(IntegrityError):
-        async with models.engine.begin() as c:
+        async with as_account(models.engine, "local") as c:
             await c.execute(model_aliases.update().where(model_aliases.c.name == name).values(status="current"))
