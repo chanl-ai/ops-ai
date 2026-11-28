@@ -250,7 +250,10 @@ def build(
         """One agent's turn on `message`, answering from `source`; with `h`, it may hand the conversation over."""
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id, version=a.version)
         if h is not None:
-            targets = {t.id: t.name for i in a.handoffs if (t := deps.catalog.agent(i)) is not None and i != a.id}
+            # Only agents the turn's caller may chat with, as for an ask; with no runner there is no one to check.
+            wanted = [i for i in a.handoffs if i != a.id]
+            allowed = await deps.agents.hand_targets(wanted) if deps.agents is not None else []
+            targets = {t.id: t.name for i in allowed if (t := deps.catalog.agent(i)) is not None}
             ports = replace(ports, tools=HandoverTools(ports.tools, h, a.id, frozenset(targets)))
             offers = [*offers, *handover_grants(targets)]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]

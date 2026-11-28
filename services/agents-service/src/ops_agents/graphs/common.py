@@ -225,6 +225,10 @@ class AgentRunner(Protocol):
         """Runs `agent`'s own turn on the question for the turn's person and returns its reply."""
         ...
 
+    async def hand_targets(self, wanted: list[str]) -> list[str]:
+        """The agents of `wanted` this turn may hand the conversation to: the checks an ask makes, with no chain."""
+        ...
+
 
 @dataclass(frozen=True)
 class AgentTools:

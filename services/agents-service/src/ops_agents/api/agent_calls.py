@@ -31,6 +31,7 @@ from ops_agent_kernel.types import ToolGrant
 from ops_agents.graphs.common import Asker
 from ops_contracts.chain import ChainRecord, ChainRefusedError
 from ops_contracts.skill_run import called_as
+from ops_identity import Principal as Caller
 from ops_service_kit import narrow
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Json, JsonValue
@@ -67,6 +68,20 @@ async def agent_team(rt: Runtime, agent_id: str) -> str | None:
     if agent_id not in owners:
         raise NotFound(f"Agent {agent_id}")
     return owners[agent_id] or None
+
+
+def _reaches(thread: StoredThread, who: Caller | None, team: str | None, name: str) -> bool:
+    """Whether the turn on `thread`, for caller `who` (None: no person), may reach an agent of `team` named `name`."""
+    if who is None:
+        return refused_with_no_person(thread, team, f"agent {name}") is None
+    # An agent with no team is open to every person of the tenant; a service or a key holds only what its token
+    # lists, so it is checked there too.
+    if team or who.kind != "person":
+        try:
+            can(who, "chat", "run", team=team, what=name)
+        except Forbidden:
+            return False
+    return True
 
 
 class AgentCalls:
@@ -170,19 +185,33 @@ class AgentCalls:
                 on.extended(a.id, a.version)
             except ChainRefusedError:
                 continue
-            if who is None:
-                if refused_with_no_person(thread, owners[sid] or None, f"agent {a.name}") is not None:
-                    continue
-            # An agent with no team is open to every person of the tenant; a service or a key holds only what its
-            # token lists, so it is checked there too.
-            elif (team := owners[sid]) or who.kind != "person":
-                try:
-                    can(who, "chat", "run", team=team or None, what=a.name)
-                except Forbidden:
-                    continue
+            if not _reaches(thread, who, owners[sid] or None, a.name):
+                continue
             seen.add(sid)
             out.append(self._grant(a))
         return out
+
+    async def hand_targets(self, wanted: list[str]) -> list[str]:
+        """The agents of `wanted` this turn may hand the conversation to: agents of the thread's tenant that the
+        turn's caller may chat with, by the same check an ask makes. A hand-over is no call, so no chain applies."""
+        try:
+            configurable = get_config().get("configurable") or {}
+        except RuntimeError:
+            return []
+        thread_id = str(configurable.get("thread_id") or "")
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        if thread is None or not wanted:
+            return []
+        person = TURN_PERSON.get()
+        who = caller_of(person) if person is not None else None
+        owners = await registry(self.rt).tenant_owners(set(wanted))
+        return [
+            sid
+            for sid in wanted
+            if sid in owners
+            and (a := self.rt.catalog.agent(sid)) is not None
+            and _reaches(thread, who, owners[sid] or None, a.name)
+        ]
 
     async def run(
         self, *, asker: Asker, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None

@@ -11,6 +11,7 @@ from tests.api.test_action_roles import ADMIN, VIEWER
 from tests.api.test_team_default_agent import (
     URL,
     Stack,
+    move,
     say,
     stack,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     start,
@@ -45,3 +46,18 @@ async def test_a_hand_over_moves_the_conversation_and_keeps_each_agents_own_hist
     again = await state()
     assert len(again["loop_states"]["ag_dispute"]) == 4, "the next message went to the agent handed to"
     assert len(again["loop_states"]["ag_branch"]) == 2, "the first agent's own history is kept as it was"
+
+
+async def test_a_hand_over_to_another_teams_agent_is_refused(stack: Stack) -> None:  # noqa: F811
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    await move(rt, "ag_fraud", "team_fraud")  # a viewer of team_ops may not chat with it
+    at = next(i for i, a in enumerate(rt.catalog.agents) if a.id == "ag_branch")
+    rt.catalog.agents[at] = rt.catalog.agents[at].model_copy(
+        update={"loop": {"kind": "swarm"}, "handoffs": ["ag_fraud"]}
+    )
+    thread = (await start(c, VIEWER))["id"]
+    events = await say(c, thread, 'call hand_over {"agentId": "ag_fraud", "message": "Check this card"}', VIEWER)
+    assert not [e for e in events if e["type"] == "handoff"], events
+    _, graph = await resolve(rt, thread)
+    assert (await graph.aget_state(config(thread))).values.get("active_agent") == "ag_branch"
