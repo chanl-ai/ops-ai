@@ -439,6 +439,11 @@ jobs:
     # (nightly-usecases.yml). A diff that affects more than ci_usecases.MAX_PICK use cases runs none here and prints why.
     needs: plan
     if: needs.plan.outputs.code == 'true'
+    # Warn-only from 2026-11-27 (owner decision). Back to blocking after 3 develop runs in a row pass the use case job
+    # with nothing quarantined except the documented nightly 621; the same PR reverts this. A job-level
+    # continue-on-error leaves the job's own check red when a use case fails, and reports its result to `ready` and
+    # `ci-ok` (through `needs`) as success, so a failure shows on the run without holding the queue.
+    continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:

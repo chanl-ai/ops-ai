@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0041_engine_settings"
 down_revision = "0040_widget_key_expiry_audit"
 branch_labels = None
@@ -30,7 +32,7 @@ def upgrade() -> None:
     )
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     op.execute(f"GRANT SELECT, INSERT, UPDATE ON engine_settings TO {TENANT_ROLE}")
     op.execute("ALTER TABLE engine_settings ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE engine_settings FORCE ROW LEVEL SECURITY")

@@ -5,7 +5,7 @@ the answer changes. open_case is a write that runs without approval, so it shows
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
-from ops_service_kit.model_calls import ModelCallError, ModelCalls
+from ops_service_kit.model_calls import ModelCallError, ModelCalls, Usage
 from ops_tools.modules.policy import CheckBeforeSend
 from ops_tools.modules.seed import load
 from ops_tools.send_check import NEEDS_REVIEW, NO_JUDGE, SendCheck
@@ -55,8 +55,11 @@ class Judge(ModelCalls):
         tenant: str,
         step: str,
         sensitivity: str = "internal",
+        run: str | None = None,
+        parts: Sequence[dict[str, Any]] = (),
+        usage: Usage | None = None,
     ) -> Any:
-        del sensitivity
+        del sensitivity, run, parts, usage
         self.calls += 1
         if self.down:
             raise ModelCallError("models-service could not be reached")

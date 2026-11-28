@@ -19,8 +19,12 @@ Today: the audit found no outside host outside the two gateways; nothing static 
 Pattern (`services/kb-service/src/ops_kb/app.py:152`): kb-service reaches agents-service through a service client; its
 model calls go through models-service.
 
-Check: `services/agents-service/tests/gateway/` (gateway tests). Needed: the `.importlinter` contract in `OB6`, and a
-socket guard in tests that fails on any connection to a host the test did not start.
+Check: `services/agents-service/tests/gateway/` (gateway tests); `ops_service_kit.standards.check_model_calls` fails on
+any module outside `ops_service_kit.model_calls` and models-service that names a model route, whole or as a piece
+joined to a base (`packages/ops_service_kit/tests/test_standards.py`). One listed exception, `MODEL_CALL_EXCEPTIONS`:
+the agent kernel (`packages/ops_agent_kernel/src/ops_agent_kernel/models.py`) points pydantic-ai's OpenAI client at
+models-service's base, because that client streams the agent's turns; it still uses the service's model key. Needed: the `.importlinter` contract in `OB6`, and a socket guard
+in tests that fails on any connection to a host the test did not start.
 
 ## SC2 A change to access leaves an audit entry in the same transaction
 
