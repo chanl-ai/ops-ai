@@ -337,7 +337,8 @@ function regionsOf(r: Review, details: KindNode[]): TaskView {
   const reason = r.reasoning?.filter(Boolean) ?? [];
   const evidence: KindNode[] = [];
   if (r.sourceFile) evidence.push({ type: 'viewer', fileId: r.sourceFile });
-  if (reason.length) evidence.push({ type: 'document', name: 'Why it was asked', passage: reason.join(' ') });
+  // The agent's reasons as a list in the product font: a document node is drawn as a quoted passage.
+  if (reason.length) evidence.push({ type: 'brief', title: 'Why it was asked', sections: [{ title: 'Reasons', items: reason.map((text) => ({ text })) }] });
   const preview = (title: string, summary: string | null | undefined, fields: ActionField[] | undefined): KindNode => ({
     type: 'confirm',
     title,
@@ -350,7 +351,7 @@ function regionsOf(r: Review, details: KindNode[]): TaskView {
     question: r.question ?? r.title,
     evidence,
     // Who it is about is already in the page's description line; the decide pane is what each choice does.
-    decide: r.options?.length ? r.options.map((o) => preview(o.label ?? o.name, o.consequence, o.fields)) : [preview('If you approve', r.consequence, r.actionFields)],
+    decide: r.options?.length ? r.options.map((o) => preview(o.label ?? o.name, o.consequence, o.fields)) : [preview('If you approve', r.actionLabel ? `${r.actionLabel}. ${r.consequence ?? ''}`.trim() : r.consequence, r.actionFields)],
     details,
     // The server's consequence is a sentence of its own, often already ending in a full stop.
     consequence: `Approve: ${(r.consequence ?? 'the step runs with the values shown').replace(/\.+$/, '')}. Reject: nothing runs.`,
