@@ -7,9 +7,11 @@ file that crashes soffice leaves nothing behind for the next one.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -18,6 +20,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 MAX_BYTES = 50 * 1024 * 1024
+# A drawing past this is refused: a small file can expand into a huge PDF, and documents-service stores what it gets.
+MAX_OUT_BYTES = 200 * 1024 * 1024
 TIMEOUT_S = int(os.environ.get("OPS_CONVERTER_TIMEOUT_S", "90"))
 SUFFIXES = (".docx", ".pptx")
 # Hidden slides are exported too, so slide N of a deck is page N of the PDF (JSON filter options, LibreOffice 7.4+).
@@ -41,13 +45,23 @@ def convert(data: bytes, suffix: str) -> tuple[int, bytes | str]:
             "--convert-to", DECK_FILTER if suffix == ".pptx" else WORD_FILTER,
             "--outdir", str(out), str(source),
         ]  # fmt: skip
+        # soffice starts helper processes; its own session lets a timeout kill all of them, not only the first.
+        proc = subprocess.Popen(
+            cmd, cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True
+        )  # fmt: skip
         try:
-            subprocess.run(cmd, cwd=work, capture_output=True, timeout=TIMEOUT_S, check=False)
+            proc.wait(timeout=TIMEOUT_S)
         except subprocess.TimeoutExpired:
             return 504, "conversion timed out"
+        finally:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
         pdf = out / "input.pdf"
         if not pdf.is_file() or pdf.stat().st_size == 0:
             return 422, "the file could not be converted"
+        if pdf.stat().st_size > MAX_OUT_BYTES:
+            return 422, "the drawing is over 200 MB"
         return 200, pdf.read_bytes()
     finally:
         shutil.rmtree(work, ignore_errors=True)

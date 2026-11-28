@@ -33,6 +33,8 @@ spec:
         env:
         - name: OPS_SERVICE_SIGNING_KID
           value: svc-documents-1
+        - name: OPS_DOCUMENTS_CONVERTER_URL
+          value: http://converter:8770
         resources:
           requests:
             cpu: 50m

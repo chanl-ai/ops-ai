@@ -4,7 +4,8 @@ Status: current. Proven locally; not yet run on a client's servers. Optional: wi
 text only.
 
 The converter draws a `.docx` or `.pptx` file as a PDF so documents-service can show it as pages. It is a small
-separate container (`deploy/images/converter`) that runs LibreOffice, which is licensed MPL-2.0. It accepts only those
+separate container (the `converter` target of `deploy/fly/Dockerfile`, code in `deploy/images/converter`) that runs
+LibreOffice, which is licensed MPL-2.0. It accepts only those
 two file types.
 
 ## What it does
@@ -16,20 +17,28 @@ two file types.
 | A name that does not end in `.docx` or `.pptx` | `415` |
 | A body over 50 MB | `413` |
 | Bytes that are not a zip file, or a file LibreOffice cannot open | `422` |
-| A conversion over 90 seconds | `504` |
+| A conversion over 90 seconds | `504`; LibreOffice and every process it started are killed |
+| A drawing over 200 MB | `422` |
 
 One conversion runs at a time; a second request waits. Each conversion gets a fresh temporary folder and its own
 LibreOffice profile. Decks are exported with their hidden slides, so slide N of a deck is page N of the PDF.
 
-## No network access
+## What it can reach
 
-The container needs no network: documents-service sends it the bytes and takes the PDF back.
+The container needs no network: documents-service sends it the bytes and takes the PDF back. It holds no settings,
+keys or database login. documents-service waits for files-service to scan each drawing clean before it shows it.
 
-| Target | How it is kept off the network |
-|---|---|
-| Compose | The `converter` service is on a network marked `internal: true` that only it and `documents` share, and publishes no port |
-| Dev | The container runs read-only with every capability dropped and publishes only `127.0.0.1`. Dev publishes a port so the host processes can reach it, so it is not network-isolated; use it for trying, not for real files |
-| Kubernetes | Not added. Give the converter its own Deployment and a NetworkPolicy that allows ingress from documents only and no egress |
+| Limit | Compose | Kubernetes | Dev (`make converter-up`) |
+|---|---|---|---|
+| Network in | `documents` only, on the internal `converter` network; no published port | NetworkPolicy `converter-isolated`: ingress from `documents` pods on 8770 only | `127.0.0.1:8780+offset`, through a relay container |
+| Network out | None: the network is `internal: true` | None: the policy's egress list is empty, DNS included | None: the converter's network is `--internal`; only the relay, which runs no LibreOffice, is also on the host's |
+| Filesystem | Read-only root; tmpfs `/tmp` 512 MB and `/home/ops` 256 MB | Read-only root; emptyDir `/tmp` and `/home/ops`, 512 MB each | Read-only root; tmpfs as Compose |
+| User | uid 10001, every capability dropped, no new privileges | uid 10001, RuntimeDefault seccomp, every capability dropped, no service account token | As Compose |
+| Memory and processes | 1 GB, 256 processes | 1 Gi | 1 GB, 256 processes |
+| Time and size | 50 MB in, 200 MB out, 90 s per file (`OPS_CONVERTER_TIMEOUT_S`) | Same | Same |
+
+NetworkPolicy holds only where the cluster's network plugin enforces it. Kubernetes has no per-pod process limit; the
+node's `podPidsLimit` applies.
 
 ## Turn it on in Compose
 
@@ -43,7 +52,7 @@ The service is in the `converter` profile, so an install that does not turn it o
 ## Turn it on in the dev stack
 
 ```
-make converter-up              # builds the image once, runs ops-converter-<offset> on 127.0.0.1:8780+offset
+make converter-up              # builds the image once, runs ops-converter-<offset> behind a relay on 127.0.0.1:8780+offset
 make up CONVERTER=1            # documents-service gets OPS_DOCUMENTS_CONVERTER_URL
 make converter-down
 ```
@@ -51,7 +60,7 @@ make converter-down
 The host port is 8780 plus `OPS_PORT_OFFSET` (8770 belongs to the code runner). A documents-service that is already
 running keeps its old settings until `make restart CONVERTER=1`. The default stays off.
 
-## Not yet covered
+## Kubernetes and the release package
 
-The release package (`deploy/release/images.sh`, `package.sh`) and the mirror lane do not build or load the converter
-image yet, so a package install cannot turn it on until they do.
+The base (`deploy/k8s/base/converter`) runs it and points documents at `http://converter:8770`, so every cluster draws
+Word files and decks. The release package builds and loads the `converter` image with the other services.

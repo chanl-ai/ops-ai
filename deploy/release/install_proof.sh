@@ -100,13 +100,13 @@ if [ "$BUILD" = 1 ]; then
   # on the default builder refuses.
   IMAGE_PREFIX=$PREFIX sh "$CLONE/deploy/release/images.sh" "$SHA" "$VERSION" >"$LOG/images.txt" 2>&1 ||
     { cat "$LOG/images.txt"; fail "building the images"; }
-  for t in platform agents tools models kb files documents runner opa proxy console db-scripts; do
+  for t in platform agents tools models kb files documents converter runner opa proxy console db-scripts; do
     docker push -q "$PREFIX/$t:$VERSION" >>"$LOG/images.txt" 2>&1 || { cat "$LOG/images.txt"; fail "pushing $PREFIX/$t:$VERSION"; }
   done
   say "built and pushed $(grep -c '^images:' "$LOG/images.txt") images in $(($(date +%s) - T0))s"
 fi
 say "2. no local copy of $PREFIX/*:$VERSION$([ "${SIGNED_IN:-0}" = 1 ] && [ "$BUILD" != 1 ] && echo ', pulled with this machine'"'"'s registry login (SIGNED_IN=1)' || echo ' and no registry login')"
-for t in platform agents tools models kb files documents runner opa proxy console db-scripts; do
+for t in platform agents tools models kb files documents converter runner opa proxy console db-scripts; do
   docker image rm "$PREFIX/$t:$VERSION" >/dev/null 2>&1 || true
 done
 [ -z "$(docker images -q --filter "reference=$PREFIX/*:$VERSION")" ] || fail "an image for $VERSION is still here"

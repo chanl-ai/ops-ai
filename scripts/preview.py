@@ -399,7 +399,7 @@ def check_offset(p: Previews, a: argparse.Namespace) -> int:
     ports = ports_for(off, dict(os.environ))
     own_ports: set[int] = set()
     if any(v > 0 for v in ports):
-        own_ports = docker_ports(f"ops-runtime-{off}") | container_ports(f"ops-converter-{off}")
+        own_ports = docker_ports(f"ops-runtime-{off}") | container_ports(f"ops-converter-{off}-relay")
     held += blockers(ports, listening(), with_descendants(p.own_pids(off)), own_ports)
     if held:
         print(f"refused: offset {off} is in use: " + brief(held, 4), file=sys.stderr)

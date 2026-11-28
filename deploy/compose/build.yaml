@@ -29,9 +29,4 @@ services:
   opa: { build: { <<: *image, target: opa } }
   console: { build: { <<: *image, target: console } }
   proxy: { build: { <<: *image, target: proxy } }
-  converter:
-    build:
-      context: ../images/converter
-      args:
-        IMAGE_REGISTRY: ${OPS_BASE_IMAGE_PREFIX:-}
-        APT_MIRROR: ${APT_MIRROR:-}
+  converter: { build: { <<: *image, target: converter } }
