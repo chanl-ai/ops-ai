@@ -164,7 +164,8 @@ def build(
         if (snapshot := state.get("test_agent")) is not None:
             return AgentDefinition.model_validate(snapshot)
         aid = state.get("active_agent") or agent_id or state.get("agent_id")
-        pinned = state.get("agent_version")
+        # The pin is the first agent's version; an agent handed to serves its live version.
+        pinned = state.get("agent_version") if aid == (agent_id or state.get("agent_id")) else None
         # A pinned version serves a new turn only while the agent is live: a pause stops widget turns too.
         live = in_flight or (aid is not None and deps.catalog.agent(aid) is not None)
         if aid and pinned is not None and live and (at := deps.catalog.agent_at(aid, pinned)) is not None:
@@ -221,7 +222,8 @@ def build(
                 {"role": "user", "content": said},
                 {"role": "assistant", "content": r.text},
             ]
-            if h.asked is not None:
+            # A turn that asked for a hand-over and then paused keeps the conversation, so no frame goes out for it.
+            if h.asked is not None and r.status == "completed":
                 to = deps.catalog.agent(h.asked[0])
                 emit(
                     "handoff",
