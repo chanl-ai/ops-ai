@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 import ops_ingest
-from ops_ingest.model_client import ModelBudgetSpent, ModelUnavailable
+from ops_ingest.model_client import ModelBudgetSpent, ModelReplyUnusable, ModelUnavailable
 from ops_ingest.models import IngestSettings, ParsedDocument, TableColumn
 from ops_ingest.parsers import parse
 from ops_ingest.split import PRESETS, InvalidIngestError, document_digest, split
@@ -206,6 +206,27 @@ def test_questions_are_asked_only_for_changed_pieces_and_stop_at_the_ceiling_or_
     assert all(not c.questions for c in fourth.chunks) and any("did not answer" in n for n in fourth.notes)
 
 
+def test_one_reply_with_no_answer_skips_only_its_piece_and_later_pieces_are_still_asked() -> None:
+    """A reply cut off or declined on one piece is not an outage: questions and FAQ drafts for later pieces go on."""
+    doc = md("# Fees\n\nA wire costs ten dollars.\n\n# Holds\n\nA hold lasts two days.")
+
+    def reply(prompt: str) -> str:
+        if "Section: Fees" in prompt:
+            raise ModelReplyUnusable("reply_cut_off")
+        said = {"question": "How long is a hold?", "answer": "Two days.", "quote": "A hold lasts two days."}
+        return json.dumps({"questions": ["How long is a hold?"], "pairs": [said]})
+
+    for step in ("faq", "faq_pairs"):
+        result = split(
+            doc,
+            settings(strategies=["structure", step], model="ingest-small", approval=approved(step)),
+            model=FakeModelClient(respond=reply),
+        )
+        held = [bool(c.questions) for c in result.chunks] if step == "faq" else [bool(result.pairs)]
+        assert held == ([False, True] if step == "faq" else [True]), (step, result.notes)
+        assert any("reply_cut_off" in n and "skipped" in n for n in result.notes), (step, result.notes)
+
+
 def test_faq_drafts_cite_text_that_is_there_and_skip_sections_drafted_before() -> None:
     """A draft whose quote the model made up would cite words the source never said; a section drafted before must not
     be paid for again."""
@@ -264,6 +285,17 @@ def test_topic_reply_cannot_drop_sections(reply: str) -> None:
     )
     assert [c.text for c in result.chunks] == ["Alpha text.", "Bravo text.", "Charlie text."]
     assert any("split by structure" in n for n in result.notes)
+
+
+def test_a_topic_reply_the_model_did_not_finish_falls_back_to_structure() -> None:
+    def cut(_: str) -> str:
+        raise ModelUnavailable("reply_cut_off")
+
+    doc = md("# A\n\nAlpha text.\n\n# B\n\nBravo text.")
+    topic = settings(strategies=["topic"], model="ingest-small", approval=approved("topic"))
+    result = split(doc, topic, model=FakeModelClient(respond=cut))
+    assert [c.text for c in result.chunks] == ["Alpha text.", "Bravo text."]
+    assert any("reply_cut_off" in n and "split by structure" in n for n in result.notes), result.notes
 
 
 PAGE = """<html><body><nav class="nav">{nav}</nav><main><h1>Card limits</h1><p>{body}</p></main>

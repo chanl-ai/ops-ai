@@ -995,7 +995,9 @@
           "finish_reason": {
             "enum": [
               "stop",
-              "tool_calls"
+              "tool_calls",
+              "length",
+              "content_filter"
             ],
             "title": "Finish Reason",
             "type": "string"
@@ -1115,6 +1117,17 @@
               }
             ],
             "title": "Content"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
           },
           "role": {
             "const": "assistant",

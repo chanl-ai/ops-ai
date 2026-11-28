@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from ops_service_kit.http import Json
 
@@ -69,6 +69,14 @@ class StepLimitReached(Exception):
 
 class SchemaMismatch(Exception):
     """The final answer did not match the turn's output schema, after one more try."""
+
+
+class ReplyEnded(Exception):
+    """The provider ended a reply with no whole answer: `length` (its length limit) or `content_filter`."""
+
+    def __init__(self, reason: Literal["length", "content_filter"]) -> None:
+        super().__init__(f"reply ended: {reason}")
+        self.reason: Literal["length", "content_filter"] = reason
 
 
 class LoopRefused(Exception):

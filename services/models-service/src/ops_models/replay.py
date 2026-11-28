@@ -82,6 +82,8 @@ def recorded(done: Completion) -> str:
             "input_tokens": done.input_tokens,
             "output_tokens": done.output_tokens,
             "tool_calls": done.tool_calls,
+            "ended": done.ended,
+            "refusal": done.refusal,
         }
     )
 
@@ -96,6 +98,9 @@ def replayed(response: str) -> Completion:
         input_tokens=int(str(data.get("input_tokens") or 0)),
         output_tokens=int(str(data.get("output_tokens") or 0)),
         tool_calls=[json_object(c) for c in calls] if isinstance(calls, list) else [],
+        # A replayed reply ends the way the recorded one did, so a cut-off or filtered answer never replays as whole.
+        ended=str(data["ended"]) if data.get("ended") else None,
+        refusal=str(data["refusal"]) if data.get("refusal") else None,
     )
 
 
@@ -106,10 +111,13 @@ class StreamedAnswer:
 
     parts: list[str] = field(default_factory=lambda: [])
     calls: dict[int, dict[str, Any]] = field(default_factory=lambda: {})
+    ended: str | None = None
 
     def add(self, chunk: Json) -> None:
         choices = chunk.get("choices")
         for choice in choices if isinstance(choices, list) else []:
+            if isinstance(choice, dict) and isinstance(finish := json_object(choice).get("finish_reason"), str):
+                self.ended = finish
             delta = json_object(choice).get("delta") if isinstance(choice, dict) else None
             if not isinstance(delta, dict):
                 continue
@@ -142,4 +150,5 @@ class StreamedAnswer:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             tool_calls=calls,
+            ended=self.ended,
         )

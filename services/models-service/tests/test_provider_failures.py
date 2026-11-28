@@ -42,7 +42,7 @@ class Rig:
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-async def _rig(models: Models, handle: Handler) -> AsyncIterator[Rig]:
+async def provider_rig(models: Models, handle: Handler) -> AsyncIterator[Rig]:
     """An OpenAI-compatible connection answered by `handle`, an alias on it and a model key."""
     upstream = httpx.AsyncClient(transport=httpx.MockTransport(handle))
     app = create_models_app(models.engine, provider_secrets={"UPSTREAM_KEY": "sk-upstream"}, upstream=upstream)
@@ -76,7 +76,7 @@ Logged = list[tuple[str, str]]
 
 async def _refusal(models: Models, handle: Handler, *, stream: bool = False) -> tuple[httpx.Response, Logged]:
     """The answer and the call log's (outcome, reason) rows: a failure is one error row whose reason is the code."""
-    async for rig in _rig(models, handle):
+    async for rig in provider_rig(models, handle):
         r = await rig.complete(stream=stream)
         return r, [(c["outcome"], c["reason"]) for c in await rig.models.calls(rig.key_id)]
     raise AssertionError("no rig")
@@ -157,7 +157,7 @@ async def test_a_stream_that_drops_part_way_is_logged_by_its_own_code(models: Mo
 
 async def test_a_provider_body_that_echoes_the_key_never_reaches_the_answer_or_the_log(models: Models) -> None:
     echoed = {"error": {"message": f"Incorrect API key provided: {LEAKED_KEY}", "code": "invalid_api_key"}}
-    async for rig in _rig(models, _answers(401, echoed)):
+    async for rig in provider_rig(models, _answers(401, echoed)):
         r = await rig.complete()
         assert LEAKED_KEY not in r.text and "sk-upstream" not in r.text
         rows = await rig.models.calls(rig.key_id)
@@ -173,7 +173,7 @@ async def test_a_refused_request_says_why_on_the_log_line(
         "error": {"message": "Unsupported value: 'temperature'", "code": "unsupported_value", "param": "temperature"}
     }
     answers: list[httpx.Response] = []
-    async for rig in _rig(models, _answers(400, refused)):
+    async for rig in provider_rig(models, _answers(400, refused)):
         answers.append(await rig.complete(stream=stream))
     assert answers[0].status_code == 502 and "temperature" not in answers[0].text, answers[0].text
     assert "code=unsupported_value param=temperature" in caplog.text

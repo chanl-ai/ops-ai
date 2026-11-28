@@ -90,6 +90,12 @@ CODES: dict[str, Code] = {
     "provider_rate_limited": Code("upstream", True, "The assistant is busy right now. Please try again shortly."),
     "provider_timeout": Code("upstream", True, "The assistant did not answer in time. Please try again."),
     "provider_error": Code("upstream", True, "The assistant could not answer. Please try again."),
+    # A reply that came back with nothing to use (ops_service_kit.model_calls.ENDINGS): the same question would end the
+    # same way at its length limit, filter or refusal, so only an empty reply is worth asking again.
+    "reply_cut_off": Code("upstream", False, "The reply was cut off at the assistant's length limit."),
+    "reply_filtered": Code("upstream", False, "The model provider's content filter stopped this reply."),
+    "reply_declined": Code("upstream", False, "The assistant declined to answer this."),
+    "reply_empty": Code("upstream", True, "The assistant's reply was empty. Please try again."),
     # timeout: which clock ran out is in details.clock.
     "queued_too_long": Code("timeout", False, "This waited too long to start, so it was stopped."),
     "step_too_long": Code("timeout", True, "A step took too long. Please try again."),

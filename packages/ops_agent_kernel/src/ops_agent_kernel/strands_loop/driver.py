@@ -21,7 +21,7 @@ from strands.models.openai import OpenAIModel
 from strands.tools.executors import SequentialToolExecutor
 from strands.types._events import ToolResultEvent, ToolStreamEvent
 from strands.types._snapshot import Snapshot
-from strands.types.exceptions import EventLoopException, ModelThrottledException
+from strands.types.exceptions import EventLoopException, MaxTokensReachedException, ModelThrottledException
 from strands.types.tools import AgentTool, ToolContext, ToolGenerator, ToolSpec, ToolUse
 
 from ops_service_kit.http import Json
@@ -35,6 +35,7 @@ from ..contract import (
     LoopRefused,
     LoopTool,
     ModelEndpoint,
+    ReplyEnded,
     SchemaMismatch,
     StepLimitReached,
     StepStarted,
@@ -363,9 +364,13 @@ async def _turns(
                     yield TextChunk(str(chunk))
                 if "result" in event:
                     result = event["result"]
+        except MaxTokensReachedException:
+            raise ReplyEnded("length") from None
         except EventLoopException as e:
             # Strands wraps what a later cycle raised; the kernel ends the turn on the exception itself.
             cause = e.__cause__
+            if isinstance(cause, MaxTokensReachedException):
+                raise ReplyEnded("length") from None
             raise (cause if isinstance(cause, Exception) else e) from None
         for queued in loop.events:
             yield queued
@@ -385,6 +390,8 @@ async def _turns(
                 nested,
             )
             return
+        if result is not None and result.stop_reason in ("content_filtered", "guardrail_intervened"):
+            raise ReplyEnded("content_filter")
         problem = check(text) if check is not None else None
         if problem is None:
             usage = cast(dict[str, int], result.metrics.accumulated_usage if result is not None else {})

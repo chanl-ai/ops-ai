@@ -91,7 +91,7 @@ def test_scripted_vectors_put_texts_that_share_words_closer_than_unrelated_ones(
     assert _cosine(claim, late) > _cosine(claim, loan) + 0.25
 
 
-class _Bridge(httpx.BaseTransport):
+class Bridge(httpx.BaseTransport):
     """A blocking transport that hands each request to the async app on the test's own event loop, so the ingestion
     client, which runs in a worker thread, reaches the real models-service app."""
 
@@ -110,7 +110,7 @@ class _Bridge(httpx.BaseTransport):
 async def test_the_ingestion_client_answers_text_and_counts_its_calls_and_tokens(models: Models) -> None:
     key_id, secret = await models.key(budget="5")
     transport = httpx.ASGITransport(app=models.app)
-    sync = httpx.Client(transport=_Bridge(transport, asyncio.get_running_loop()), base_url="http://models")
+    sync = httpx.Client(transport=Bridge(transport, asyncio.get_running_loop()), base_url="http://models")
     ingest = IngestModel(sync, secret, tenant="local", step="kb:questions")
     answer: Any = await asyncio.to_thread(
         ingest.complete, "Write three questions this passage answers.", alias="bank-standard", max_tokens=200

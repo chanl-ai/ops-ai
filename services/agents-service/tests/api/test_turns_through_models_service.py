@@ -45,6 +45,8 @@ class FakeModelsService:
         self.proxy: dict[str, object] | None = None
         # An exception's text for every call to break with: a fault that is no refusal and carries no code.
         self.broken: str | None = None
+        # The text a streamed reply writes and the finish reason it ends on, for a reply cut off or filtered.
+        self.ending: tuple[str, str] | None = None
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
@@ -67,9 +69,10 @@ class FakeModelsService:
             message = {"role": "assistant", "content": text}
             choice = {"index": 0, "message": message, "finish_reason": "stop"}
             return httpx2.Response(200, json={**head, "object": "chat.completion", "choices": [choice], "usage": usage})
+        text, finish = self.ending or (text, "stop")
         chunks: list[dict[str, Any]] = [
             {"choices": [{"index": 0, "delta": {"role": "assistant", "content": text}, "finish_reason": None}]},
-            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": finish}]},
             {"choices": [], "usage": usage},
         ]
         sse = "".join(f"data: {json.dumps({**head, 'object': 'chat.completion.chunk', **c})}\n\n" for c in chunks)
@@ -214,6 +217,28 @@ async def test_the_message_models_service_wrote_reaches_the_test_turn_and_the_ch
     assert (events[-1]["type"], events[-1].get("message")) == ("error", SAID)
     reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]
     assert reloaded["messages"][-1]["error"] == SAID, "a reload reads the same sentence as the stream"
+
+
+@pytest.mark.parametrize(
+    ("text", "finish", "code"),
+    [
+        ("", "length", "reply_cut_off"),
+        ("The personal daily wire limit is", "length", "reply_cut_off"),
+        ("", "content_filter", "reply_filtered"),
+    ],
+)
+async def test_a_reply_cut_off_or_filtered_ends_the_turn_with_its_code_and_a_plain_sentence(
+    stack: tuple[AsyncClient, Runtime, FakeModelsService], text: str, finish: str, code: str
+) -> None:
+    client, _, models = stack
+    models.ending = (text, finish)
+    thread = await new_thread(client)
+    _, events = await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
+    last = events[-1]
+    assert (last["type"], last.get("code")) == ("error", code), last
+    assert "max_tokens" not in last["message"] and "Content filter triggered" not in last["message"], last["message"]
+    reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]["messages"][-1]
+    assert reloaded["errorCode"] == code and reloaded["content"].startswith(text), reloaded
 
 
 BROKEN = "pool exhausted on db-7.internal"

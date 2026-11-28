@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from ops_ingest.model_client import ModelUnavailable
 from ops_ingest.models import Chunk, ParsedDocument, Section
 from ops_ingest.strategies.base import ModelReply, SplitContext, json_list, json_object, section_text
 from ops_ingest.strategies.structure import split_section, split_structure
@@ -54,7 +55,12 @@ def split_topic(document: ParsedDocument, ctx: SplitContext, *, include_tables: 
         f"{section_text(s, include_tables=include_tables)[:PREVIEW_CHARS]}"
         for i, s in enumerate(sections)
     )
-    reply = ctx.call_model(PROMPT.format(title=ctx.title, sections=listing), max_tokens=MAX_TOKENS)
+    try:
+        reply = ctx.call_model(PROMPT.format(title=ctx.title, sections=listing), max_tokens=MAX_TOKENS)
+    except ModelUnavailable as e:
+        # A model that is down, or a reply cut off or declined, still leaves the document's own structure to split by.
+        ctx.notes.append(f"The topic grouping got no usable reply ({e}), so the document was split by structure.")
+        return split_structure(document, ctx, include_tables=include_tables)
     groups = valid_groups(json_object(reply), len(sections))
     if groups is None:
         ctx.notes.append("The topic grouping reply was not usable, so the document was split by structure.")

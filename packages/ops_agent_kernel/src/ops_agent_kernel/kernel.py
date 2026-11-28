@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator
 from ops_contracts.skill_run import SkillRunState, grant_token
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
+from ops_service_kit.model_calls import CUT_OFF, FILTERED
 from ops_service_kit.narrow import json_object
 
 from . import (
@@ -1170,6 +1171,11 @@ STEP_LIMIT_REACHED = "I reached the step limit for one reply before I could answ
 # a complete one.
 CUT_SHORT_TOOLS = "\n\n(Reply cut short: the agent reached the most tool calls it may make in one reply.)"
 CUT_SHORT_STEPS = "\n\n(Reply cut short: the agent reached its step limit for one reply.)"
+# A reply the provider ended at its length limit or by its content filter fails with the kit's code and one of these,
+# never as a complete answer and never with the model library's own wording.
+REPLY_CUT_OFF = "The reply was cut off at the model's length limit. Ask again for a shorter answer."
+REPLY_FILTERED = "The model provider's content filter stopped this reply. Rephrase the question and ask again."
+ENDED = {"length": (CUT_OFF, REPLY_CUT_OFF), "content_filter": (FILTERED, REPLY_FILTERED)}
 BUDGET_REACHED = "This conversation reached its budget before I could answer."
 BAR_RETRY = "Your answer does not meet the bar it is checked against: {reason} Answer again, using only what you found."
 
@@ -1705,6 +1711,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         for closed in _close_open(state, NOT_RUN[stop]):
             yield closed
         yield finish("completed", stop, error=None)
+        return
+    except contract.ReplyEnded as e:
+        # The provider cut the reply off at its length limit or filtered it: the turn fails with the kit's code and a
+        # plain sentence, keeping what was written, never as a complete answer or in the loop library's wording.
+        if (cleared := _withhold(state, guarded)) is not None:
+            yield cleared
+        code, said = ENDED[e.reason]
+        for closed in _close_open(state, said):
+            yield closed
+        yield finish("failed", "error", error=said, error_code=code)
         return
     except contract.SchemaMismatch as e:
         if (cleared := _withhold(state, guarded)) is not None:
