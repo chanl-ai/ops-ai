@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "Add Tone, Context and your own sections to a brief",
-  "description": "An agent's brief can hold sections such as Personality, Tone, Environment, Context, Tool use, Error handling and Escalation wording, plus up to five of your own. Each is placed where it belongs in the prompt, and the never rules stay last.",
-  "tag": "new"
-}
