@@ -22,12 +22,16 @@ from .tenancy import ROLE
 # An event nobody subscribes to, or whose subscriber this install does not run, is delivered by doing nothing.
 ROUTES: dict[str, tuple[str, ...]] = {
     MEMBER_REMOVED: ("tools",),
-    TEAM_CREATED: ("tools", "agents"),
+    TEAM_CREATED: ("tools", "agents", "models"),
     POLICY_CHANGED: ("agents",),
     API_KEY_CHANGED: ("agents",),
 }
 # The rights a subscriber checks before acting on each event; the relay's token for that service carries them.
-SCOPES: dict[str, list[str]] = {"tools": ["connections:delete", "tools:create"], "agents": ["agents:create"]}
+SCOPES: dict[str, list[str]] = {
+    "tools": ["connections:delete", "tools:create"],
+    "agents": ["agents:create"],
+    "models": ["settings:manage"],
+}
 ROUTE = "/v1/platform-events"
 
 

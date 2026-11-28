@@ -21,7 +21,7 @@ async def test_an_existing_openai_local_is_repointed_at_the_fake(database_url: s
     async with engine.begin() as c:
         await c.execute(
             postgresql.insert(provider_connections)
-            .values(id=OPENAI_LOCAL, base_url="https://api.openai.com/v1", **row)
+            .values(id=OPENAI_LOCAL, tenant_id="local", base_url="https://api.openai.com/v1", **row)
             .on_conflict_do_update(
                 index_elements=["id"], set_={"base_url": "https://api.openai.com/v1", "key_ref": None}
             )
@@ -41,7 +41,7 @@ async def test_an_openai_local_an_operator_gave_a_credential_stays_on_its_provid
     async with engine.begin() as c:
         await c.execute(
             postgresql.insert(provider_connections)
-            .values(id=OPENAI_LOCAL, base_url="https://api.openai.com/v1", **row)
+            .values(id=OPENAI_LOCAL, tenant_id="local", base_url="https://api.openai.com/v1", **row)
             .on_conflict_do_update(
                 index_elements=["id"], set_={"base_url": "https://api.openai.com/v1", "key_ref": "openai"}
             )

@@ -592,8 +592,9 @@ class Settings(BaseSettings):
             # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
             # workspace closed. connections:delete: a member removed from a team has their own accounts on its
             # apps deleted in tools-service. tools:create, agents:create: a new team's defaults are written
-            # by each service when platform-service reports the team.
-            "platform": ["workflows:view", "connections:delete", "tools:create", "agents:create"],
+            # by each service when platform-service reports the team. settings:manage: models-service writes a new
+            # account's dev models, its `default` alias among them, when the account's first team is reported.
+            "platform": ["workflows:view", "connections:delete", "tools:create", "agents:create", "settings:manage"],
         }
     )
     # The embed app's own origins (apps/embed), such as https://ops.bank.example. A widget request from one of

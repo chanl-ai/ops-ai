@@ -515,12 +515,14 @@ erDiagram
   model_keys ||--o{ model_call_log : records
   provider_connections {
     string id PK
-    string name UK
+    string tenant_id "the account; unique with name"
+    string name
     string type
     string base_url
     string key_ref "credential name in the secrets store"
   }
   model_aliases {
+    string tenant_id PK
     string name PK
     int version PK
     string provider_id FK
@@ -550,8 +552,8 @@ erDiagram
 
 | Table | Holds | Status |
 |---|---|---|
-| `provider_connections` | A model provider endpoint and the name of its credential | built |
-| `model_aliases` | Versioned aliases with prices and the data sensitivity each is cleared for | built |
+| `provider_connections` | An account's model provider endpoint and the name of its credential, held to its tenant | built |
+| `model_aliases` | An account's versioned aliases with prices and the data sensitivity each is cleared for, held to the account by the database | built |
 | `model_keys` | Gateway keys per identity, with budget, rate limit and rotation | built |
 | `model_call_log` | Metadata for every call: alias, tokens, cost, latency, outcome | built |
 

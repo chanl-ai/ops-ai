@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ops_models.store import model_aliases, model_keys
 
-from .conftest import LOCAL, SERVICE, Models
+from .conftest import LOCAL, SERVICE, Models, accounts
 
 
 async def admit(m: Models, key_id: str, **extra: object) -> tuple[int, str | None]:
@@ -189,13 +189,14 @@ async def test_one_tenant_spending_its_share_of_a_shared_key_leaves_other_tenant
     """Files-service extracts for every tenant on one key; a tenant that spends its share is refused while the
     next tenant still reads, and a call that names no tenant is refused rather than charged to the whole key."""
     key_id, secret = await models.key(budget="1")
+    await accounts(models.engine, "t_a", "t_b")
     async with models.engine.begin() as c:
         # Below one call's cost, as above: the first call by a tenant overshoots its share, the next is refused.
         await c.execute(model_keys.update().where(model_keys.c.id == key_id).values(tenant_budget=Decimal("0.000040")))
     first = await models.complete(secret, **{"X-Tenant-Id": "t_a"})
     again = await models.complete(secret, **{"X-Tenant-Id": "t_a"})
     other = await models.complete(secret, **{"X-Tenant-Id": "t_b"})
-    nobody = await models.complete(secret)
+    nobody = await models.complete(secret, **{"X-Tenant-Id": ""})
     assert first.status_code == 200 and other.status_code == 200, (first.text, other.text)
     assert (again.status_code, again.json()["error"]["code"]) == (429, "tenant_budget_exhausted"), again.text
     assert (nobody.status_code, nobody.json()["error"]["code"]) == (400, "tenant_required"), nobody.text

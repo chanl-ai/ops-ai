@@ -1,10 +1,11 @@
 """models-service's tables, in its own migration chain (`alembic_version_models`).
 
-A provider connection names its credential (`key_ref`) and never holds it: the credential is a row of provider_keys,
-the account's, sealed under the service's secrets key and set by an account admin. An alias has immutable versions; the
-newest version that is not retired serves calls. A model key belongs to one identity (a workflow, an agent, a person
-or a platform purpose) and carries its budget, its spend and a hash of its secret, plus the previous hash during a
-rotation's overlap. A model call row is metadata only: never a prompt or a completion.
+A provider connection is an account's: it names its credential (`key_ref`) and never holds it, and the credential is
+a row of provider_keys, the account's too, sealed under the service's secrets key and set by an account admin. An
+alias is the account's as well and has immutable versions; the newest version that is not retired serves calls. A
+model key belongs to one identity (a workflow, an agent, a person or a platform purpose) and carries its budget, its
+spend and a hash of its secret, plus the previous hash during a rotation's overlap. A model
+call row is metadata only: never a prompt or a completion.
 """
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ provider_connections = sa.Table(
     "provider_connections",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("name", sa.String(120), nullable=False, unique=True, info=LISTED),
+    sa.Column("tenant_id", sa.String(64), nullable=False),
+    sa.Column("name", sa.String(120), nullable=False, info=LISTED),
     # openai-compatible | azure-openai | anthropic | scripted
     sa.Column("type", sa.String(32), nullable=False, info=LISTED),
     sa.Column("base_url", sa.String(400)),
@@ -36,7 +38,11 @@ provider_connections = sa.Table(
     sa.Column("observed_region", sa.String(64)),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Index("ix_provider_connections_type", "type"),
-    info=system("an install's model connection: no tenant and no value; the provider key it names is held by tenant"),
+    # A name is unique within its account only, so a second account's create never learns that another holds it.
+    sa.UniqueConstraint("tenant_id", "name", name="uq_provider_connections_tenant_name"),
+    # Held to its tenant by the database (models_0014): an account's connection says where its calls and its provider
+    # key go, so another account that could read or re-point one could send that key to an endpoint of its own.
+    info=TENANT_SCOPED,
 )
 
 # An account's model provider keys: account admins set them, only this service reads them, and no
@@ -61,6 +67,7 @@ provider_keys = sa.Table(
 model_aliases = sa.Table(
     "model_aliases",
     metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(120), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("kind", sa.String(16), nullable=False),  # chat | embedding
@@ -79,12 +86,15 @@ model_aliases = sa.Table(
     # One version of an alias serves: a second current row would leave which one serves to the query's order.
     sa.Index(
         "ux_model_aliases_current",
+        "tenant_id",
         "name",
         unique=True,
         postgresql_where=sa.text("status = 'current'"),
         mssql_where=sa.text("status = 'current'"),
     ),
-    info=system("an install's alias versions: every tenant's calls are served by them, and none names a tenant"),
+    # An account's own, as its connections are (models 20261128_0015): every account names its chat alias `default`,
+    # so a name is unique within an account only, and another account's alias is one that does not exist.
+    info=TENANT_SCOPED,
 )
 
 model_keys = sa.Table(

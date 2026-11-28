@@ -21,7 +21,8 @@ from .test_provider_keys import people
 @pytest.fixture
 async def client(models: Models) -> AsyncIterator[httpx.AsyncClient]:
     app = create_models_app(models.engine)
-    person = people(f"t_{uuid4().hex[:8]}")
+    # The seeded account, whose scripted connection the alias names.
+    person = people("local")
     app.dependency_overrides[current_principal] = person
     app.dependency_overrides[current_tenant_caller] = person
     hooks = {"response": [response_checker(app)]}

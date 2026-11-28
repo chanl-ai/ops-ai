@@ -1,0 +1,1 @@
+{"date": "2026-11-27", "title": "Model connections and aliases stay inside your account", "description": "Each account now sees, changes and calls only the model connections and aliases it set up, and chats through its own default model. Another account's connection is treated as one that does not exist.", "tag": "fix"}

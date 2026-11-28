@@ -5,7 +5,6 @@ list or reads as 0 agents, which looks safe to re-point. agents-service is a fak
 from __future__ import annotations
 
 from urllib.parse import parse_qs
-from uuid import uuid4
 
 import httpx
 
@@ -25,7 +24,8 @@ def _app(models: Models, agents: httpx.MockTransport) -> object:
     http = httpx.AsyncClient(transport=agents, base_url="http://agents")
     client = ServiceClient.for_settings(Settings(), http, service="models", audience="agents", scopes=["agents:view"])
     app = create_models_app(models.engine, alias_users=AgentsAliasUsers(client))
-    person = people(f"t_{uuid4().hex[:8]}")
+    # The seeded account, which holds the seeded aliases.
+    person = people("local")
     app.dependency_overrides[current_principal] = person
     app.dependency_overrides[current_tenant_caller] = person
     return app

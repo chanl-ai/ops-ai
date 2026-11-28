@@ -27,7 +27,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
-from .conftest import SERVICE, Models
+from .conftest import SERVICE, Models, service_as
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -99,6 +99,20 @@ class Rig:
         return await self.models.complete(self.secret, alias=self.alias, **{"X-Tenant-Id": tenant or self.tenant})
 
 
+async def _bind(client: httpx.AsyncClient, tenant: str, key_name: str, alias: str | None = None) -> str:
+    """A connection of `tenant` naming `key_name`, and an alias of that account on it."""
+    conn = {"name": f"openai-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
+    pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=service_as(tenant))
+    assert pid.status_code == 201, pid.text
+    alias = alias or f"bank-keys-{uuid4().hex[:8]}"
+    version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
+    made = await client.post(
+        "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=service_as(tenant)
+    )
+    assert made.status_code == 201, made.text
+    return alias
+
+
 async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[Rig]:
     """A connection naming a fresh key, an alias on it and a model key, for a fresh tenant; `in_settings` is the dev
     stack's value for that key from settings."""
@@ -110,14 +124,7 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:
-        conn = {"name": f"openai-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-        pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=SERVICE)
-        alias = f"bank-keys-{uuid4().hex[:8]}"
-        version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
-        made = await client.post(
-            "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE
-        )
-        assert made.status_code == 201, made.text
+        alias = await _bind(client, tenant, key_name)
         on_app = Models(client, models.engine, app)
         key_id, secret = await on_app.key(budget="5")
         yield Rig(client, seen, tenant, key_name, alias, key_id, secret, on_app)
@@ -152,7 +159,7 @@ async def test_a_call_naming_no_account_uses_no_accounts_key(rig: Rig) -> None:
     """A provider key is an account's own; a call that names no tenant is refused, never signed with the key of an
     account the install names."""
     assert (await rig.save("sk-mine")).status_code == 200
-    r = await rig.models.complete(rig.secret, alias=rig.alias)
+    r = await rig.models.complete(rig.secret, alias=rig.alias, **{"X-Tenant-Id": ""})
     assert (r.status_code, r.json()["error"]["code"]) == (400, "tenant_required"), r.text
     assert rig.seen == []
 
@@ -185,8 +192,11 @@ async def test_only_an_account_admin_sets_lists_or_deletes_a_key(rig: Rig) -> No
 
 async def test_another_accounts_key_is_not_used_for_this_accounts_call(rig: Rig) -> None:
     assert (await rig.save("sk-mine")).status_code == 200
-    r = await rig.complete(tenant=f"t_{uuid4().hex[:8]}")
-    assert r.status_code == 503 and rig.seen == []
+    # The other account names the same key and alias on a connection of its own, and saved no key.
+    other = f"t_{uuid4().hex[:8]}"
+    await _bind(rig.client, other, rig.key_name, rig.alias)
+    r = await rig.complete(tenant=other)
+    assert r.status_code == 503 and rig.seen == [], r.text
 
 
 async def test_a_key_a_connection_names_is_not_deleted(rig: Rig) -> None:

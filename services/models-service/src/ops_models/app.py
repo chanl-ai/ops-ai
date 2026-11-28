@@ -13,7 +13,7 @@ import hashlib
 import json
 import secrets
 import time
-from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Mapping, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ops_access import Access
+from ops_access.platform_events import TEAM_CREATED, Handler, platform_events_router
 from ops_identity import (
     Auth,
     CurrentPrincipal,
@@ -502,13 +503,16 @@ def create_models_app(
     chat_aliases: tuple[str, ...] = ("default", "assistant"),
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] | None = None,
     alias_users: AliasUsers | None = None,
+    account_models: Callable[[str], Awaitable[int]] | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
     default); `provider_secrets` are the dev stack's keys from settings, behind them. `background` are the processes
     the lifespan runs beside the server, by default the sweep of idle key spend. `alias_users` says how many agents
-    name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset."""
+    name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset.
+    `account_models(tenant)` writes a new account's connections and aliases when platform-service reports its team
+    made (`team.created`), the dev seed's in dev; with none, an account chooses its chat model before its first call."""
     http = upstream or httpx.AsyncClient(timeout=60)
     # Testing a key sends it out: only to a public address, never following a redirect with it.
     key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
@@ -922,8 +926,11 @@ def create_models_app(
                     "output_per_million": held_version.output_per_million,
                 }
             )
-            if await aliases.add_version(alias, priced) is None:
-                await aliases.create(alias, "chat", version_fields)
+            if await aliases.add_version(alias, priced) is None and not await aliases.create(
+                alias, "chat", version_fields
+            ):
+                # Another choice made the alias between the two statements; choosing again moves it.
+                raise Conflict(f"Alias {alias} changed while it was set; choose the model again.", code="alias_exists")
         return typed(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)))
 
     @app.delete(
@@ -982,7 +989,10 @@ def create_models_app(
         responses=ERRORS,
     )
     async def create_alias(body: AliasIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        if not await aliases.create(body.name, body.kind, _version_fields(body)):
+        made = await aliases.create(body.name, body.kind, _version_fields(body))
+        if made is None:
+            raise refusal(404, "provider_not_found", f"No provider connection {body.provider_id}.")
+        if not made:
             raise Conflict(f"Alias {body.name} exists; add a version instead.", code="alias_exists")
         return typed(AliasRef(name=body.name, version=1), status=201)
 
@@ -1154,7 +1164,8 @@ def create_models_app(
         if (why := _key_refusal(key, datetime.now(UTC))) is not None:
             raise refusal(*why)
         remaining: Decimal = key.budget - key.spent
-        if body.alias and body.estimated_tokens:
+        # An alias is an account's: with no account in scope there is no alias to price the estimate by.
+        if body.alias and body.estimated_tokens and isolation.log_ids()["tenant_id"]:
             alias_row = await aliases.current(body.alias)
             if alias_row is not None:
                 estimate = cost(Usage(input_tokens=body.estimated_tokens), Price(alias_row.input_per_million))
@@ -1269,8 +1280,10 @@ def create_models_app(
             provider = self.provider
             seen = provider.observed_region if isinstance(provider, AzureOpenAIProvider) else None
             alias = self.alias_row
-            if seen and alias is not None and seen != alias.observed_region:
-                await providers.observe(alias.provider_id, seen)
+            if seen and alias is not None and self.tenant and seen != alias.observed_region:
+                # The connection is the calling account's, written as that account.
+                with isolation.scope(self.tenant, None):
+                    await providers.observe(alias.provider_id, seen)
 
         async def failed(self, e: Exception) -> JSONResponse:
             """The provider's failure as the caller gets it, its code also the call-log row's reason."""
@@ -1338,11 +1351,16 @@ def create_models_app(
                     429, "run_spend_cap", f"Run {row['run_id']} has spent its {cap} on model key {key.id}."
                 )
         recent = totals.recent
-        alias_row = await aliases.current(alias_name)
         if recent >= key.rate_limit_per_minute:
             return await gate.refuse(
                 429, "rate_limited", f"Model key {key.id} is over {key.rate_limit_per_minute} calls a minute."
             )
+        if not tenant:
+            # Every alias and connection is an account's: a call that names no account has none to be served from.
+            return await gate.refuse(400, "tenant_required", f"Alias {alias_name} is an account's; send X-Tenant-Id.")
+        # Read as the calling account, so another account's alias is not found.
+        with isolation.scope(tenant, None):
+            alias_row = await aliases.current(alias_name)
         if alias_row is None:
             return await gate.refuse(404, "alias_not_found", f"No current version of alias {alias_name}.")
         gate.alias_row = alias_row
@@ -1363,14 +1381,7 @@ def create_models_app(
             )
         gate.price = Price(alias_row.input_per_million, alias_row.output_per_million)
         ref = alias_row.key_ref
-        if ref and not tenant:
-            # A provider key is an account's own: a call that names no account signs in with none.
-            return await gate.refuse(
-                400,
-                "tenant_required",
-                f"Alias {alias_name} signs in with an account's model provider key {ref}; send X-Tenant-Id.",
-            )
-        provider_key = await keys.get(str(ref), str(tenant)) if ref else None
+        provider_key = await keys.get(str(ref), tenant) if ref else None
         if ref and provider_key is None:
             # Calling the provider without its key would only come back as its own 401, after a network round trip.
             return await gate.refuse(
@@ -1552,6 +1563,15 @@ def create_models_app(
         responses=error_responses(provider_errors),
     )(embeddings)
 
+    events: dict[str, Handler] = {}
+    if account_models is not None:
+        made = account_models
+
+        async def team_created(tenant_id: str, _team: str, _payload: Json) -> int:
+            return await made(tenant_id)
+
+        events[TEAM_CREATED] = Handler("settings", "manage", team_created)
+    app.include_router(platform_events_router(events, tags=("platform-events",)))
     return app
 
 

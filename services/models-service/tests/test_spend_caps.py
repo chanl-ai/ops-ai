@@ -23,7 +23,7 @@ from ops_models.store.tables import SPEND_KEPT_IDLE_S
 from ops_service_kit.logging import captured_logging
 from ops_store import background, isolation
 
-from .conftest import Models
+from .conftest import Models, accounts
 
 
 async def test_a_run_stops_at_its_ceiling_from_its_recorded_spend(models: Models) -> None:
@@ -49,6 +49,7 @@ async def test_a_key_stops_at_its_daily_cap(models: Models) -> None:
 async def test_a_keys_caps_count_the_calls_it_made_for_every_tenant(models: Models) -> None:
     """A key spent for many tenants: its daily and run caps are the key's, so a tenant that never called is refused
     once another tenant's calls reached them, and its rate limit counts a refused call too."""
+    await accounts(models.engine, "t_a", "t_b", "t_c", "t_d")
     key_id, secret = await models.key(budget="5", rateLimitPerMinute=2)
     run = {"X-Run-Id": "run_shared_1", "X-Run-Spend-Cap": "0.00001"}
     assert (await models.complete(secret, **run, **{"X-Tenant-Id": "t_a"})).status_code == 200
@@ -207,22 +208,15 @@ async def _ledgers(models: Models, key_id: str, *, per_tenant: bool, charged: De
     return {"period totals": today, "key spent": await models.spent(key_id), "tenant share": share}
 
 
-async def _untenanted_rows(models: Models, key_id: str) -> list[tuple[str, str]]:
-    async with models.engine.connect() as c:
-        found = await c.execute(
-            sa.text("SELECT outcome, reason FROM model_calls_untenanted WHERE key_id = :k"), {"k": key_id}
-        )
-        return [(r.outcome, r.reason) for r in found]
-
-
-@pytest.mark.parametrize("kind", ["one_budget", "per_tenant", "untenanted"])
+# A call that names no account is refused before it reaches a provider (400 tenant_required), so only a tenant's call
+# is ever billed and lost.
+@pytest.mark.parametrize("kind", ["one_budget", "per_tenant"])
 async def test_a_charge_both_settle_attempts_lost_is_replayed_once(models: Models, kind: str) -> None:
     """The settle and its fallback both fail after the provider billed: the log carries the whole charge, and its
     replay records it once in every ledger, however many times it runs (the call's id is the row's key)."""
     key_id, secret = await models.key(budget="5")
     if kind == "per_tenant":
         await ModelKeys(models.engine).set_tenant_budget(key_id, Decimal("2"))
-    tenant = {} if kind == "untenanted" else {"X-Tenant-Id": "local"}
 
     def fail() -> None:
         raise RuntimeError("the database went away")
@@ -230,7 +224,7 @@ async def test_a_charge_both_settle_attempts_lost_is_replayed_once(models: Model
     remove = _on_spend_write(models, fail)
     try:
         with captured_logging("models-settle-lost") as stream, contextlib.suppress(RuntimeError):
-            await models.complete(secret, **tenant)
+            await models.complete(secret, **{"X-Tenant-Id": "local"})
     finally:
         remove()
     lines = stream.getvalue().splitlines()
@@ -246,11 +240,7 @@ async def test_a_charge_both_settle_attempts_lost_is_replayed_once(models: Model
     assert await replay_lines(models.engine, masked) == (0, 0, 1)
     assert await replay_lines(models.engine, lines) == (1, 0, 0)
     assert await replay_lines(models.engine, lines) == (0, 1, 0), "a second replay of one call charged it again"
-    rows = (
-        await _untenanted_rows(models, key_id)
-        if kind == "untenanted"
-        else [(r["outcome"], r["reason"]) for r in await models.calls(key_id)]
-    )
+    rows = [(r["outcome"], r["reason"]) for r in await models.calls(key_id)]
     assert rows == [("error", "settle_failed")], rows
     ledgers = await _ledgers(models, key_id, per_tenant=kind == "per_tenant", charged=charged)
     assert ledgers == dict.fromkeys(ledgers, charged), f"the ledgers disagree on the {charged} charged: {ledgers}"

@@ -23,6 +23,7 @@ from fastapi import Header, Request
 from ops_identity import Principal, current_tenant_caller
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
+from ops_store import isolation
 
 from .conftest import SERVICE, Models
 
@@ -67,7 +68,7 @@ def _person(role: str) -> Any:
         if authorization:
             return await current_tenant_caller(request, authorization=authorization, x_team_id=x_team_id)
         team = "team_security" if role == "admin" else "team_ops"
-        return Principal(
+        p = Principal(
             kind="person",
             sub=f"usr_{role}",
             email=f"{role}@bank.example",
@@ -81,6 +82,9 @@ def _person(role: str) -> Any:
             # The workspace's Security team, which platform-service names in every person's token.
             security_team="team_security",
         )
+        # As the real dependency does: the request acts in the person's account, which holds its connections.
+        isolation.enter_caller(p, dev=False)
+        return p
 
     return caller
 

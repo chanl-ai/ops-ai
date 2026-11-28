@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
 from ops_models.app import create_models_app
-from ops_models.seed import seed
+from ops_models.seed import seed, seed_account
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
@@ -42,7 +42,13 @@ SERVICE = {
 LOCAL = {"X-Tenant-Id": "local"}
 
 
-def _service(tenant: str) -> dict[str, str]:
+async def accounts(engine: Any, *tenants: str) -> None:
+    """Each of `tenants` with the seeded account's connections and aliases as its own, as a new account gets them."""
+    for tenant in tenants:
+        await seed_account(engine, tenant, install_tenant="local", fake_openai_url=None, install=None)
+
+
+def service_as(tenant: str) -> dict[str, str]:
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant, ttl_s=3600)
     return {"Authorization": f"Bearer {token}"}
 
@@ -121,7 +127,10 @@ class Models:
             "messages": [{"role": "user", "content": "Summarise the dispute for case DSP-2210 please"}],
         }
         return await self.client.post(
-            "/v1/models/chat/completions", json=body, headers={"Authorization": f"Bearer {secret}", **headers}
+            "/v1/models/chat/completions",
+            json=body,
+            # As the seeded account unless a test names another: every alias is an account's.
+            headers={"Authorization": f"Bearer {secret}", **LOCAL, **headers},
         )
 
     async def calls(self, key_id: str, tenant: str = "local") -> list[dict[str, Any]]:
@@ -130,7 +139,7 @@ class Models:
         page = 1
         while True:
             params = {"keyId": key_id, "page": page}
-            r = await self.client.get("/v1/models/calls", params=params, headers=_service(tenant))
+            r = await self.client.get("/v1/models/calls", params=params, headers=service_as(tenant))
             body = r.json()["data"]
             found += body["data"]
             if not body["pagination"]["hasNext"]:
