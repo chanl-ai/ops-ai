@@ -58,6 +58,11 @@ the refusal in the same way as a call.*
 ## Aliases
 
 An alias is a name such as `default` that agents, workflows and document types use instead of a provider's model id.
+Connections and aliases belong to one account: no account sees, changes or calls another's.
+
+**Upgrading to this release clears every model connection and alias**, because they had no account to keep them in.
+An account admin connects a provider and makes the aliases again on Settings › Workspace › Models.
+
 Each alias has versions, and the newest current version is the one that serves calls. A version records:
 
 - the provider connection and the provider's model

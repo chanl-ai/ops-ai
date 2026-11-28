@@ -3,6 +3,8 @@ old port, a real provider's URL) is repointed at the fake; one an operator bound
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -16,7 +18,7 @@ from .conftest import as_account
 FAKE = "http://127.0.0.1:6199/v1"
 
 
-async def _point_at_openai(engine: AsyncEngine, row: dict[str, object]) -> None:
+async def _point_at_openai(engine: AsyncEngine, row: Mapping[str, object]) -> None:
     """The install account's openai-local row on OpenAI's own URL, made or moved there."""
     values = {**row, "base_url": "https://api.openai.com/v1"}
     async with as_account(engine, "local") as c:

@@ -1,5 +1,4 @@
-# 122 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
-1 body agents_platform_event
+# 120 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body forms_upload_public
 1 reply health_health
 5 dict-any services/agents-service/src/ops_agents/activities/catalog.py
@@ -51,7 +50,6 @@
 1 dict-any services/agents-service/src/ops_agents/store/channels.py
 1 task services/agents-service/src/ops_agents/store/leases.py
 1 dict-any services/agents-service/src/ops_agents/store/mailboxes.py
-1 dict-any services/agents-service/src/ops_agents/store/trigger_events.py
 3 dict-any services/agents-service/src/ops_agents/store/widget_deployments.py
 2 store-dict services/agents-service/src/ops_agents/store/widget_deployments.py
 1 reply threads_reattach

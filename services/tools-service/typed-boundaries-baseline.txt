@@ -1,6 +1,5 @@
-# 20 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 19 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_own_account
-1 body gateway_platform_event
 3 dict-any services/tools-service/src/ops_tools/app.py
 1 dict-any services/tools-service/src/ops_tools/connections/records.py
 2 dict-any services/tools-service/src/ops_tools/egress.py
