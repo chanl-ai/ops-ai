@@ -205,7 +205,9 @@ class ReadingsStore(Store):
         async with self.tx() as c:
             return (await c.execute(query)).scalar_one_or_none()
 
-    async def set_rendition(self, row: ReadingRow, file_id: str) -> None:
+    async def set_rendition(self, row: ReadingRow, file_id: str | None, *, replacing: str | None = None) -> None:
+        """Names the PDF the reading's file was drawn into (None: none). `replacing` is a drawing Files deleted: every
+        reading of the team's bytes that named it names the new one."""
         t = documents_readings
         async with self.tx() as c:
             await c.execute(
@@ -213,6 +215,15 @@ class ReadingsStore(Store):
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
                 .values(rendition_id=file_id)
             )
+            if replacing is not None:
+                await c.execute(
+                    sa.update(t)
+                    .where(
+                        t.c.tenant_id == isolation.tenant(), t.c.team == row.team, t.c.file_digest == row.digest,
+                        t.c.rendition_id == replacing, team_visible(t),
+                    )
+                    .values(rendition_id=file_id)
+                )  # fmt: skip
 
     async def link(self, file_id: str, team: str, digest: str, at: datetime) -> None:
         """Records that the team's file holds these bytes; a file that changes content is linked to its new digest."""

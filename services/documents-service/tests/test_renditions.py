@@ -6,6 +6,7 @@ of the same pages; the worker itself is run for real by the use case."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 from typing import Any
 
@@ -19,6 +20,7 @@ from reportlab.pdfgen.canvas import Canvas
 
 from ops_documents.picture_reading import PictureReading
 from ops_documents.renditions import DOCX, PPTX, ConverterError, Renditions
+from ops_files_client import FileNotFound
 
 from .conftest import OPS, Make
 from .test_picture_reading import DIAGRAM, Policy, Seeing, read_all
@@ -89,10 +91,6 @@ async def test_a_deck_picture_slide_is_described_from_its_drawn_page_and_drawn_o
     fid = await s.stored(deck(), name="review.pptx", mime=PPTX)
     async with s.client as c:
         first = await read_all(s, c, fid)
-        # files-service scans the drawn PDF like any file; a later reading reads it back once clean.
-        await s.files.client(service="scanner", scopes=["files:decide"]).report_scan(
-            s.tenant, first["renditionId"], status="clean", engine="clamav"
-        )
         again = await read_all(s, c, fid, sensitivity="confidential")
         image = await c.get(f"/v1/documents/readings/{fid}/pages/2/image", headers=OPS)
     slide = first["pages"][1]
@@ -134,6 +132,53 @@ async def test_turning_the_converter_on_draws_a_file_read_without_it(make: Make)
     assert readings is not None
     async with s.client as c:
         before = await read_all(s, c, fid)
-        readings.renditions = Renditions(Converter(), s.files.client(service="documents", scopes=["files:create"]))
+        s.files.clean_on_write = ("knowledge_rendition",)
+        writer = s.files.client(service="documents", scopes=["files:create", "files:view"])
+        readings.renditions = Renditions(Converter(), writer, scan_wait_s=0.2, scan_poll_s=0.02)
         after = await read_all(s, c, fid)
     assert before["renditionId"] is None and after["renditionId"], after
+
+
+async def test_a_drawing_waiting_on_its_scan_keeps_the_reading_waiting_and_is_not_drawn_again(make: Make) -> None:
+    converter = Converter()
+    s = make(converter=converter, rendition_scan="pending")
+    readings = s.extractor.readings
+    assert readings is not None and readings.renditions is not None
+    readings.renditions.scan_wait_s = 5.0
+    fid = await s.stored(deck(), name="review.pptx", mime=PPTX)
+    asked = {"ocr": "off", "pictureSensitivity": "internal"}
+    async with s.client as c:
+        await c.post("/v1/documents/readings", json={"fileId": fid, **asked}, headers=OPS)
+        drawn: list[str] = []
+        for _ in range(500):  # at most 5 s for the reading to draw the deck
+            if drawn := [k for k, f in s.files.files.items() if f["purpose"] == "knowledge_rendition"]:
+                break
+            await asyncio.sleep(0.01)
+        waiting = (await c.get(f"/v1/documents/readings/{fid}", params=asked, headers=OPS)).json()["data"]
+        await s.files.client(service="scanner", scopes=["files:decide"]).report_scan(
+            s.tenant, drawn[0], status="clean", engine="clamav"
+        )
+        await readings.drain()
+        done = (await c.get(f"/v1/documents/readings/{fid}", params=asked, headers=OPS)).json()["data"]
+    assert waiting["status"] in ("queued", "reading"), waiting
+    assert done["status"] == "done" and done["renditionId"] == drawn[0], done
+    assert converter.calls == 1 and len(drawn) == 1, "drawn once while its scan was waited on"
+
+
+async def test_the_same_file_in_two_teams_gets_a_drawing_each_that_the_other_cannot_read(make: Make) -> None:
+    s = make(converter=Converter())
+    readings = s.extractor.readings
+    assert readings is not None
+    ours = await s.stored(deck(), name="review.pptx", mime=PPTX)
+    theirs = await s.stored(deck(), name="review.pptx", mime=PPTX, team="team_cards")
+    cards = {"X-Team-Id": "team_cards"}
+    asked = {"ocr": "off", "pictureSensitivity": "internal"}
+    async with s.client as c:
+        a = await read_all(s, c, ours)
+        await c.post("/v1/documents/readings", json={"fileId": theirs, **asked}, headers=cards)
+        await readings.drain()
+        b = (await c.get(f"/v1/documents/readings/{theirs}", params=asked, headers=cards)).json()["data"]
+    assert a["renditionId"] and b["renditionId"] and a["renditionId"] != b["renditionId"], (a, b)
+    assert s.files.files[b["renditionId"]]["team"] == "team_cards"
+    with pytest.raises(FileNotFound):
+        await s.files.client(service="documents", scopes=["files:view"]).get(s.tenant, "team_cards", a["renditionId"])

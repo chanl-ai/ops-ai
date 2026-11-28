@@ -31,7 +31,7 @@ from ops_documents.picture_reading import (
     stricter,
     wants_picture,
 )
-from ops_documents.renditions import DRAWN, Renditions, on_pages, page_texts, undrawn
+from ops_documents.renditions import DRAWN, Renditions, RenditionWaiting, on_pages, page_texts, undrawn
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -550,6 +550,18 @@ class Readings:
             )
         except ReadingError as e:
             await self.store.finish(row, status="failed", at=self.clock(), error_code=e.code, error=str(e))
+        except RenditionWaiting as e:
+            # Still reading to its asker; tried again for the scan's verdict, up to MAX_TRIES, drawing nothing new.
+            if tries >= MAX_TRIES:
+                await self.store.finish(
+                    row,
+                    status="failed",
+                    at=self.clock(),
+                    error_code="rendition_waiting",
+                    error=f"{TOO_MANY_TRIES}: {e}",
+                )
+            elif (again := await self.store.get(row.team, row.digest, row.version, row.key)) is not None:
+                self._queued.append(again)
         except Exception as e:
             if tries >= MAX_TRIES:
                 await self.store.finish(
@@ -571,13 +583,19 @@ class Readings:
         if self.renditions is None or reader.facts.mime_type not in DRAWN:
             return None
         kept = await self.store.rendition(row.team, row.digest)
-        pdf = await self.renditions.read(who, kept) if kept else None
-        if kept is None or pdf is None:
-            made = await self.renditions.make(who, file, data, row.digest)
+        if kept is None or await self.renditions.gone(who, kept):
+            made = await self.renditions.make(who, file, data, row.digest, replacing=kept)
             if made is None:
                 return None
-            kept, pdf = made.file_id, made.pdf
-        await self.store.set_rendition(row, kept)
+            # Named before the scan is waited on, so a reading tried again waits for this file and draws nothing.
+            await self.store.set_rendition(row, made, replacing=kept)
+            kept = made
+        else:
+            await self.store.set_rendition(row, kept)
+        pdf = await self.renditions.scanned(who, kept)
+        if pdf is None:
+            await self.store.set_rendition(row, None)
+            return None
         pages = [reader.page(n) for n in range(1, reader.facts.page_count + 1)]
         return pdf, on_pages(reader.facts.mime_type, pages, await asyncio.to_thread(page_texts, pdf))
 

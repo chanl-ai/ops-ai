@@ -8,8 +8,10 @@ and write. With no converter configured these files are read as text only."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -17,7 +19,7 @@ import httpx
 import pdfplumber
 
 from ops_documents.files import Who
-from ops_files_client import FileInfo, FilesClient, FilesRefused
+from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
 from ops_ingest.reading import Block, Page, page_text
 from ops_service_kit.logging import get_logger
 
@@ -32,11 +34,18 @@ CONVERT_TIMEOUT_S = 120.0
 # The words of a paragraph matched against a drawn page's text to find the page it is on.
 MATCH_CHARS = 60
 WHOLE_PAGE = [0.0, 0.0, 1.0, 1.0]
+# files-service scans a drawn PDF like any file; a reading waits this long for the verdict before trying again later.
+SCAN_WAIT_S = 120.0
+SCAN_POLL_S = 2.0
 _SPACE = re.compile(r"\s+")
 
 
 class ConverterError(Exception):
     """The worker could not draw the file; it is read as text only."""
+
+
+class RenditionWaiting(Exception):
+    """The drawn PDF is still being scanned: the reading waits and is tried again, and the file is not drawn again."""
 
 
 class Converter(Protocol):
@@ -61,31 +70,54 @@ class HttpConverter:
         return response.content
 
 
-@dataclass(frozen=True)
-class Rendition:
-    file_id: str
-    pdf: bytes
-
-
 @dataclass
 class Renditions:
     converter: Converter
     files: FilesClient
+    scan_wait_s: float = SCAN_WAIT_S
+    scan_poll_s: float = SCAN_POLL_S
 
-    async def make(self, who: Who, file: FileInfo, data: bytes, digest: str) -> Rendition | None:
-        """The file drawn as a PDF and stored for its team, or None (logged) when it cannot be drawn: the reading
-        then goes on as text only."""
+    async def make(
+        self, who: Who, file: FileInfo, data: bytes, digest: str, *, replacing: str | None = None
+    ) -> str | None:
+        """The id of the file drawn as a PDF and stored for its team, or None (logged) when it cannot be drawn: the
+        reading then goes on as text only. `replacing` names a drawing Files no longer has, so the store is asked for
+        a new file rather than handed back the deleted one."""
         stem = file.name.rsplit(".", 1)[0] or "document"
+        key = f"rendition:{digest}" if replacing is None else f"rendition:{digest}:{replacing}"
         try:
             pdf = await self.converter.to_pdf(data, name=file.name)
             stored = await self.files.write(
                 who.tenant_id, who.team, pdf, name=f"{stem}.pdf", mime="application/pdf", purpose=PURPOSE,
-                uploaded_by="documents-service", idempotency_key=f"rendition:{digest}",
+                uploaded_by="documents-service", idempotency_key=key,
             )  # fmt: skip
         except (ConverterError, FilesRefused, httpx.HTTPError) as e:
             log.warning("rendition_not_made", extra={"file": file.id, "error": str(e)})
             return None
-        return Rendition(stored.file.id, pdf)
+        return stored.file.id
+
+    async def gone(self, who: Who, file_id: str) -> bool:
+        """Whether Files no longer has the drawing, so the file is drawn again."""
+        try:
+            await self.files.get(who.tenant_id, who.team, file_id)
+        except FileNotFound:
+            return True
+        return False
+
+    async def scanned(self, who: Who, file_id: str) -> bytes | None:
+        """The drawing's bytes once files-service has scanned it clean, None when the scan refused it (the reading
+        goes on as text only); RenditionWaiting when it is still being scanned after `scan_wait_s`."""
+        until = time.monotonic() + self.scan_wait_s
+        while True:
+            info = await self.files.get(who.tenant_id, who.team, file_id)
+            if info.scan.status == "clean":
+                return await self.read(who, file_id)
+            if info.scan.status != "pending":
+                log.warning("rendition_refused", extra={"file": file_id, "scan": info.scan.status})
+                return None
+            if time.monotonic() >= until:
+                raise RenditionWaiting(f"{file_id} is still being scanned")
+            await asyncio.sleep(self.scan_poll_s)
 
     async def read(self, who: Who, file_id: str) -> bytes | None:
         try:
