@@ -1,5 +1,5 @@
 # Publishes the SDKs (sdk/python to PyPI as ops-ai, sdk/typescript to npm as @chanl-ai/ops-ai) when the version in a
-# package's file is not on its registry yet. It runs on a version tag (vX.Y.Z, made by release-tag.yml when a release or
+# package's file is not on its registry yet. It runs on a version tag (vX.Y.Z, made by release-finish.yml when a release or
 # hotfix merges into main; that workflow starts it, since a tag pushed with the workflow token starts nothing itself)
 # and by hand, never on a branch push, so no merge to a branch can publish. A release raises the version on its
 # branch; the release notes name the platform tag it was tested on.

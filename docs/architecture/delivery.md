@@ -116,6 +116,18 @@ its number is not reused.
 | 20 | Does the network review allow Graph change notifications for mailboxes and SharePoint? | Phase 2 |
 | 21 | Who names the Model Risk second-line approver group, and when? | First `high` workflow |
 
+## From draft to main
+
+| Column | What puts it there | What runs |
+|---|---|---|
+| Draft | A pull request opened as a draft | Nothing from `ci.yml`; CodeQL and the leak scan as usual |
+| Ready | Marked ready for review | The jobs of what it changed (below) |
+| Reviewed | The reviewer adds the label `reviewed`; `hold` keeps it out, a push removes the label unless it only merged develop in | `auto-queue.yml` arms it: not a draft, base `develop`, from this repository. A stacked pull request is armed only once its base merged and it was retargeted to `develop` |
+| Queue | Armed pull request | The merge queue: every job of the plan, SQL Server included. A second red run drops it with the label `queue-failed` and a comment naming each failed job |
+| `develop` | The queue's merge | Staging deploys it (skipped with a notice while a release or hotfix branch exists) |
+| Release branch | `make release-start` | Every job on each push, `release-security.yml`, the staging deploy; `make release-rc` tags a candidate |
+| `main` | The owner merges the release pull request | `release-finish.yml` tags `vX.Y.Z`, publishes, merges back into `develop` ([Releasing](../deploy/release.md)) |
+
 ## What a pull request runs
 
 A pull request runs fast feedback for the areas it changed: the plan, `checks` (the script tests too, when `scripts/` or a workflow changed), the touched services' and packages' tests, the console and docs jobs when touched, and the maintainer review. The slow jobs (`repo`, `store-mssql` and `release-proof`) have `needs.plan.outputs.heavy == 'true'` in their `if:`; `scripts/ci-plan.sh` prints `heavy=false` for a `pull_request` event unless the pull request is titled `[ci full]` or labelled `ci:full`. The merge queue (`merge_group`), pushes to develop and pushes to `release/*` or `hotfix/*` run them, so every change passes them before it reaches develop. A push to develop of a commit a green merge queue run of `ci.yml` already tested plans nothing (`CI_TESTED` in `scripts/ci-plan.sh`), so a merge is tested once on develop's tip; `ci-ok` and the staging deploy still run. `ci-ok` counts a skipped job as passed. `scripts/tests/test_ci_plan.py` fails when `store-mssql` or `repo` is planned on a pull request.

@@ -10,10 +10,10 @@ You review one change you did not build. You change nothing on the branch; you r
 ## Read first
 1. `.claude/agent-rules.md`, then `.claude/project-profile.md` ("Layers", "Architecture rules", "Checks a review runs
    first"), then `.claude/workspace.local.md` if it exists.
-2. The review context, run first: `python3 scripts/agents/review_context.py --base origin/main` (`make
+2. The review context, run first: `python3 scripts/agents/review_context.py --base origin/develop` (`make
    agent-review-context`), and the test audit's report if one was run.
 3. The design page and its "Acceptance criteria and tests", the builder's report, then the diff
-   (`git diff origin/main...HEAD`), every line.
+   (`git diff origin/develop...HEAD`), every line.
 4. The [engineering standards](../../docs/architecture/engineering-standards.md) pages for the layers the diff touches
    (the index maps ids to pages: `LY*` layers, `CF*` configuration, `TN*` and `AC*` tenancy and access, `DA*` data
    access, `AP*` and `MD*` API and models, `EV*` events, `UI*` console and SDK, `OB*` observability, `SC*` security,

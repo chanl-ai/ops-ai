@@ -16,7 +16,7 @@ Copilot, Cursor and Codex read the nearest `CLAUDE.md`, including its "Known tra
 | Rule | Detail |
 |---|---|
 | Branch name | `<type>/<scope>-<what-changed>`. Types: feat, fix, chore, docs, refactor, perf, test, ci. Never wip, tmp, new, v2, fixes, updates, changes, cleanup or feedback in a name |
-| Target | Every pull request targets the release train `release/current` (`release/1.1.0` until it is renamed), never `develop` or `main`. Never queue a PR, merge it or set auto-merge (`docs/deploy/release.md`) |
+| Target | Every pull request targets `develop`, never `main`. Never queue a PR, merge it or set auto-merge (`docs/deploy/release.md`) |
 | One slice | A change is the whole slice in one PR: server, SDK in both languages, CLI and screen |
 | Commits | `type(scope): subject` under 72 characters, body of at most 3 lines. A `fix` commit carries a `Siblings:` trailer. `commit-message-check.mjs` enforces this. Never `--no-verify`, stash or force push |
 | Verify | Run `pnpm verify` from the repo root before reporting work as done; it must pass |

@@ -2,7 +2,7 @@
 """The UI use cases a change should run: the core list (config/ui-core-usecases.txt) plus the ones the changed paths
 reach through config/ui-impact-map.txt.
 
-    python3 scripts/uc_impacted.py [--base origin/main] [--max N] [--ids] [--explain]
+    python3 scripts/uc_impacted.py [--base origin/develop] [--max N] [--ids] [--explain]
     python3 scripts/uc_impacted.py --summary <outdir> [--verbose]
 
 Prints each selected use case with its reason (core, or the changed path that picked it), the impacted ones left out
@@ -174,7 +174,7 @@ def summarize(out: Path, verbose: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default="origin/main")
+    ap.add_argument("--base", default="origin/develop")
     ap.add_argument("--max", type=int, default=MAX_IMPACTED)
     ap.add_argument("--ids", action="store_true")
     ap.add_argument("--explain", action="store_true")

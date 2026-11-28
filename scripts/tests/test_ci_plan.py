@@ -24,14 +24,21 @@ CLEAN_MAKE_ENV = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", 
 
 
 def plan(
-    tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "", tested: str = ""
+    tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "", tested: str = "", trivial: str = ""
 ) -> dict[str, str]:
     listed = tmp_path / "changed.txt"
     listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
     out = subprocess.run(
         ["bash", "scripts/ci-plan.sh", str(listed)],
         cwd=ROOT,
-        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref, "CI_FULL": full, "GITHUB_EVENT_NAME": event, "CI_TESTED": tested},
+        env={
+            **CLEAN_MAKE_ENV,
+            "GITHUB_REF": ref,
+            "CI_FULL": full,
+            "GITHUB_EVENT_NAME": event,
+            "CI_TESTED": tested,
+            "CI_TRIVIAL": trivial,
+        },
         capture_output=True,
         text=True,
         check=True,
@@ -290,3 +297,27 @@ def test_the_repo_job_is_one_matrix_entry_per_suite_and_check(tmp_path: Path) ->
     parts = [e["part"] for e in json.loads(p["repo_jobs"])]
     assert parts == [*p["repo_pool"].split(), "checks", "scripts", "sdk"], parts
     assert len(parts) >= 8 and plan(tmp_path, "docs/guide/plugins.md")["repo_jobs"] == "[]"
+
+
+def test_a_merge_back_of_version_fields_plans_no_job_but_a_release_branch_push_still_runs_all(tmp_path: Path) -> None:
+    jobs = ("checks", "service", "package", "console", "docs", "repo", "store-mssql", "usecases")
+    for event in ("pull_request", "merge_group"):
+        p = plan(tmp_path, "deploy/release/version", event=event, trivial="true")
+        assert all(not _runs(j, p) for j in jobs), (event, p)
+    full = plan(tmp_path, "deploy/release/version", ref="refs/heads/release/1.2.1", event="push", trivial="true")
+    assert full["full"] == "true", full
+    # The decision is made from the diff in the plan step, never from the branch name.
+    run = _plan_step()["run"]
+    assert "ci_trivial.py" in run and "CI_TRIVIAL=true" in run and "head_ref" not in run, run
+
+
+def test_the_release_pull_request_reports_the_push_run_and_a_frozen_staging_is_a_notice() -> None:
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    for job in ("plan", "ready"):
+        cond = str(ci[job]["if"])
+        assert "base_ref == 'main'" in cond and "startsWith(github.head_ref, 'release/')" in cond, (job, cond)
+    wait = next(s for s in ci["ci-ok"]["steps"] if "push run" in s.get("name", ""))
+    assert "event=push&head_sha=$SHA" in wait["run"] and "release/" in wait["if"], wait
+    staging = yaml.safe_load((ROOT / ".github/workflows/deploy-staging.yml").read_text())["jobs"]
+    held = next(s for j in staging.values() for s in j["steps"] if "freeze or hold" in s.get("name", ""))
+    assert "::notice" in held["run"] and "exit 1" not in held["run"], held

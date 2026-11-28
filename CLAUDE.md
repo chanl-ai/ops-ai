@@ -49,10 +49,10 @@ Every fragment, target and variable: [make/CLAUDE.md](make/CLAUDE.md) and
 | Run someone's branch on the same stack | `make review BRANCH=<name>` |
 | Console on the mock, no services | `make dev` (http://localhost:3016; not while `make up` holds :3016) |
 | Call a route or drive an area as a seeded person | `make api GET /v1/me AS=viewer`, `make chat …`, `make kb-search …` |
-| Tests for what you changed | `make test PKG=services/<x> T=tests/<file>.py`; `make test` runs what changed since `origin/main` |
+| Tests for what you changed | `make test PKG=services/<x> T=tests/<file>.py`; `make test` runs what changed since `origin/develop` |
 | One use case | `make usecase-test UC=<id> LAYER=api\|sdk\|cli\|ui` |
 | Console gate | `pnpm verify` |
-| Everything a commit must pass (CI runs it on every pull request) | `make verify` |
+| Every check of the hosted run, locally (optional) | `make verify` |
 | Regenerate OpenAPI documents and SDKs after a route change | `make openapi`, then `make sdk-verify` |
 | Check every guide's links, paths and make targets | `make docs-guides-check` |
 
@@ -119,8 +119,8 @@ only to diagnose. Every target, variable and the test-data rule:
 
 | Rule | Detail |
 |---|---|
-| Run the tests for the files you changed | `make test PKG=packages/<x>` or `PKG=services/<x>`, with `T=tests/<file>.py` naming files (every service Makefile passes it to pytest); `make test` with no `PKG` runs the suites of what changed since `origin/main` and every member that depends on a changed package (`scripts/verify-changed.sh`) |
-| Full suites run in CI | `.github/workflows/ci.yml` runs everything `make verify` runs on every pull request; run `make verify` locally to reproduce a CI failure |
+| Run the tests for the files you changed | `make test PKG=packages/<x>` or `PKG=services/<x>`, with `T=tests/<file>.py` naming files (every service Makefile passes it to pytest); `make test` with no `PKG` runs the suites of what changed since `origin/develop` and every member that depends on a changed package (`scripts/verify-changed.sh`) |
+| Full suites run in CI | The pull request runs the jobs of what it changed and the merge queue runs the rest ([what runs when](docs/architecture/delivery.md)); `make verify` reproduces a CI failure locally |
 | Use cases | `make usecase-test UC=<id> LAYER=api\|sdk\|cli\|ui`; registry and rules in `docs/usecases/README.md` |
 | Scripted model | Tests and use cases run on the scripted model with model keys removed; real model calls are capped at 10 per experiment unless a maintainer approves more |
 | One test per failure mode | Name the ways the change can break, write one test for each, and watch each new test fail once before trusting it |

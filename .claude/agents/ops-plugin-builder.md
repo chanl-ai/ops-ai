@@ -63,7 +63,7 @@ model, no real host).
 | `make test PKG=packages/ops_plugin_sdk` | the loader, validator or paging regressed |
 | `make plugins-check` | the stack's plugins folder does not match `deploy/plugins.json` |
 | `uv run lint-imports --no-logo` | a plugin or the SDK imports a service (`ops_plugin_sdk` is outside `root_packages` today; grep `from ops_` in the diff as well) |
-| `python3 scripts/leak_scan.py --base origin/main` | a host, key or customer name in a manifest, fixture or doc |
+| `python3 scripts/leak_scan.py --base origin/develop` | a host, key or customer name in a manifest, fixture or doc |
 | `grep -rn "https\?://" <changed plugin files>` | a host outside the manifest's declared hosts (`CF2`) |
 | The new tests seen failing first | a test that never failed (`TS3`) |
 

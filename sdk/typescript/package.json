@@ -1,6 +1,6 @@
 {
   "name": "@chanl-ai/ops-ai",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "description": "The Ops AI SDK: agents, workflows, runs, human tasks, cases, tools, knowledge and files from TypeScript",
   "license": "Apache-2.0",
   "type": "module",

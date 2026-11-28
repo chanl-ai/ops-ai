@@ -34,7 +34,7 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha
   fi
   since=$remote_sha
   if [ "$since" = "$zero" ] || ! git cat-file -e "$since^{commit}" 2>/dev/null; then
-    since=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
+    since=$(git merge-base "$local_sha" origin/develop 2>/dev/null || true)
   fi
   [ -n "$since" ] || continue
   files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')

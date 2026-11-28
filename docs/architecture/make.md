@@ -30,7 +30,7 @@ beside it.
 | `make wt-list` | Each preview's branch, console URL and age; rewrites a page listing them, `.run/previews.html` by default (`PREVIEW_PAGE=` another path) |
 | `make wt-stop BRANCH=<name>` | Stops that preview by its pids and compose project and drops that offset's database volume (`ops-runtime-<offset>_ops-runtime-pgvector`, by exact name); the worktree stays |
 | `make review-main` | Checks the review worktree out at the latest `origin/main` and restarts the :3016 stack from it (`AUTH=platform OPS_CONSOLE_PORT=3016 make restart`). Restart only: no reset, the database stays. Refuses when the review worktree has uncommitted changes |
-| `make test PKG=<folder>` | One member's tests (`T=` some files), on a throwaway database of its own on the stack's PostgreSQL; with no `PKG`, the suites of what changed since `origin/main` (`scripts/verify-changed.sh`) |
+| `make test PKG=<folder>` | One member's tests (`T=` some files), on a throwaway database of its own on the stack's PostgreSQL; with no `PKG`, the suites of what changed since `origin/develop` (`scripts/verify-changed.sh`) |
 
 A branch made before this change has the old make files, which refuse to run a stack from a worktree: merge `main`
 into it before reviewing it.
@@ -199,9 +199,9 @@ data volume.
 | Watch one service | `make logs SVC=agents` |
 | Restart after a settings change | `make restart SVC=agents` |
 | New migration, then apply | `make migration NAME="add cases"` (`SVC=kb` for another service; the id is `20261122_1405_add_cases`, a UTC timestamp, so two branches never take one number) then `make migrate` |
-| Before committing | `make verify` |
+| Before pushing | `make test` (what changed since `origin/develop`); the hosted run gates |
 | One package's or service's tests | `make test PKG=packages/ops_access` or `make test PKG=services/agents-service` |
-| Tests of what changed since `origin/main` | `make test` |
+| Tests of what changed since `origin/develop` | `make test` |
 | Run the core and impacted UI use cases (about 10 minutes, one line per use case) | `make uc-impacted` |
 | Run an experiment | `make experiment E=1` |
 | Stop everything | `make down` (`KEEP_DB=1` keeps PostgreSQL and OPA) |

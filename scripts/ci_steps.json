@@ -5,7 +5,7 @@
       {"step": "Plan the jobs", "no_local_twin": "Picks which jobs a pull request runs; `bash scripts/ci-plan.sh <base>` prints that plan and a local run always takes every twin."}
     ],
     "checks": [
-      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base \"${BASE_SHA:-origin/main}\" HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
+      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base \"${BASE_SHA:-origin/develop}\" HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
       {"step": "Types of the packages", "twin": "uv run python scripts/check_tests_typecheck.py packages"},
       {"step": "make -s checks", "twin": "make -s checks"},
       {"step": "Script tests", "twin": "uv run pytest -q -n auto --dist loadfile scripts/tests"}

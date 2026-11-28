@@ -36,7 +36,7 @@ def test_an_agent_cannot_run_a_whole_suite_and_is_told_the_command_to_run_instea
 def test_an_agent_can_run_a_named_file_and_the_impacted_pick() -> None:
     assert run("uv run pytest services/kb-service/tests/test_x.py -q", CL_AGENT="b").returncode == 0
     assert run("make test PKG=services/kb-service T=tests/test_x.py", CL_AGENT="b").returncode == 0
-    assert run("make test-impacted BASE=origin/main", CL_AGENT="b").returncode == 0
+    assert run("make test-impacted BASE=origin/develop", CL_AGENT="b").returncode == 0
 
 
 def test_a_sleep_over_a_minute_is_refused_and_a_short_one_is_not() -> None:

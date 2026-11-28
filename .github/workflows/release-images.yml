@@ -1,5 +1,5 @@
 # Builds every Ops AI image for linux/amd64 and linux/arm64 and pushes it to ghcr.io/chanl-ai/ops-ai/<image>, tagged
-# with the version and latest. Runs on a version tag (v0.1.0 publishes 0.1.0), which release-tag.yml starts it on when a
+# with the version and latest. Runs on a version tag (v0.1.0 publishes 0.1.0), which release-finish.yml starts it on when a
 # release or hotfix merges into main, or by hand with a version.
 # The build is deploy/release/images.sh, the same script the release package and install.sh --build use.
 #
@@ -13,7 +13,7 @@ name: release-images
 
 on:
   push:
-    # Version tags only (v0.1.0), the same tag release-tag.yml makes.
+    # Version tags only (v0.1.0), the same tag release-finish.yml makes.
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   # release-security.yml calls it in proof mode on every push to a release or hotfix branch.
   workflow_call:

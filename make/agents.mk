@@ -6,18 +6,18 @@
 
 AGENT_OUT ?= .logs/agents
 
-agent-review-context: ## One bundle for a reviewer: diff stat, files by layer with their docs, tests, new public surface, checks: make agent-review-context [BASE=origin/main]
-	@python3 scripts/agents/review_context.py --base $(or $(BASE),origin/main) --out $(AGENT_OUT)/review-context.md
+agent-review-context: ## One bundle for a reviewer: diff stat, files by layer with their docs, tests, new public surface, checks: make agent-review-context [BASE=origin/develop]
+	@python3 scripts/agents/review_context.py --base $(or $(BASE),origin/develop) --out $(AGENT_OUT)/review-context.md
 
-agent-test-audit: db-up ## Test effectiveness on the changed lines (mutation score, tests that cannot fail, failure modes with no test): make agent-test-audit [BASE=origin/main] [DESIGN=docs/design/<area>/<topic>.md] [PATHS="…"]
-	@python3 scripts/agents/test_audit.py --base $(or $(BASE),origin/main) $(if $(DESIGN),--design $(DESIGN)) $(if $(PATHS),--paths $(PATHS)) --out $(AGENT_OUT)/test-audit.md
+agent-test-audit: db-up ## Test effectiveness on the changed lines (mutation score, tests that cannot fail, failure modes with no test): make agent-test-audit [BASE=origin/develop] [DESIGN=docs/design/<area>/<topic>.md] [PATHS="…"]
+	@python3 scripts/agents/test_audit.py --base $(or $(BASE),origin/develop) $(if $(DESIGN),--design $(DESIGN)) $(if $(PATHS),--paths $(PATHS)) --out $(AGENT_OUT)/test-audit.md
 
 agent-ui-walk: ## Screenshots and findings per route, role and width on the running console: make agent-ui-walk ROUTES="/knowledge /tools" [AS=admin,member] [WIDTHS=1440,390] [STATES=1]
 	@[ -n "$(ROUTES)" ] || { echo "make agent-ui-walk: name the routes, e.g. ROUTES='/knowledge /tools'" >&2; exit 2; }
 	@node scripts/agents/ui_walk.mjs --routes $(ROUTES) $(if $(AS),--as $(AS)) $(if $(WIDTHS),--widths $(WIDTHS)) $(if $(STATES),--states) --out $(AGENT_OUT)/ui-walk
 
-agent-affected-usecases: ## The use cases to run for a change, with layers, and the changed files none covers: make agent-affected-usecases [BASE=origin/main] [HEAD=HEAD]
-	@python3 scripts/agents/affected_usecases.py $(or $(BASE),origin/main) $(or $(HEAD),HEAD)
+agent-affected-usecases: ## The use cases to run for a change, with layers, and the changed files none covers: make agent-affected-usecases [BASE=origin/develop] [HEAD=HEAD]
+	@python3 scripts/agents/affected_usecases.py $(or $(BASE),origin/develop) $(or $(HEAD),HEAD)
 
 agent-canary: ## Plant known bugs on a throwaway branch for a finder to look for; the answer key stays in $(AGENT_OUT)/canary-keys: make agent-canary [COUNT=6] [SEED=n]
 	@python3 scripts/agents/seed_canaries.py plant --count $(or $(COUNT),6) $(if $(SEED),--seed $(SEED)) --key-dir $(AGENT_OUT)/canary-keys

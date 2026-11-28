@@ -5,7 +5,7 @@ Usage: python scripts/agents/affected_usecases.py <base> [<head>]
 
 Each changed file is matched against the globs in `usecase_map.json` (next to this script); a changed use case
 script (`docs/usecases/<service>/scripts/test-uc-NNN-<layer>.*`) selects its own use case. The output lists every
-selected use case with the layers the registry (`docs/usecases/README.md` at <head>, else origin/main) gives it,
+selected use case with the layers the registry (`docs/usecases/README.md` at <head>, else origin/develop) gives it,
 then the changed files that match no glob as "uncovered": each one is a page or module the coverage plan has no row
 for yet. Files on the map's ignore list (docs, tests, lock files) are counted but not listed. Exit code 0 always;
 the caller decides what an uncovered file means for a release.
@@ -44,13 +44,13 @@ def registry_layers(text: str) -> dict[str, list[str]]:
 
 
 def registry_at(head: str) -> dict[str, list[str]]:
-    """The registry as of <head>, filled in from origin/main for use cases added after <head>.
+    """The registry as of <head>, filled in from origin/develop for use cases added after <head>.
 
     <head> wins so a release reads the layers it ships; the map is built from the newest plan, so an older range can
-    name a use case its own registry does not have yet, and origin/main still knows its layers.
+    name a use case its own registry does not have yet, and origin/develop still knows its layers.
     """
     layers: dict[str, list[str]] = {}
-    for rev in ("origin/main", head):
+    for rev in ("origin/develop", head):
         try:
             layers.update(registry_layers(git("show", f"{rev}:{REGISTRY}")))
         except subprocess.CalledProcessError:

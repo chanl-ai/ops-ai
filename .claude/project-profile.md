@@ -149,11 +149,11 @@ origin has its own role accounts: `scripts/agents/ui_walk.mjs --origin <deployed
 | Tests for the files changed since main | `make test` (`scripts/verify-changed.sh`) |
 | One package or service | `make test PKG=services/<x> T=tests/<file>` |
 | One use case at one layer | `make usecase-test UC=<id> LAYER=api\|sdk\|cli\|ui` |
-| Use cases the change touches | `make uc-impacted BASE=origin/main` |
+| Use cases the change touches | `make uc-impacted BASE=origin/develop` |
 | Everything a commit must pass | `make verify` |
 | Regenerate OpenAPI and SDKs | `make openapi` |
-| Review context bundle | `make agent-review-context BASE=origin/main` |
-| Test audit (static checks and mutation on changed lines) | `make agent-test-audit BASE=origin/main [DESIGN=docs/design/<area>/<topic>.md]` |
+| Review context bundle | `make agent-review-context BASE=origin/develop` |
+| Test audit (static checks and mutation on changed lines) | `make agent-test-audit BASE=origin/develop [DESIGN=docs/design/<area>/<topic>.md]` |
 | Browser walk of routes as two roles at two widths | `make agent-ui-walk ROUTES="/a /b" [AS=admin,member] [STATES=1]` |
 | Commit named files through the hooks | `make commit FILES='…' MSG='type(scope): subject' [CHANGELOG=<topic>]` |
 
@@ -161,7 +161,7 @@ origin has its own role accounts: `scripts/agents/ui_walk.mjs --origin <deployed
 
 | Convention | Rule | Owned by |
 |---|---|---|
-| Branch names | `<type>/<scope>-<what-changed>` from `origin/main` | `CONTRIBUTING.md` "Branches and pull requests" |
+| Branch names | `<type>/<scope>-<what-changed>` from `origin/develop` | `CONTRIBUTING.md` "Branches and pull requests" |
 | Commit messages | `type(scope): subject`, body of at most three lines saying why and what ran | `CONTRIBUTING.md` "Commit messages" |
 | Doc file names | kebab-case topics, no dates or numbers; ids in the title | `CONTRIBUTING.md` "Doc standards" |
 | Headings | sentence case | `CONTRIBUTING.md` "Writing rules" |

@@ -13,6 +13,5 @@ One versioned package a client team installs on its own Linux machines with Dock
 
 ## Working here
 
-Every script here is slow and builds or pulls every image; none runs in `make verify`. `make release-tag DRY=1`
-prints the tag a merged commit would get without pushing it. Bump `version` only for a published image version.
+Every script here is slow and builds or pulls every image; none runs in `make verify`. Bump `version` only for a published image version (`make release-start` does it for a release).
 Folder rules: `../CLAUDE.md`.

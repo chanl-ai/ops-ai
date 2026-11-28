@@ -58,7 +58,7 @@ check's name goes on that rule's "Check" line in the same change (`DL8`).
 | Docs and guides | `make docs-verify` (`check-docs`, `check-guides`, `check-standards-refs`) |
 | Staging | `make stg-deploy-ci REF=`, `make stg-deploy`, `make stg-health`, `make stg-rollback` (changes a live app; only when the brief says so) |
 | Upgrade proof | `make db-scripts-proof FROM=<last tag>` (needs Docker) |
-| Release | `make release-tag DRY=1` (prints the tag); without `DRY=1` only when the brief says so |
+| Release | `make release-start V=X.Y.Z` (prints the plan); `DRY=0` only when the brief says so; `make release-doctor` |
 
 ## Checks before committing
 | Check | Fails when |
@@ -66,7 +66,7 @@ check's name goes on that rule's "Check" line in the same change (`DL8`).
 | The new check's `--self-test` or `scripts/tests/test_<script>.py`, seen red once | the check cannot fail (`DL9`) |
 | `make docs-verify` | a guide names a path or target that does not exist; an agent or folder guide lacks its standards link; a cited rule id does not exist |
 | `uv run pytest -q scripts/tests` | a script's rules regressed |
-| `python3 scripts/leak_scan.py --base origin/main` | a path, id or tone word in a workflow, script or doc |
+| `python3 scripts/leak_scan.py --base origin/develop` | a path, id or tone word in a workflow, script or doc |
 | `bash scripts/ci-plan.sh` on the change | the new check is in no job, or runs only on a full plan without a stated reason |
 | `make help` | the new target has no help line |
 

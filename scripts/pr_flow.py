@@ -6,6 +6,9 @@
   ready                 ci.yml job `ready`: fails when CodeQL is red or a job is red
   queue-failure         queue-retry.yml: a failed merge queue run reruns its failed jobs once; a second failure
                         comments each failed job and its first error line; a green rerun queues the request again
+  auto-queue --pr N     auto-queue.yml: arms or disarms the merge queue for one pull request into develop by its labels
+                        (`reviewed` arms it, `hold` or a draft, a fork or a stacked base keeps it out); a push after
+                        the review takes `reviewed` off unless it only merged develop in
   --self-test           every decision below on planted input
 
 The decisions are pure functions (first_error, ready_reasons, queue_step); the commands around them only read
@@ -72,6 +75,27 @@ def queue_step(attempt: int, conclusion: str) -> str:
 def queue_pr(branch: str) -> int | None:
     m = QUEUE_BRANCH.match(branch)
     return int(m.group(1)) if m else None
+
+
+def auto_queue_step(pr: dict) -> str:
+    """What the kanban asks of one pull request: `arm`, `disarm` or `nothing`. Armed is ready for the merge queue: not
+    a draft, labelled `reviewed` (the reviewer's label; approvals cannot be used, one account authors every pull
+    request), without `hold`, into develop, from this repository. The release workflow arms its own merge-back."""
+    if str(pr["head"]).startswith("merge-back/"):
+        return "nothing"
+    labels = set(pr["labels"])
+    ok = (
+        pr["base"] == "develop" and not pr["draft"] and not pr["fork"] and "reviewed" in labels and "hold" not in labels
+    )
+    if ok and not pr["armed"]:
+        return "arm"
+    return "disarm" if pr["armed"] and not ok else "nothing"
+
+
+def review_survives(parents: int, before: dict[str, str], after: dict[str, str]) -> bool:
+    """A push keeps the review only when it is a merge commit whose changes against develop (each file with its blob)
+    are exactly what was reviewed: a clean merge of develop, no conflict resolution, nothing else."""
+    return parents == 2 and bool(after) and before == after
 
 
 def failure_comment(failed: list[tuple[str, str]], url: str) -> str:
@@ -177,7 +201,7 @@ def cmd_ready() -> int:
     needs = json.loads(os.environ.get("NEEDS") or "{}")
     sha, event = os.environ.get("HEAD_SHA", ""), os.environ.get("GITHUB_EVENT_NAME", "")
     codeql = {}
-    # The merge queue tests a pull request on develop's tip, so being behind develop is not checked here; CodeQL
+    # The merge queue tests a pull request on develop's tip, so a stale base is not checked here; CodeQL
     # reports on pull requests only (codeql.yml).
     if event == "pull_request" and sha:
         deadline = time.time() + int(os.environ.get("CODEQL_WAIT", "2400"))
@@ -216,8 +240,54 @@ def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, u
         gh("run", "rerun", run, "--failed")
     elif step == "comment":
         gh("pr", "comment", str(pr), "--body", failure_comment(failures(run), url))
+        gh("pr", "edit", str(pr), "--add-label", "queue-failed")
     elif step == "requeue":
         gh("pr", "merge", str(pr), "--auto", "--merge")
+    return 0
+
+
+def changed_blobs(sha: str) -> dict[str, str]:
+    """Each file a commit's branch changes against develop, with its blob, read through the API (no checkout)."""
+    out = gh(
+        "api",
+        f"repos/{repo()}/compare/develop...{sha}",
+        "--jq",
+        "[.files[] | {(.filename): .sha}] | add // {}",
+    )
+    return json.loads(out or "{}")
+
+
+def cmd_auto_queue(number: int, action: str, before: str, dry: bool) -> int:
+    """Only the API is called with the event's pull request number; the pull request's code is never fetched."""
+    info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
+    labels = [x["name"] for x in info["labels"]]
+    head = info["head"]["sha"]
+    if action == "synchronize" and "reviewed" in labels:
+        parents = len(json.loads(gh("api", f"repos/{repo()}/commits/{head}"))["parents"])
+        kept = before and review_survives(parents, changed_blobs(before), changed_blobs(head))
+        if not kept:
+            print(f"#{number}: a push after the review, so `reviewed` comes off")
+            if not dry:
+                gh("pr", "edit", str(number), "--remove-label", "reviewed")
+            labels.remove("reviewed")
+    pr = {
+        "base": info["base"]["ref"],
+        "head": info["head"]["ref"],
+        "draft": info["draft"],
+        "fork": info["head"]["repo"] is None or info["head"]["repo"]["full_name"] != info["base"]["repo"]["full_name"],
+        "labels": labels,
+        "armed": info.get("auto_merge") is not None,
+    }
+    step = auto_queue_step(pr)
+    print(f"#{number}: {step}")
+    if dry or step == "nothing":
+        return 0
+    if step == "arm":
+        gh("pr", "merge", str(number), "--auto", "--merge")
+        if "queue-failed" in labels:
+            gh("pr", "edit", str(number), "--remove-label", "queue-failed", check=False)
+    else:
+        gh("pr", "merge", str(number), "--disable-auto")
     return 0
 
 
@@ -293,6 +363,42 @@ def self_test() -> int:
             True,
         ),
     ]
+    base = {"base": "develop", "head": "fix/x", "draft": False, "fork": False, "labels": ["reviewed"], "armed": False}
+    cases += [
+        (
+            "a reviewed, ready pull request into develop is armed; hold, draft, fork, stacked base, no label are not",
+            [
+                auto_queue_step(base),
+                auto_queue_step({**base, "labels": ["reviewed", "hold"]}),
+                auto_queue_step({**base, "draft": True}),
+                auto_queue_step({**base, "fork": True}),
+                auto_queue_step({**base, "base": "feat/y"}),
+                auto_queue_step({**base, "labels": []}),
+            ],
+            ["arm", "nothing", "nothing", "nothing", "nothing", "nothing"],
+        ),
+        (
+            "an armed pull request that loses its label, goes draft or gets `hold` is disarmed; a merge-back is not",
+            [
+                auto_queue_step({**base, "armed": True, "labels": []}),
+                auto_queue_step({**base, "armed": True, "draft": True}),
+                auto_queue_step({**base, "armed": True, "labels": ["reviewed", "hold"]}),
+                auto_queue_step({**base, "armed": True}),
+                auto_queue_step({**base, "head": "merge-back/release-1.2.1", "labels": [], "armed": True}),
+            ],
+            ["disarm", "disarm", "disarm", "nothing", "nothing"],
+        ),
+        (
+            "a push keeps the review only as a merge of develop that changes nothing the review saw",
+            [
+                review_survives(2, {"a.py": "1"}, {"a.py": "1"}),
+                review_survives(2, {"a.py": "1"}, {"a.py": "2"}),
+                review_survives(1, {"a.py": "1"}, {"a.py": "1"}),
+                review_survives(2, {}, {}),
+            ],
+            [True, False, False, False],
+        ),
+    ]
     bad = [f"{name}: got {got!r}, expected {want!r}" for name, got, want in cases if got != want]
     for b in bad:
         print(f"pr_flow self-test FAILED: {b}")
@@ -303,7 +409,7 @@ def self_test() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", nargs="?", choices=["verify", "failures", "ready", "queue-failure"])
+    ap.add_argument("command", nargs="?", choices=["verify", "failures", "ready", "queue-failure", "auto-queue"])
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--branch", default="")
     ap.add_argument("--run", default="")
@@ -311,6 +417,9 @@ def main() -> int:
     ap.add_argument("--conclusion", default="failure")
     ap.add_argument("--url", default="")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--pr", type=int, default=0)
+    ap.add_argument("--action", default="")
+    ap.add_argument("--before", default="")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
@@ -320,6 +429,8 @@ def main() -> int:
         return 1 if print_failures(a.run or sys.exit("usage: pr_flow.py failures --run <id>")) else 0
     if a.command == "ready":
         return cmd_ready()
+    if a.command == "auto-queue":
+        return cmd_auto_queue(a.pr or sys.exit("usage: pr_flow.py auto-queue --pr N"), a.action, a.before, a.dry_run)
     if a.command == "queue-failure":
         return cmd_queue_failure(a.run, a.attempt, a.conclusion, branch=a.branch, url=a.url, dry=a.dry_run)
     ap.print_help()

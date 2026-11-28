@@ -55,7 +55,7 @@ request line, typed errors, timeouts from settings); `TN4` (tenant from the toke
 | Try a route as a person | `make api GET /v1/<path> AS=<role>` (`make/CLAUDE.md`) |
 | Regenerate the contract and the SDKs after a route change | `make openapi`, then `make sdk-verify` |
 | The contract gate alone | `uv run python services/<x>/scripts/check_openapi.py` |
-| Use cases the change touches | `make uc-impacted BASE=origin/main`, then `make usecase-test UC=<id> LAYER=api` |
+| Use cases the change touches | `make uc-impacted BASE=origin/develop`, then `make usecase-test UC=<id> LAYER=api` |
 | Lint, format, types | `uv run ruff check <files>`, `uv run ruff format --check <files>`, `uv run pyright services/<x>` |
 
 ## Checks before committing

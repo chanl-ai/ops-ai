@@ -14,7 +14,7 @@ Four parts, each a section of the report:
 4. Failure modes with no test: the rows of the design page's "Acceptance criteria and tests" (or "Acceptance tests")
    whose use case id, test name or words are found in no test file of the change.
 
-  python3 scripts/agents/test_audit.py --base origin/main [--design docs/design/<area>/<topic>.md]
+  python3 scripts/agents/test_audit.py --base origin/develop [--design docs/design/<area>/<topic>.md]
          [--paths services/kb-service/src/ops_kb/app.py …] [--max-mutants 60] [--no-mutate] [--json] [--out FILE]
   python3 scripts/agents/test_audit.py --self-test      the static rules and the mutator on a fixture package
 
@@ -887,7 +887,7 @@ def self_test() -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base", default="origin/main")
+    parser.add_argument("--base", default="origin/develop")
     parser.add_argument("--profile", help="the profile file (default: OPS_AGENT_PROFILE or .claude/project-profile.md)")
     parser.add_argument("--paths", nargs="*", help="limit the audit to these changed files")
     parser.add_argument("--design", help="the design page whose acceptance rows are checked for a test")

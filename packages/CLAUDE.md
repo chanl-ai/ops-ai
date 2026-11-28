@@ -32,7 +32,7 @@ prerequisite and runs first), so a package suite never touches the stack's own d
 |---|---|
 | One package's tests | `make test PKG=packages/ops_policy` |
 | Some test files | `make test PKG=packages/ops_signin T="tests/test_password.py tests/test_oidc.py"` |
-| What changed since `origin/main`, with every dependant | `make test` (`scripts/verify-changed.sh`) |
+| What changed since `origin/develop`, with every dependant | `make test` (`scripts/verify-changed.sh`) |
 | Who depends on a package | `uv run python scripts/dependants.py packages/ops_store` (`--direct` for direct dependants only) |
 | Lint and format | `uv run ruff check packages/<x>` and `uv run ruff format --check packages/<x>` |
 | Types | `uv run pyright packages/<x>`; inside the folder use `uv run pyright .`, since a bare `uv run pyright` there checks the whole repo |

@@ -151,15 +151,15 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 
 | Trigger | When | Pin |
 |---|---|---|
-| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Not deployed, and the `staging` job fails red, while a `release/*` or `hotfix/*` branch exists on origin or a live `STAGING_HOLD` is set (docs/deploy/release.md, The staging hold) |
-| A push to `release/*` or `hotfix/*` | The same job | Not frozen by a branch: it is the release being tested. A live `STAGING_HOLD` still stops it and fails the job, whatever the ref |
+| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Not deployed, and the `staging` job is skipped with a notice naming the reason, while a `release/*` or `hotfix/*` branch exists on origin or a live `STAGING_HOLD` is set (docs/deploy/release.md) |
+| A push to `release/*` or `hotfix/*` | The same job | Not frozen by a branch: it is the release being tested. A live `STAGING_HOLD` still stops it, whatever the ref |
 | By hand | `make stg-deploy-ci REF=<branch, tag or commit>` (`SKIP_WALK=1`, `REASON=`), or Actions, deploy-staging, Run workflow | Deploys anyway; the summary says which pin it overrode |
 
 | To | Do |
 |---|---|
 | Put another commit, tag or branch on staging | `make stg-deploy-ci REF=<ref>`; it starts the run and watches it to the end |
 | Keep it there through later merges | Set the repository variable `STAGING_HOLD` to `X.Y.Z: reason` (the release it waits for; ignored once tag `vX.Y.Z` exists); merges are still checked but not deployed |
-| Test a release on staging | After telling the owner, `make stg-deploy-ci REF=release/current`; a push to the train deploys nothing, so set `STAGING_HOLD` for as long as the owner tries it. A numbered `release/X.Y.Z` or any `hotfix/*` branch on origin still freezes merges to `develop` (`docs/deploy/release.md`) |
+| Test a release on staging | The push to `release/X.Y.Z` or `hotfix/*` deploys it; `make release-rc` tags the candidate once it passed. The branch freezes merges to `develop` until it is finished (`docs/deploy/release.md`) |
 | Go back to `develop` | Delete the hotfix branch after its merge and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
 
 `REF` is what is deployed; the workflow file runs from `develop` (`WORKFLOW_REF=` changes that). GitHub offers a
@@ -170,7 +170,7 @@ process, OCR, plugins and one signed-in request (the first admin signs in and li
 smoke check, which `skip_walk` leaves out together. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release
 before>` without the walk and fails either way; a failure before that point leaves staging as it was. The job summary
 shows the commit, the trigger, the reason, any pin it overrode, the URL, each step's seconds, the walk's counts, the smoke
-check's last line (passed and failed counts, and the step and reason when a request stopped it) and the rollback's result. A release is only tagged, by `release-tag.yml`, on the merge into `develop`.
+check's last line (passed and failed counts, and the step and reason when a request stopped it) and the rollback's result. A release is tagged by `release-finish.yml` when its pull request merges into `main`.
 
 The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
 owner's machine; the runner has no such file, so it lists the release and hotfix branches on origin (`git ls-remote`) and reads `STAGING_HOLD` instead.
@@ -202,7 +202,7 @@ runs after merge.
 
 ### Production on GitHub: not built yet
 
-No workflow deploys production. A tag `vX.Y.Z` is made by `release-tag.yml` on the develop merge of a release or hotfix pull request; nothing deploys
+No workflow deploys production. A tag `vX.Y.Z` is made by `release-finish.yml` on the merge of a release or hotfix pull request into `main`; nothing deploys
 it. A workflow that read a repository variable could not prove that a person approves each deploy, since the
 environment's reviewers and the place the deploy token lives are invisible to it. Before one returns, the owner sets up:
 
