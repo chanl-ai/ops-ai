@@ -5,7 +5,8 @@ name: ci
 on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
-    # ready_for_review: leaving draft runs the jobs a draft skips.
+    # ready_for_review: a draft runs no job (plan is skipped, and so is everything that needs it); marking it ready starts
+    # the run, and later pushes run as usual.
     types: [opened, synchronize, reopened, labeled, ready_for_review]
     # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
     # (docs/deploy/release.md).
@@ -45,6 +46,8 @@ env:
 
 jobs:
   plan:
+    # A draft pull request runs nothing; ci-ok below still reports (success), so no required check stays pending.
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -602,7 +605,7 @@ jobs:
     # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
     # scripts/pr_flow.py ready; its --self-test is in make checks.
     name: ready
-    if: always()
+    if: always() && github.event.pull_request.draft != true
     needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
     runs-on: ubuntu-24.04
     # CodeQL may still be running when the last job ends; this waits for it (codeql.yml allows it 45 minutes).
@@ -621,7 +624,8 @@ jobs:
 
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
-    # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
+    # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch;
+    # a draft pull request skips the plan and so every job, and this reports success without waiting for any.
     # `ready` is one of them, so the queue requires it without a second required check.
     name: ci-ok
     if: always()
@@ -631,8 +635,10 @@ jobs:
     steps:
       - env:
           NEEDS: ${{ toJSON(needs) }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
           if grep -qE '"result": "(failure|cancelled)"' <<<"$NEEDS"; then echo "$NEEDS"; exit 1; fi
+          if [ "$DRAFT" = true ]; then echo "draft pull request: no job ran; the checks start when it is marked ready"; exit 0; fi
           echo "every check that ran passed"
 
   staging:
