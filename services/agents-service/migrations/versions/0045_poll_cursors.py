@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0045_poll_cursors"
 down_revision = "0044_team_default_agent"
 branch_labels = None
@@ -33,10 +35,8 @@ def upgrade() -> None:
     )
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
-    op.execute(
-        f"DO $$ BEGIN CREATE ROLE {SYSTEM_ROLE} NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
-    )
+    op.execute(role_ddl(TENANT_ROLE))
+    op.execute(role_ddl(SYSTEM_ROLE, bypass=True))
     op.execute(f"GRANT SELECT, INSERT, UPDATE ON poll_cursors TO {TENANT_ROLE}")
     op.execute("ALTER TABLE poll_cursors ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE poll_cursors FORCE ROW LEVEL SECURITY")

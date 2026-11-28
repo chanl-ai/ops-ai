@@ -126,7 +126,8 @@ def _as_staging_made_it(scratch: URL) -> None:
     """Each login as a roles.sql older than files_0011 left it: a non-superuser login with its tables and no roles."""
     for s in SERVICES:
         statements = [
-            f"DO $$ BEGIN CREATE ROLE {s.login} LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+            f"DO $$ BEGIN CREATE ROLE {s.login} LOGIN; "
+            f"EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$",
             f"ALTER ROLE {s.login} LOGIN PASSWORD '{PASSWORD}' NOSUPERUSER NOBYPASSRLS INHERIT",
             f"REVOKE {', '.join(sorted(s.roles))} FROM {s.login}",
         ]
