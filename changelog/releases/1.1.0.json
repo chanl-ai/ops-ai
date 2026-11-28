@@ -1,0 +1,286 @@
+{
+  "version": "1.1.0",
+  "date": "2026-11-25",
+  "entries": [
+    {
+      "title": "Ask the assistant to set up your workspace",
+      "description": "The Ops Assistant can now draft an agent and invite people for you, with only the rights your role gives you. A draft waits for its publish review as usual, and an invite waits for your yes on a card.",
+      "tag": "new"
+    },
+    {
+      "title": "Give a role to a person or a group from its page",
+      "description": "A role's page now has Give role: search one list of the team's people and the workspace's groups, pick one, and the role applies to them in the team you act in from their next action.",
+      "tag": "new"
+    },
+    {
+      "title": "Redrive a failed run from the step that failed",
+      "description": "A failed run's page has Redrive, which sends it again from its failed step on the workflow version it started on, and many runs can be redriven or cancelled at once by error, time or workflow. Finished steps are not run again, and a write that already reached its system is not sent twice.",
+      "tag": "new"
+    },
+    {
+      "title": "See every person's app sign-ins and end one",
+      "description": "Admins can list who signed in to which of the team's apps, with counts that work, ended and failed and when each was last used, and end a person's sign-in. The person's next call asks them to connect again and names who ended it, and the audit log records it.",
+      "tag": "new"
+    },
+    {
+      "title": "Try one skill path or workflow step safely",
+      "description": "From a skill or a workflow step, try one path with sample values on the account you pick: reads run, and every write is shown as a plan first and sent only when you confirm.",
+      "tag": "new"
+    },
+    {
+      "title": "Draft an agent's brief from a description",
+      "description": "Draft on the brief card takes a short description of the agent's job and proposes text for each heading: Job, How to answer, Hand off when, Examples and Never. Each heading shows as a change you accept or skip; nothing is saved until you accept.",
+      "tag": "new"
+    },
+    {
+      "title": "Failing evals stop an agent from publishing",
+      "description": "When a blocking eval step fails on the version you publish, the publish check names it and the publish and its approval are refused, and a draft saved after its last run needs a new run first. A team can also require that an agent's saved cases have run before it publishes.",
+      "tag": "new"
+    },
+    {
+      "title": "Hand off when and Examples in an agent's brief",
+      "description": "An agent's brief has two more headings: Hand off when, a list of moments the agent passes the conversation to a person, and Examples of good answers. Both reach the prompt, and View prompt shows the exact text the model reads, with Never last.",
+      "tag": "new"
+    },
+    {
+      "title": "One list of the ways to reach an agent",
+      "description": "An agent's Channels tab lists Chat, API and SDK, MCP, Embed on a page, Email, Slack and Teams, each marked On, Off or Not set up. API and SDK shows the endpoint, the agent ID and a curl, Python, TypeScript and CLI example.",
+      "tag": "new"
+    },
+    {
+      "title": "Withdraw a version sent for review",
+      "description": "The person who sent an agent, skill or workflow for review can withdraw it, change the draft and send it again. The new request links the earlier one.",
+      "tag": "new"
+    },
+    {
+      "title": "An agent's Evals tab shows its real saved cases and runs",
+      "description": "The Evals tab lists the cases saved on the agent and the runs kept, adds a case with a judge check, and runs them from the tab, with each run's pass rate and cost. The sample cases and the preview badge are gone.",
+      "tag": "new"
+    },
+    {
+      "title": "Eval checks judged by a model, and what each run cost",
+      "description": "A test case can hold a check written in words, which a model reads the reply against and passes or fails with a one-line reason. Each run shows what its replies and judging cost, and says when a model has no price set.",
+      "tag": "new"
+    },
+    {
+      "title": "Roles for groups and a team's own approval rules",
+      "description": "A role can now be given to a group of people, in one team or every team, and never carries admin-level permissions through a group. A team's admin sets the team's approval rules, including letting whoever asked decide in one area at a time, inside a floor the Security team can lock.",
+      "tag": "new"
+    },
+    {
+      "title": "Workflows keep your changes until you publish",
+      "description": "The workflow editor saves your changes as you go without making a version, and Publish waits until every problem is fixed. If someone else saved first, you are told who and when instead of their work being replaced.",
+      "tag": "new"
+    },
+    {
+      "title": "Write a skill as plain text",
+      "description": "A skill is now written like a prompt: type @ to mention a tool, knowledge, a skill or an agent, write \"if ...:\" with an indented block for a path and \"else:\" for the other one, and \"stop\" to end it. The agent follows the paths you write, and only a mention of something that no longer exists stops a publish.",
+      "tag": "new"
+    },
+    {
+      "title": "Chat never asks whose login an app uses",
+      "description": "An admin sets each app once to Everyone uses the team's login or Each person signs in, and chat actions say which login acted and who asked. An app each person signs in to shows one Sign in card the first time, then the chat carries on, and since the team login is no longer a backup a schedule cannot call such an app.",
+      "tag": "improved"
+    },
+    {
+      "title": "New invites for members who cannot sign in",
+      "description": "When your workspace signs in only through a company provider, the members list marks anyone who has no linked sign-in and no password. An admin can send them a new invite; signing in from it links their company account and keeps their membership as it was.",
+      "tag": "improved"
+    },
+    {
+      "title": "A write cut off by a restart waits for a person",
+      "description": "When the service sending a write stops mid-call and nothing says whether the write ran, the run now pauses as Stuck for someone to check, instead of failing. A write marked safe to repeat is sent again.",
+      "tag": "improved"
+    },
+    {
+      "title": "Approvals follow your team's roles",
+      "description": "People may now decide their own requests where their role lets them, and an admin always may. A team that wants someone else to decide turns on the two-person rule under Approvals, Advanced.",
+      "tag": "improved"
+    },
+    {
+      "title": "Apps opens as a table, with a People page",
+      "description": "Apps now opens as a table that says how people sign in to each app and how many sign-ins work, ended or failed, and leaves out template packs. Admins get a People tab listing each person's sign-ins, where they can end one; that person's app card then says an admin ended it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Find any of your teams by name",
+      "description": "The team switcher, the command palette's Switch team and every Team field search your teams as you type and load more as you scroll, so a workspace with hundreds of teams opens as fast as one with three.",
+      "tag": "improved"
+    },
+    {
+      "title": "Find any template by searching",
+      "description": "The template gallery searches every template your apps offer, not only the ones already loaded.",
+      "tag": "improved"
+    },
+    {
+      "title": "Large API documents open faster in the tool picker",
+      "description": "When you add operations from an OpenAPI document or an MCP server, the picker searches them on the server and shows them a page at a time, so a large document opens fast. Select all covers every matching operation, and ones the tool already has are marked.",
+      "tag": "improved"
+    },
+    {
+      "title": "Search what agents remember about you",
+      "description": "The Memory page in account settings and the memory sheet in chat search your memories, filter them by agent and page through them, so nothing past the first 200 is hidden any more.",
+      "tag": "improved"
+    },
+    {
+      "title": "Sort any list by its columns",
+      "description": "Clicking a column header on a list that pages, such as cases, roles, keys, sources or tool calls, now sorts the whole list on the server, not only the rows on the page you are looking at.",
+      "tag": "improved"
+    },
+    {
+      "title": "The skill page opens on its instructions",
+      "description": "A skill opens on one editor with an Insert menu, with its tools and knowledge beside it as the same lists the agent page uses. Name, loading and guardrails move to a Settings tab, and a skill's parts are listed read-only under the instructions.",
+      "tag": "improved"
+    },
+    {
+      "title": "Your apps have a page of their own",
+      "description": "The apps page now sits first in Work under New chat, outside Settings, and each app opens its own page without a Mine and Team setup switch. A sign-in that fails says Couldn't connect on the app's card.",
+      "tag": "improved"
+    },
+    {
+      "title": "A reply survives a restart of the platform",
+      "description": "If the platform restarts while an assistant is replying, the reply is picked up and finished without asking the model again or repeating a change it already made. A team that is already running as many replies as it may is asked to try again shortly.",
+      "tag": "improved"
+    },
+    {
+      "title": "A workflow step naming a missing tool stops publish",
+      "description": "Publishing a workflow now lists a tool step whose tool your team does not have, on that step, and refuses the publish until the step changes.",
+      "tag": "improved"
+    },
+    {
+      "title": "Agent tabs have their own addresses",
+      "description": "Settings, Evals, Channels, Versions, Usage and Limits each open at their own link on an agent, so a tab can be shared or reloaded. Versions and widgets and limits moved to their own tabs.",
+      "tag": "improved"
+    },
+    {
+      "title": "One brief card and View prompt",
+      "description": "An agent's brief is one card with a band for each heading: Job, How to answer, Hand off when, Examples and Never. View prompt in its footer shows the exact prompt the model reads, and plain-text mode is gone.",
+      "tag": "improved"
+    },
+    {
+      "title": "One save status and header on edit pages",
+      "description": "Edit pages now show Saved, Unsaved, Saving or Not saved in the same place, followed by Save, Test, the main action and a menu. Cmd+S or Ctrl+S saves, and shorter button names.",
+      "tag": "improved"
+    },
+    {
+      "title": "Skill checks written in words are judged",
+      "description": "A step check written as a sentence is now decided by a separate model when the tool's result arrives, not by the agent. If it says no, or cannot answer, the step takes its 'if not' as a failed rule does, and the record keeps the judge's reason.",
+      "tag": "improved"
+    },
+    {
+      "title": "Skills save themselves",
+      "description": "A skill's changes save to its draft a second after you stop typing, like agents and workflows, with no version note to fill in first.",
+      "tag": "improved"
+    },
+    {
+      "title": "Success checks become eval cases",
+      "description": "Success checks written on an agent's brief now appear on its Evals tab, each with Make case to turn it into a graded case.",
+      "tag": "improved"
+    },
+    {
+      "title": "The agent side panel is the test chat",
+      "description": "The test chat uses the same message box as Chat (type / for a skill, attach files, pick connectors) and each reply has Show steps for what the agent did. Compare is a full-width page under Versions.",
+      "tag": "improved"
+    },
+    {
+      "title": "Tools, knowledge and skills are on the agent page",
+      "description": "An agent's tools, knowledge and skills are lists on its Settings page, each with a count and an Add button, instead of a sheet. The name is edited in the page header and the agent ID is on Channels.",
+      "tag": "improved"
+    },
+    {
+      "title": "Versions shows one version at a time",
+      "description": "An agent's Versions tab lists its versions on the left and shows the selected one's details and prompt on the right, with Restore, Compare and Publish in one footer.",
+      "tag": "improved"
+    },
+    {
+      "title": "A failed run says what kind of failure it was",
+      "description": "A failed run now says whether its input, a rule, an app, a clock or the platform stopped it, at which step and attempt, and whether trying again can help. Chat shows one plain sentence instead of technical text, and the opsai command exits with a different status for each kind.",
+      "tag": "improved"
+    },
+    {
+      "title": "Find any agent with @ in a chat",
+      "description": "Typing @ in a chat now searches every agent your team can chat with as you type, and the list keeps loading as you scroll, so a team with many agents can hand the chat to any of them.",
+      "tag": "improved"
+    },
+    {
+      "title": "Hints in a skill's text never stop it publishing",
+      "description": "A skill written as text publishes with its hints shown on their lines, including a new one on a tool that changes something on a path the agent decides. A team that wants that refused can turn on Strict skill publishing in Governance › Policies.",
+      "tag": "improved"
+    },
+    {
+      "title": "One team's runs cannot take every worker",
+      "description": "An install can cap how many workflow runs one team has running at once, so a team at its cap waits while other teams' runs go ahead. A run waiting for a person or a timer does not use up a slot.",
+      "tag": "improved"
+    },
+    {
+      "title": "Retry shows only when trying again can help",
+      "description": "A failed reply now offers Retry only when a second try can succeed, and says whether the request, a rule, an app or the platform stopped it. A fault in the platform itself no longer reads as an app failing.",
+      "tag": "improved"
+    },
+    {
+      "title": "Your own app sign-ins are in the sidebar",
+      "description": "Everyone who can chat now finds the page for their own app accounts under Work in the sidebar, to connect, check and reconnect them. It is still in the account menu too.",
+      "tag": "improved"
+    },
+    {
+      "title": "Agent and workflow pages line up with the console",
+      "description": "The title, icon, save state and buttons share one row, the workflow editor has one tab strip, and every page has one heading. Agent tabs use one section style, the tab strip scrolls on a phone, and the step sheet stays inside the panel.",
+      "tag": "fix"
+    },
+    {
+      "title": "Human Tasks show where to choose and how to take a task",
+      "description": "On a Human Task the Decide button now says which choices to pick and why it waits, the choices sit above the folded Details, and a task can be taken with Assign. A person who cannot decide is told who can.",
+      "tag": "fix"
+    },
+    {
+      "title": "Compare opened from a link picks a version",
+      "description": "Opening an agent's Compare page from its address now offers the published version to compare with, and asking a question sends it to both.",
+      "tag": "fix"
+    },
+    {
+      "title": "Events that keep failing stop retrying",
+      "description": "An event between two parts of the platform that keeps failing is now set aside with its last error after about ten minutes of retries, instead of being tried for ever. It can be sent again once the cause is fixed.",
+      "tag": "fix"
+    },
+    {
+      "title": "Links to an agent's Evals or Channels tab open that tab",
+      "description": "Links from reviews, publish checks and channels to an agent's Evals or Channels tab opened its Settings instead; they now open the tab they name.",
+      "tag": "fix"
+    },
+    {
+      "title": "A busy team never stalls other teams' runs",
+      "description": "When one team has thousands of runs waiting, other teams' runs still start at once. A refusal such as an open review or a stale save now reads as the same kind in the console, the SDKs and the command line.",
+      "tag": "fix"
+    },
+    {
+      "title": "A restarted workflow never pays twice for an AI step",
+      "description": "When a workflow run restarts after a crash, an AI or agent step it had already asked reuses the answer it got instead of asking the model again. A step whose input changed still gets a fresh answer.",
+      "tag": "fix"
+    },
+    {
+      "title": "Deploys and busy runs no longer push runs to Stuck",
+      "description": "A workflow run is tried again only when a second try can help, waits as long as an app asks before trying again, and is not counted as failing when the platform restarts. A run that keeps failing pauses as Stuck with its last error, ready for Retry.",
+      "tag": "fix"
+    },
+    {
+      "title": "A budget holds when agents are asked at once",
+      "description": "An agent that asked several agents together could spend past the conversation's model-call cap, because each ask was checked before any of them was counted. Each model call is now counted from the moment it starts, so asks made together stop at the cap and the first agent still gives its closing answer.",
+      "tag": "fix"
+    },
+    {
+      "title": "A long or blank name no longer breaks saving",
+      "description": "Creating an agent, guardrail or link with a very long name used to show a server error. Names are now trimmed, a blank name or one with a line break is refused with a clear message, and the address made from a long name is shortened to fit.",
+      "tag": "fix"
+    },
+    {
+      "title": "A reply no longer stops when tools are called together",
+      "description": "An agent that searched its tools or showed widgets several times at once ended its reply with a step limit notice after one model call; it is now told to answer in text and does. An agent limited to one model call a reply answers in text instead of calling a tool it could not read.",
+      "tag": "fix"
+    },
+    {
+      "title": "Test an agent that asks other agents before publishing",
+      "description": "An agent's Test panel now offers the agents its draft was granted, so a chain can be tried before the agent is published. Chats keep running the published version.",
+      "tag": "fix"
+    }
+  ]
+}

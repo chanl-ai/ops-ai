@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-22",
-  "title": "Events that keep failing stop retrying",
-  "description": "An event between two parts of the platform that keeps failing is now set aside with its last error after about ten minutes of retries, instead of being tried for ever. It can be sent again once the cause is fixed.",
-  "tag": "fix"
-}
