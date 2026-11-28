@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 import pytest
 
-from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls
+from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls, Usage
 from ops_service_kit.scripted_vectors import scripted_vector
 
 from .conftest import LOCAL, Models
@@ -99,3 +99,29 @@ async def test_the_ingestion_client_answers_text_and_counts_its_calls_and_tokens
     assert (ingest.calls, ingest.input_tokens, ingest.output_tokens) == (1, 6, 4)
     [row] = await models.calls(key_id)
     assert (row["outcome"], row["stepId"]) == ("ok", "kb:questions")
+
+
+async def test_a_structured_call_adds_its_tokens_to_the_callers_usage_and_is_logged_under_its_run(
+    models: Models,
+) -> None:
+    key_id, secret = await models.key(budget="5")
+    spent = Usage()
+    calls = ModelCalls(models.client, secret, alias="bank-standard")
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+    for step in ("extract", "extract:reask"):
+        await calls.structured("Read the notice.", "Invoice INV-2207", schema, tenant="local", step=step, run="ext_1",
+                               usage=spent)  # fmt: skip
+    rows = await models.calls(key_id)
+    assert {(r["runId"], r["stepId"]) for r in rows} == {("ext_1", "extract"), ("ext_1", "extract:reask")}
+    tokens = (sum(r["inputTokens"] for r in rows), sum(r["outputTokens"] for r in rows))
+    assert spent == Usage(2, *tokens, alias="bank-standard") and tokens[0] > 0, (spent, tokens)
+
+
+async def test_a_structured_answer_in_another_shape_is_a_named_error_not_a_crash() -> None:
+    def odd(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(odd), base_url="http://models") as http:
+        with pytest.raises(ModelCallError) as unread:
+            await ModelCalls(http, "mk").structured("s", "u", {}, tenant="t", step="s")
+    assert unread.value.code == "models_answer_unreadable"
