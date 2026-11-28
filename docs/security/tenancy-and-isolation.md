@@ -17,11 +17,11 @@ Sign in as a member of one team and open a record that belongs to another team, 
 
 The server answers "not found" and never "forbidden". A person outside the team cannot learn that the record exists, and its identifier reveals nothing. The same holds for agents, workflows, runs, files, knowledge bases and every other team record.
 
-## What success looks like
+## What the other team sees
 
 Lending sees only lending records in every list, count and search. A person who belongs to both teams sees one team at a time, because every request acts in the team they have selected, and switching team changes everything on the screen. Nothing is shared between teams except what you install as a separate copy from the catalogue, which belongs to the team that installed it from then on.
 
-## What skipping it would cost
+## If teams share one space
 
 With only a filter in the application code, one missed filter in one new screen shows another team's cases. Ops AI repeats the check in the database, so a bug in a service still cannot return rows the caller is not entitled to.
 
@@ -51,7 +51,7 @@ With only a filter in the application code, one missed filter in one new screen 
 | Database | Row-level security by organisation, forced on the tables that hold an organisation's records, on PostgreSQL and SQL Server. Most tables that belong to a team are also held to the acting team. Each service connects with its own database login, which can read and write only its own tables |
 | Security team | A few actions reach across teams, such as the egress allow-list, storage settings and tool security reviews. They need a role in the workspace's Security team, and a role in any other team grants none of them |
 
-## Settings
+## Isolation settings and their defaults
 
 | Setting | What it does | Default | Who changes it |
 |---|---|---|---|
@@ -59,7 +59,7 @@ With only a filter in the application code, one missed filter in one new screen 
 | Team membership | Which teams a person belongs to, and their role in each | Set by invitation or by sign-in group rules ([Identity and sign-in](identity-and-sign-in.md)) | A team admin, in Govern › Access |
 | One organisation or several per installation | A self-hosted install holds one organisation, and a hosted install can hold several | One | The operator, at install |
 
-## What is not built yet
+## Limits today
 
 - Model aliases belong to the installation, so every team on it shares them. Provider keys, model keys and the call log belong to one organisation each.
 - The database rules do not apply to whoever administers the database. A person with database owner access can read every row, so keep that access to the few people who need it.

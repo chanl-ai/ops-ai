@@ -24,11 +24,11 @@ A Security admin allows one host, then a builder connects an app that uses it.
 
 When a builder connects an app that names an address nobody has allowed, the default is to hold the request and create a human task for the Security team. Approving the task adds the host to the list and the builder's screen retries what it was doing.
 
-## What success looks like
+## A blocked call and an allowed one
 
 A tool call to the listed host succeeds and appears in the activity record. A call to any other host fails, and the message names the host that was refused, so a builder knows what to ask Security for. The agent sees the refusal as a tool error and can explain it to the person.
 
-## What skipping the list costs
+## If you leave the list open
 
 With the "Any public address" choice, tools may call any public host without anyone listing it. The gateway still blocks private, loopback, link-local and cloud metadata addresses, but a tool that a builder points at a host outside your control can send data there. Teams in regulated settings usually keep the default, where a Security admin approves each new host.
 
@@ -57,7 +57,7 @@ A refusal lists every condition that failed.
 - A person can connect an app with their own account. Tools they run, and agents acting for them, then use that account.
 - A code tool runs in a sandbox with a memory limit, a time limit, no network, no files and no secrets. It reaches other systems only by calling a tool back through the gateway, and those calls are checked as the original caller's.
 
-## Settings
+## Egress settings and their defaults
 
 | Setting | What it does | Default | Who changes it |
 |---|---|---|---|
@@ -66,7 +66,7 @@ A refusal lists every condition that failed.
 | Only Security adds secrets | Builders may not add their team's own secrets | Off: builders add and use their team's secrets | A Security admin, in Govern › Policies |
 | Credentials | Entered once in the console, sealed with AES-256-GCM, never returned by any API, scrubbed from answers and logs, and limited to the teams they are shared with | Not applicable | A Security admin for shared credentials, or a builder for a team's own, in Data › Secrets |
 
-## What is not built yet
+## Limits today
 
 - Writing a code tool in the console is planned. A code tool runs today in the sandbox described above.
 - Keeping credential values in your own key vault is planned.

@@ -18,11 +18,11 @@ A Security admin connects the endpoint, and the workspace owner decides which mo
 
 Any endpoint that speaks the OpenAI chat completions API can serve: OpenAI, Anthropic and Google Gemini through their OpenAI-compatible APIs, Azure OpenAI, Amazon Bedrock, a private deployment, or your bank's own gateway.
 
-## What success looks like
+## A chat answered through the approved endpoint
 
 A test turn answers from the endpoint you chose, and the usage page shows its cost. A call that the gateway refuses is logged the same way, with the reason, so you can see why a call stopped, for example because the key had spent its budget or the model was not cleared for the data.
 
-## What skipping the gateway would cost
+## If teams call models directly
 
 If each agent held its own provider key, you could not tell which agent spent the money, a leaked key would mean finding every place that held it, and a confidential document could reach a model nobody had cleared for it. Routing every call through one gateway gives you one place to set budgets, rotate keys and read the log.
 
@@ -44,7 +44,7 @@ If each agent held its own provider key, you could not tell which agent spent th
 - Provider keys are stored sealed, and they belong to one organisation. Outside development the gateway refuses provider keys from its environment, so a key exists only where an admin saved it.
 - A model key can carry a budget, a limit on calls per minute, an expiry date and a daily spending cap that resets at midnight UTC.
 
-## Settings
+## Model gateway settings and their defaults
 
 | Control | What it does | Default | Who changes it |
 |---|---|---|---|
@@ -56,7 +56,7 @@ If each agent held its own provider key, you could not tell which agent spent th
 | Model calls per turn | How many model calls one answer may make | 50 | A builder, on the agent |
 | AI steps in workflows | Whether a team's workflows may call a model at all | Off | A builder or admin of the team, in Govern › Policies |
 
-## What is not built yet
+## Gaps to plan around
 
 - Every call is treated as internal data today, so an alias must be cleared for internal data to serve any call. Marking each call with the level of the data it carries is planned.
 - Model aliases belong to the installation, so every team on it shares them. Provider keys, model keys and the call log belong to one organisation each.

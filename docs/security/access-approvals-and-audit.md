@@ -67,7 +67,7 @@ A published agent, workflow, skill, guardrail, widget or tool version is the thi
 
 Some changes are reviewed whatever the team chose: changes to approval rules, access and egress, to an agent's guardrails, blocked topics and never rules, and turning off masking.
 
-## Settings that shape approvals
+## Approval settings and their defaults
 
 | Setting | What it does | Default | Who changes it |
 |---|---|---|---|
@@ -93,7 +93,7 @@ Some changes are reviewed whatever the team chose: changes to approval rules, ac
 
 On PostgreSQL the audit log is append-only. The service that writes it may add and read entries and may not change or delete them.
 
-## What is not built yet
+## Limits today
 
 - A tamper-evident hash chain over the audit log, export to write-once storage and a retention setting per organisation are planned. Today the audit log, run journals and call logs are kept without an expiry.
 - Approval tokens are signed with a key that two services share. Signing with a key only the review step holds is planned.

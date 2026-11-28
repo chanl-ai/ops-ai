@@ -16,11 +16,11 @@ A builder fixes the cause of a failure and then sends the run on from where it s
 3. Press **Redrive**, or run `opsai runs redrive <run-id>`. The run goes back to Queued, runs the failed step again as its next attempt and carries on.
 4. Look at the steps that finished before the failure. Each shows one attempt, because they returned what they had recorded and ran nothing again.
 
-## What success looks like
+## The run finishes on its own record
 
 The run ends as Succeeded. The steps that had already finished show one attempt each, the failed step shows its earlier attempt marked as redriven, and nothing was sent to your systems twice. A run that cannot continue on its own ends as Failed with one error record that names the step, the attempt, the kind of error and whether a retry can help.
 
-## What skipping recovery would cost
+## If failed runs are rerun by hand
 
 Without saved steps, the usual answer to a crash is to start the whole run again. For a run that already approved a credit and sent it, starting over means asking the approver again or, worse, sending the credit twice. Ops AI avoids both by keeping each step's result and by checking the gateway's record before it sends a write again.
 
@@ -69,7 +69,7 @@ Only the failed step runs again. Its failed attempt stays on the run as history,
 
 Delivered events are kept for a week and pruned hourly. A dead letter is kept until it is sent again.
 
-## What is not built yet
+## What you cannot do yet
 
 - Dead letters have no route or screen. Nothing lists them, and sending one again needs an operator with access to the service's database.
 - Bulk redrive and cancel have no console screen. The console shows Redrive on a Failed run and Retry on a Stuck run.

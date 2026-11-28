@@ -39,7 +39,7 @@ These settings control masking and the features that send data to a model.
 
 Which model may receive the real values is decided per model alias, as [Model calls](model-calls.md) explains.
 
-## What happens if you skip it
+## If you leave masking off
 
 With agent masking off, a supervisor reading a transcript sees every customer's full card and ID numbers, and so does anyone who gets a copy of the transcript. The setting is on by default for that reason, and turning it off is reviewed before it goes live.
 
@@ -65,7 +65,7 @@ Ops AI sends no telemetry. Keep the installation's secrets key with your backups
 | Secret use and change records | Deleted after 90 days | Not configurable |
 | Sign-ins in progress | Expire after ten minutes | Not configurable |
 
-## What is not built yet
+## Limits today
 
 - Names are not masked, because no pattern finds a name without a model call. Masking names is planned.
 - Files are not deleted automatically when their retention date passes. The date only blocks an earlier delete.

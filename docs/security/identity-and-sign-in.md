@@ -16,11 +16,11 @@ A Security admin connects the provider once, and everyone on the verified email 
 
 You can check a new provider before you rely on it. The API offers a test sign-in that records what the provider returned and signs nobody in.
 
-## What success looks like
+## What a person sees at sign-in
 
 A person types their work email on the sign-in page, lands on your provider's page, signs in with whatever your provider requires, and arrives in the console. Their first sign-in creates their account and, if you set group rules, places them in the right teams. If anything fails, the person sees one message, "sign-in refused", whatever the cause, and the reason goes to the log.
 
-## What skipping it costs
+## If you stay on passwords
 
 Without a provider, people sign in with a password stored in Ops AI, and a leaver has to be removed by hand in two places. Your provider's multi-factor rules do not apply to those passwords.
 
@@ -56,7 +56,7 @@ Without a provider, people sign in with a password stored in Ops AI, and a leave
 
 Passwords work where the workspace has no sign-in provider, or where a password provider is enabled. Each password must be at least 12 characters and is stored as a salted PBKDF2-SHA256 hash with 600,000 iterations. After five wrong passwords in 15 minutes the person is locked out for 15 minutes, and the right password is refused during that time. Wrong passwords at sign-in and at step-up count together. A reset link is emailed only to a person who could sign in with a password, is valid for an hour, and ends every session the person had when it is used.
 
-## Settings
+## Sign-in settings and their defaults
 
 | Setting | What it does | Default | Who changes it |
 |---|---|---|---|
@@ -66,7 +66,7 @@ Passwords work where the workspace has no sign-in provider, or where a password 
 | Step-up on every approval | Every approver signs in again before deciding | Off: only operations that ask for it | A Security admin, in Govern › Policies |
 | Invitations | Invite people by email with a single-use link | Not applicable | A team admin, in Govern › Access |
 
-## What is not built yet
+## Gaps to plan around
 
 - SCIM provisioning is planned. Until then, accounts are created at first sign-in and group rules are applied at each sign-in. Ops AI does not ask your provider again during a session, so a person you remove at the provider keeps their session for up to 8 hours. To cut access sooner, remove their roles in **Govern › Access**, which applies on their next request.
 - Group rules, the test sign-in and break-glass accounts are set through the API today, and the console does not edit them yet.
