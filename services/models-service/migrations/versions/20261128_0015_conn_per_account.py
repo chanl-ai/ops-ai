@@ -61,7 +61,6 @@ def upgrade() -> None:
         CURRENT, "model_aliases", ["tenant_id", "name"], unique=True, postgresql_where=WHERE, mssql_where=WHERE
     )
     if dialect == "postgresql":
-        op.execute("SET LOCAL row_security = off")
         op.execute(f"GRANT SELECT, INSERT, UPDATE ON provider_connections TO {ROLE}")
         op.execute(f"GRANT SELECT, INSERT, UPDATE ON model_aliases TO {ROLE}")
     elif dialect == "mssql":
