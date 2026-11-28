@@ -16,6 +16,7 @@ runs the same locally and in CI; a deploy migrates, checks every process and wal
    ([engineering standards](../../docs/architecture/engineering-standards.md) lists which rules have none); then
    `deploy/CLAUDE.md`, `make/CLAUDE.md`, `scripts/CLAUDE.md`, `docs/architecture/make.md`, `docs/architecture/delivery.md`
    and `docs/deploy/`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
@@ -104,3 +105,7 @@ updates it. Changes asked for in review re-create the worktree from the pushed b
 ## Report (at most 10 lines)
 Commits; the checks added with the rule ids they enforce and the red output of each self-test; what moved into the
 `checks` job; `make verify` output; the baseline counts; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).

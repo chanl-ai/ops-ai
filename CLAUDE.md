@@ -157,7 +157,7 @@ named files through both hooks, from HEAD plus those files; `make whats-mine FIL
 | `services/` and each `services/<x>/` | `services/CLAUDE.md`, then the service's own |
 | `packages/` and each `packages/<x>/` | `packages/CLAUDE.md`, then the package's own |
 | `sdk/` | `sdk/CLAUDE.md`: both SDKs, the generated layer and the CLI |
-| `deploy/` | `deploy/CLAUDE.md`, then each target's `README.md` or `CLAUDE.md` |
+| `deploy/` | `deploy/CLAUDE.md` (the schema scripts: `deploy/database/CLAUDE.md`), then each target's `README.md` or `CLAUDE.md` |
 | `make/` | `make/CLAUDE.md`: the fragments and the API-as-a-person targets |
 | `scripts/` | `scripts/CLAUDE.md`: what each group of scripts does and its tests |
 | `docs/usecases/` | `docs/usecases/README.md` |

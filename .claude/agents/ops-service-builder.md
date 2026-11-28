@@ -17,6 +17,7 @@ belongs to `ops-sdk-builder`.
    [API contracts and models](../../docs/architecture/standards/api-and-models.md) and
    [observability](../../docs/architecture/standards/observability.md); then `services/CLAUDE.md`, the service's own
    `CLAUDE.md`, `packages/ops_service_kit/CLAUDE.md`, `docs/architecture/api.md` and `docs/architecture/service-map.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
@@ -104,3 +105,7 @@ updates it. Changes asked for in review re-create the worktree from the pushed b
 ## Report (at most 10 lines)
 Commits; the routes added or changed with their operation ids; the settings added; tests and use cases run per layer
 with what they printed; each new test's first failure; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).
