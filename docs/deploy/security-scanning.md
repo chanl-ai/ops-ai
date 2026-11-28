@@ -6,8 +6,7 @@ Before your security team lets a container run on your network, it will ask who 
 what was done to find known flaws. This page shows how to check for yourself that the Ops AI images and SDK files you
 run are the ones the project built, and what every change and release is scanned for. Every change is scanned for
 vulnerable code and dependencies before it merges. Every release ships with a list of what is inside it (a software bill
-of materials, or SBOM), a signature and a record of how it was built, and its scan stops the release if it finds a
-critical flaw that has a fix. Each check runs in the
+of materials, or SBOM), a signature and a record of how it was built. Each check runs in the
 repository's public workflows, and the badges show the latest result on the main branch.
 
 [![CodeQL](https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml)
@@ -31,6 +30,15 @@ models, kb, files, documents, runner, opa, proxy, console or db-scripts.
 | An SDK file was built here | `gh attestation verify <file> --repo chanl-ai/ops-ai` |
 
 ## What is checked, and when
+
+A release goes through these steps in order, and a scan finding stops it before anything is signed.
+
+<!-- site: sequence caption="How a release image is built, scanned and signed, and where a critical flaw stops it" -->
+1. **Release workflow → Registry**: Builds each image and pushes it by digest
+2. **Release workflow → Trivy**: Writes the SBOM and scans it
+   - A critical finding that has a fixed version stops the release here, and the images stay unsigned.
+3. **Release workflow → Transparency log**: Signs each digest, logs the signature and verifies it
+4. **Release workflow → GitHub**: Records the build provenance and attaches the SBOMs to the release
 
 | Check | What it covers | When | Fails when | Workflow |
 |---|---|---|---|---|

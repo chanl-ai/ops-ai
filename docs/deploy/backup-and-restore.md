@@ -16,9 +16,14 @@ restore.
 ```
 
 A backup is one archive in `./backups/`, readable only by its owner. It holds a dump of the database, the files and
-knowledge volumes, and `ops-ai.env`. `--out DIR` writes it to another folder. A restore stops the services, recreates the
-database from the dump, puts the volumes back, starts everything and runs the install check. It refuses a backup that
-was made with another secrets key.
+knowledge volumes, and `ops-ai.env`. `--out DIR` writes it to another folder. A restore replays the archive in this order.
+
+<!-- site: sequence caption="What ./install.sh restore does with a backup archive" -->
+1. **Install script → Services**: Stops them
+   - The script refuses a backup that was made with another secrets key.
+2. **Install script → PostgreSQL**: Recreates the database from the dump
+3. **Install script → Volumes**: Puts the files and knowledge volumes back
+4. **Install script → Services**: Starts everything and runs the install check
 
 In `dba` mode both commands need `--admin-url-file <file>`, because the services' own logins cannot dump the database
 under its tenant policies.

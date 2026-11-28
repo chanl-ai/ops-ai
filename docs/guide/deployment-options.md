@@ -15,11 +15,13 @@ with the choice below, then read the network and sizing sections for what your p
 <!-- site: decision caption="Which install to use, by what your machines can reach and who runs them" -->
 - **Can the machines reach the internet?**
   - **No**: [Install offline from a release package](../deploy/release-package.md).
-  - **Yes**: **Does your platform team run a Kubernetes cluster for this?**
-    - **Yes**: [Install on Kubernetes](../deploy/kubernetes.md).
-    - **No**: **Do you want to run each step yourself?**
-      - **Yes**: [Install with Docker Compose](../deploy/compose.md).
-      - **No**: [Install with the script](../deploy/install.md).
+  - **Yes**:
+    - **Does your platform team run a Kubernetes cluster for this?**
+      - **Yes**: [Install on Kubernetes](../deploy/kubernetes.md).
+      - **No**:
+        - **Do you want to run each step yourself?**
+          - **Yes**: [Install with Docker Compose](../deploy/compose.md).
+          - **No**: [Install with the script](../deploy/install.md).
 
 ## Where it can run
 

@@ -9,10 +9,19 @@ answer says whether the control is built, partly built or planned.
 
 ## Everything is in one PostgreSQL database
 
-Ops AI keeps all of its records in one PostgreSQL database that you run. Seven services store data (platform, agents, tools, models, kb, files and documents), and each
-one owns its own tables, applies its own migrations and connects with its own login. That login can read and write the
-service's tables and nothing else. File bytes live outside the database, on a volume or in object storage. The schema
+Ops AI keeps all of its records in one PostgreSQL database that you run, and keeps file bytes outside it. The schema
 scripts in each release list every table.
+
+<!-- site: layers frame="Where one install keeps its data" caption="Seven services keep their records in one PostgreSQL database, each on its own login, and file and knowledge bytes sit outside it" -->
+- **Seven services**: Each owns its own tables and applies its own migrations
+  - **Platform and agents**: People, teams, roles and the audit log; agents, workflows, runs and cases
+  - **Tools and models**: Connections, credentials and the allow-list; model aliases, keys and call logs
+  - **Knowledge and documents**: Sources and searchable chunks; what was read from files, and the corrections
+  - **Files**: File records, versions, holds and storage settings
+- **PostgreSQL**: One database that you run
+  - **One login per service**: It can read and write that service's tables and nothing else
+- **Outside the database**: Where the bytes go
+  - **A volume or object storage**: File and knowledge bytes, on the host, in S3 or in Azure Blob
 
 ```mermaid
 erDiagram

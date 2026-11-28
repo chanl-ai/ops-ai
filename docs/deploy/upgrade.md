@@ -17,9 +17,17 @@ git fetch --tags && git checkout v<new version>
 ./install.sh upgrade
 ```
 
-The script takes a backup, pulls the new images, applies the schema, restarts the services and checks the result. If the
-check fails, it restores the backup on the old version and exits with an error. If the install is already on that
-version, it checks and changes nothing. `--version V` upgrades to a version other than the checkout's. Afterwards, run `./install.sh status` and confirm that it
+The script works in this order.
+
+<!-- site: sequence caption="What ./install.sh upgrade does, and what it does when its check fails" -->
+1. **Install script → PostgreSQL**: Takes a backup
+2. **Install script → Services**: Pulls the new images
+3. **Install script → PostgreSQL**: Applies the schema
+4. **Install script → Services**: Restarts them on the new version
+5. **Install script → Services**: Checks the result
+   - If the check fails, the script restores the backup on the old version and exits with an error.
+
+If the install is already on that version, it checks and changes nothing. `--version V` upgrades to a version other than the checkout's. Afterwards, run `./install.sh status` and confirm that it
 shows the new version.
 
 In `dba` mode the script writes the upgrade scripts to `./dba/upgrade-<from>-to-<to>/` and waits for your DBA to apply

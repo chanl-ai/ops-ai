@@ -3,12 +3,18 @@
 Status: current.
 
 Your teams want an app that Ops AI does not ship with, such as a CRM or a document service, and someone has written a
-plugin for it. A plugin reaches a team in two steps. The person who runs Ops AI installs it once for the whole install,
-and from then on every team is offered its app. Each team then turns the app on and signs in. This page covers both
+plugin for it. A plugin reaches a team in two steps, shown below. This page covers both
 steps, for the console and for a script, and how an installed plugin is updated. Writing a plugin is covered in
 [Building a plugin](plugins.md).
 
 ## Install a plugin
+
+<!-- site: sequence caption="From a plugin folder to a team signed in: the person who runs Ops AI installs once, and each team turns it on" -->
+1. **Platform admin → Plugins folder**: Installs the plugin once for the whole install
+2. **Platform admin → Tools service**: Restarts the tools and kb services, which load every plugin that passes validation
+3. **Tools service → Team admin**: Offers the app to every team
+4. **Team admin → Tools service**: Turns the app on and sets its settings
+5. **Team admin → Tools service**: Signs in, and the account is kept for the team
 
 There are three ways to put a plugin in front of an install:
 

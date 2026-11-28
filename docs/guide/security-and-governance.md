@@ -176,7 +176,7 @@ Ops AI records every security-relevant change and every call to an outside syste
 - the model call log
 
 When someone saves or clears a workflow's schedule, the audit log shows the old and the new schedule written out in
-words. For the details of each record and its status, see [Data and database](data-and-database.md#the-audit-trail).
+words. For the details of each record and its status, see [Data and database](data-and-database.md#what-the-audit-trail-records).
 
 ## With and without these controls
 

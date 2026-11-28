@@ -60,6 +60,6 @@ because the services do not yet run on SQL Server.
 | Knowledge search | PostgreSQL full-text search and pgvector have no SQL Server equivalent in the scripts yet; a search there returns no passages | Planned |
 | Sign-in data | The platform service still sets the tenant with PostgreSQL statements and uses four lookup functions that run before the tenant is known | Planned |
 | The worker's queue claim and the timer poller | The claim happens before the tenant is known, which SQL Server's block predicate refuses; the timer poller starts only on PostgreSQL | Planned |
-| Tenant policies for the tools, models, knowledge, files and documents tables | The same gap as on PostgreSQL ([Tenants and teams](data-and-database.md#tenants-and-teams)) | Planned |
+| Tenant policies for the tools, models, knowledge, files and documents tables | The same gap as on PostgreSQL ([Tenants and teams](data-and-database.md#keeping-tenants-and-teams-apart)) | Planned |
 | Signing in to the database with Microsoft Entra ID or a managed identity | The scripts use SQL logins | Planned |
 | A drift check against a live SQL Server | The packaged check (`make db-drift`) works for PostgreSQL only. On SQL Server the comparison runs from the test image | Planned |
