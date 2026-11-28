@@ -5,18 +5,19 @@
 // run fails if any step fails or the total is over BUDGET_SECONDS. Platform sign-in, the scripted model, 1440 wide.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, MAYA, PASSWORD, publishReviewOn } from '../../lib/workflow_ui.mjs';
+import { lineOf, textBox } from './rich-text.mjs';
 
 const BUDGET_SECONDS = Number(process.env.UC771_BUDGET_SECONDS ?? 600);
 const RUN = Math.random().toString(36).slice(2, 6);
 const NAME = `Refund request ${RUN}`;
 const USE_WHEN = 'Use when a customer asks for a refund.';
-const SOP = [
-  'Ask for the order number and look the order up.',
-  'if they ask for a refund:',
-  '    Never refund over 500 without a manager approving it.',
-  '    Explain the refund policy and ask them to confirm.',
-  'Tell them what happens next.',
-].join('\n');
+const SOP_LINES = {
+  first: 'Ask for the order number and look the order up.',
+  guard: 'if they ask for a refund:',
+  limit: 'Never refund over 500 without a manager approving it.',
+  explain: 'Explain the refund policy and ask them to confirm.',
+  last: 'Tell them what happens next.',
+};
 
 const rows = [];
 const actions = { clicks: 0, fields: 0, keys: 0, chars: 0 };
@@ -70,13 +71,32 @@ await withUiStack(
         await fill(dialog.getByLabel('Use when'), USE_WHEN);
         await click(james.getByTestId('new-skill-submit'));
         await james.waitForURL(/\/build\/skills\/[^/?#]+/, { timeout: 60_000 });
-        await james.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
+        await james.getByTestId('rich-text').waitFor({ timeout: 120_000 });
       });
       await step('3 write the SOP with one guard', async () => {
-        await click(james.getByTestId('sop-editor-content'));
+        // Typed as a person writes it: a paragraph, an if line as a bullet with its two steps indented under it with Tab,
+        // then back out of the list for the last line.
+        const box = textBox(james);
+        await click(box);
         await press(james, 'ControlOrMeta+A');
-        await typeText(james, SOP);
-        await james.getByTestId('sop-editor').locator('.cm-line', { hasText: 'Never refund over 500' }).waitFor({ timeout: 30_000 });
+        await press(james, 'Backspace');
+        const type = async (text) => (actions.fields++, (actions.chars += text.length), james.keyboard.type(text));
+        await type(SOP_LINES.first);
+        await press(james, 'Enter');
+        await type(`- ${SOP_LINES.guard}`);
+        await press(james, 'Enter');
+        await press(james, 'Tab');
+        await type(SOP_LINES.limit);
+        await press(james, 'Enter');
+        await type(SOP_LINES.explain);
+        await press(james, 'Enter');
+        await press(james, 'Shift+Tab');
+        await press(james, 'Enter');
+        await type(SOP_LINES.last);
+        await lineOf(james, 'Never refund over 500').waitFor({ timeout: 30_000 });
+        // The guard is an if line with its two steps under it, not three flat lines.
+        const nested = await textBox(james).locator('li', { hasText: SOP_LINES.guard }).locator('ul > li').count();
+        if (nested !== 2) throw new Error(`the guard holds ${nested} indented lines, not two`);
       });
       await step('4 save the draft', async () => {
         const saved = james.locator('[data-testid="save-state"][data-state="saved"]');

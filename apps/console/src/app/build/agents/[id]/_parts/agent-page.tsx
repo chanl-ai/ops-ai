@@ -197,7 +197,9 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const briefDirty = briefEdit !== null && !sameValue(briefEdit, agent.brief ?? null);
   const purposeMissing = mode === 'brief' && briefDirty && !briefEdit!.purpose.trim();
   const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: mode === 'full' && !draft.role.trim() ? 'Describe the job in one line.' : undefined };
-  const valid = !errors.name && !errors.role && !purposeMissing;
+  // A plain prompt that mentions something the team no longer holds would save text the agent cannot follow.
+  const [brokenMentions, setBrokenMentions] = React.useState(0);
+  const valid = !errors.name && !errors.role && !purposeMissing && !(mode === 'full' && brokenMentions > 0);
   const sections = changedSections(saved, draft);
   const dirty = sections.length > 0 || briefDirty;
   const [attach, setAttach] = React.useState<AttachFilter | null>(null);
@@ -513,6 +515,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 name={agent.name}
                 brief={brief}
                 onBrief={setBriefEdit}
+                onMissingChange={(refs) => setBrokenMentions(refs.length)}
                 cardHeader={
                   // One row: the model on the left, what the agent uses as quiet text, the actions on the right. What opens
                   // something to read (View prompt, the uses links) stays outside the read-only fieldset.
@@ -541,7 +544,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 controls={docControls}
                 toolbar={assist.toolbar}
                 footer={assist.footer}
-                textareaRef={assist.textareaRef}
               />
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {mode === 'full' && <AgentJobField draft={draft} set={set} error={errors.role} />}

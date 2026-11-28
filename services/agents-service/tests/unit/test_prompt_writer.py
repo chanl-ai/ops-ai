@@ -309,3 +309,17 @@ async def test_a_list_that_renames_never_writes_the_never_rules_under_its_name_a
     marks = ["# Now: Open a dispute, step 1 of 2", "# Rules for this skill", "# Hard limits", NEVER[0], NEVER[1]]
     assert in_order(sent, marks) == marks, sent
     assert "# Never" not in sent and sent.rstrip().endswith(NEVER[1]), sent[-300:]
+
+
+def test_a_full_prompt_that_names_something_the_agent_lacks_cannot_publish() -> None:
+    spec: Json = {
+        "name": "Fees",
+        "promptMode": "full",
+        "toolIds": ["lookup_charge"],
+        "instructions": "Use @tool:lookup_charge, then @tool:refund_charge. Mail a@tool:x is not a mention.",
+    }
+    (problem,) = agent_brief.publish_problems(spec)
+    assert problem["id"] == "tool:refund_charge" and problem["position"] is not None
+    assert problem["position"]["field"] == "instructions", problem
+    # Saved before the mode, the text is served as it was and nothing checks it.
+    assert agent_brief.publish_problems({k: v for k, v in spec.items() if k != "promptMode"}) == []

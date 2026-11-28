@@ -7,6 +7,7 @@
 // server side of it is proved by the api script.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { agentBase, saveAgent } from '../../lib/agent_save.mjs';
+import { caretAtLineEnd, lineOf as lineOfIn, showView } from './rich-text.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -82,8 +83,8 @@ await withUiStack(
       const page = await signIn(JAMES);
 
       // 10. The skill page: the notes and steps are one text, and the endings hint reads.
-      const doc = page.getByTestId('sop-editor-content');
-      const lineOf = (text) => page.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
+      const doc = page.getByTestId('rich-text');
+      const lineOf = (text) => lineOfIn(page, text);
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await doc.waitFor({ timeout: 120_000 });
       await lineOf('Tell the cardholder what happens next').waitFor({ timeout: 60_000 });
@@ -105,16 +106,15 @@ await withUiStack(
       await page.getByRole('tab', { name: /^Instructions/ }).click();
       await lineOf('Look the charge up').waitFor({ timeout: 30_000 });
       // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once as a mention.
-      await lineOf('Look the charge up').click();
-      await page.keyboard.press('End');
+      await caretAtLineEnd(page, 'Look the charge up');
       await page.keyboard.type(' with @');
       const picker = page.getByTestId('caret-menu');
       await picker.getByRole('option').first().waitFor({ timeout: 60_000 });
       await page.keyboard.press('Enter');
-      await lineOf('Look the charge up').getByTestId('sop-mention').waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const drawn = await page.getByTestId('sop-editor').getByTestId('sop-mention').count();
+      await lineOf('Look the charge up').getByTestId('reference-chip').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const drawn = await page.getByTestId('skill-text-editor').getByTestId('reference-chip').count();
       // The Tools field lists what the text mentions, read-only, once the text holds the mention.
-      const picked = (await lineOf('Look the charge up').getByTestId('sop-mention').innerText()).trim();
+      const picked = (await lineOf('Look the charge up').getByTestId('reference-chip').innerText()).trim();
       const rows = page.getByTestId('skill-tools-rows').locator(':scope > *');
       const toolRow = rows.filter({ hasText: 'In the steps' });
       await toolRow.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
@@ -137,8 +137,7 @@ await withUiStack(
       const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
       const THEIRS = 'Ask whether there is anything else.';
       await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, source: `${open.text}\n${THEIRS}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
-      await lineOf('Tell the cardholder what happens next').click();
-      await page.keyboard.press('End');
+      await caretAtLineEnd(page, 'Tell the cardholder what happens next');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
       await page.keyboard.insertText(' Then thank them.');
       // A resize to phone width and back draws the page's columns again; the unsaved text and its save stay.
@@ -172,8 +171,7 @@ await withUiStack(
         await notice.scrollIntoViewIfNeeded().catch(() => undefined);
       });
       // He copies his sentence across by hand; the save keeps their text with it, and their name.
-      await lineOf(THEIRS).click();
-      await page.keyboard.press('End');
+      await caretAtLineEnd(page, THEIRS);
       await page.keyboard.insertText(' Then thank them.');
       const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await saveSkill(page);
@@ -192,13 +190,12 @@ await withUiStack(
         const real = window.setTimeout.bind(window);
         window.setTimeout = (fn, ms, ...rest) => real(fn, ms === undefined || ms === 0 ? 60 : ms, ...rest);
       });
-      const slowLine = (text) => slow.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
+      const slowLine = (text) => lineOfIn(slow, text);
       const rounds = [];
       for (let n = 1; n <= 5; n += 1) {
         await slow.goto(`${consoleUrl}/build/skills/${raced.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await slowLine('Tell them what happens next').waitFor({ timeout: 120_000 });
-        await slowLine('Tell them what happens next').click();
-        await slow.keyboard.press('End');
+        await caretAtLineEnd(slow, 'Tell them what happens next');
         await slow.keyboard.insertText(` mine${n}.`);
         const read = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data;
         const put = await fetch(`${agents}/v1/skills/${raced.id}/draft`, { method: 'PUT', headers: J, body: JSON.stringify({ source: `${read.text}\nSay theirs${n}.`, baseVersion: read.version, baseDigest: read.digest }) });
@@ -207,7 +204,7 @@ await withUiStack(
         await slow.getByTestId('skill-stale-reload').click();
         await slow.getByTestId('skill-stale-base').waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
         await slowLine(`theirs${n}`).waitFor({ timeout: 30_000 }).catch(() => undefined);
-        const shown = await slow.getByTestId('sop-editor-content').innerText();
+        const shown = await slow.getByTestId('rich-text').innerText();
         await slow.getByTestId('skill-kept-copy-open').click().catch(() => undefined);
         const copied = await slow.getByTestId('skill-kept-copy-text').innerText().catch(() => '');
         // Long enough for a save to land, were one going to.
@@ -225,20 +222,15 @@ await withUiStack(
 
       // 10. A skill written as text with an if line: each condition is marked, "checked" when the tool above returns what it
       // tests and "agent decides" when it is the agent's own words.
-      const guarded = await made('/v1/skills', {
-        name: `Guarded walk ${RUN}`,
-        ownerTeam: 'team_ops',
-        useWhen: 'The cardholder disputes a charge.',
-        instructions: '',
-        source: `Look the charge up with @${kept.use.kind}:${kept.use.id}\nif the cardholder sounds unsure:\n    Offer to explain the review.\nTell the cardholder what happens next`,
-      });
+      const guardedSource = `Look the charge up with @${kept.use.kind}:${kept.use.id}\nif the cardholder sounds unsure:\n    Offer to explain the review.\nTell the cardholder what happens next`;
+      const guarded = await made('/v1/skills', { name: `Guarded walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder disputes a charge.', instructions: '', source: guardedSource });
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${consoleUrl}/build/skills/${guarded.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
-      const legend = page.getByTestId('sop-condition-how');
-      await legend.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      // A condition in words is judged by a model; only a condition on a value reads as checked.
-      check('10 an if line shows that the agent decides', (await legend.count()) >= 1 && /^judged$/.test(await legend.first().innerText()), await legend.allInnerTexts());
+      // The editor draws no per-line label; the text's reading marks each if line, and a condition in words is the agent's to decide.
+      const reading = (await (await fetch(`${agents}/v1/skills/${guarded.id}/text`, { method: 'POST', headers: J, body: JSON.stringify({ text: guardedSource }) })).json()).data;
+      const ifLine = (reading?.lines ?? []).find((l) => l.kind === 'if');
+      check('10 an if line in words is read as one the agent decides', ifLine?.how === 'agent', reading?.lines);
       await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
 
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -405,7 +397,7 @@ await withUiStack(
       check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
       await shootBothWidths(maya, AREA, 'uc-757-agent-member', async () => {});
       await maya.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
+      await maya.getByTestId('rich-text').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
       // 28. An agent whose brief was saved before sections opens as it was: no added section, and View prompt reads
@@ -774,9 +766,9 @@ await withUiStack(
           await viaSidebar(p, '/build/skills');
           // The row's link lies under its label; a click event on the link is the row click a person makes.
           await p.locator(`main a[href="/build/skills/${skill.id}"]`).first().dispatchEvent('click');
-          await p.getByTestId('sop-editor-content').waitFor({ timeout: 60_000 });
+          await p.getByTestId('rich-text').waitFor({ timeout: 60_000 });
           if (who === 'james') {
-            await p.getByTestId('sop-editor-content').click();
+            await p.getByTestId('rich-text').click();
             await p.keyboard.press('ControlOrMeta+End');
             await p.keyboard.type(' Then say goodbye with @', { delay: 20 });
             await p.getByTestId('caret-menu').getByRole('option').first().waitFor({ timeout: 60_000 });
@@ -815,6 +807,71 @@ await withUiStack(
         splits.every((x) => /Made 2 skills/.test(x.text) && x.text.includes(`Charge look-up ${x.width} ${RUN}`) && !x.sideways && x.reviewerSees === 0),
         splits,
       );
+      // 37. The editor's button bar, its insert dialog and its Markdown view, at 1440 and 390, and what an edit leaves alone:
+      // a table, an image, a link definition, a task list and the blank lines between blocks keep their bytes.
+      {
+      const WIDE = ['# Plan', '', 'First step.', '', '', '', 'Second step.', '', '| a | b |', '|---|---|', '| 1 | 2 |', '', '![diagram](https://example.com/d.png)', '', '[policy]: https://example.com/policy "Policy"', '', 'See [policy].', '', '- [ ] check the id', '- [x] ask the cardholder', '', 'Last step.'].join('\n');
+      const wideSkill = await made('/v1/skills', { name: `Editor walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'Never, it is a walk.', instructions: WIDE });
+      await page.goto(`${consoleUrl}/build/skills/${wideSkill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await doc.waitFor({ timeout: 120_000 });
+      await lineOf('First step.').waitFor({ timeout: 60_000 });
+      const bar = ['rte-bold', 'rte-heading', 'rte-bullets', 'rte-numbers', 'rte-indent', 'rte-outdent', 'rte-insert-tool', 'rte-insert-knowledge', 'rte-insert-skill', 'rte-insert-path', 'rte-view-formatted', 'rte-view-markdown'];
+      const onBar = await Promise.all(bar.map((id) => page.getByTestId(id).isVisible()));
+      check('37 the button bar shows formatting, indent, the four inserts and the two views', onBar.every(Boolean), Object.fromEntries(bar.map((id, i) => [id, onBar[i]])));
+      const savedText = () => page.getByTestId('rte-markdown').inputValue();
+      await showView(page, 'markdown');
+      const opened = await savedText();
+      await showView(page, 'formatted');
+      check('37 the Markdown view shows the saved text as it is, and back again changes nothing', opened === WIDE, opened);
+      await caretAtLineEnd(page, 'First step.');
+      await page.keyboard.type('xxxxx', { delay: 40 });
+      await showView(page, 'markdown');
+      const typed = await savedText();
+      await showView(page, 'formatted');
+      check('37 five letters typed beside blank lines add five letters, and the table, image, link and task list keep their bytes', typed === WIDE.replace('First step.', 'First step.xxxxx'), typed);
+      await caretAtLineEnd(page, 'Second step.');
+      await page.getByTestId('rte-heading').click();
+      await page.getByTestId('rte-insert-path').click();
+      await showView(page, 'markdown');
+      const formatted = await savedText();
+      await showView(page, 'formatted');
+      check('37 Heading and If / else write Markdown a person can read', /^## Second step\./m.test(formatted) && /if …:/.test(formatted) && /otherwise:/.test(formatted), formatted);
+      const before = await page.getByTestId('reference-chip').count();
+      await page.getByTestId('rte-insert-tool').click();
+      const picker = page.getByTestId('reference-picker');
+      await picker.getByTestId('reference-picker-row').first().waitFor({ timeout: 60_000 });
+      await picker.getByTestId('reference-picker-row').first().click();
+      const previewed = (await picker.getByTestId('reference-picker-preview').innerText()).trim();
+      await picker.getByTestId('reference-picker-add').click();
+      await page.getByTestId('reference-chip').nth(before).waitFor({ timeout: 30_000 }).catch(() => undefined);
+      await showView(page, 'markdown');
+      const withTool = await savedText();
+      await showView(page, 'formatted');
+      check('37 Insert tool searches, shows what the tool is before it goes in, and writes a badge as @tool:id', previewed.length > 10 && (await page.getByTestId('reference-chip').count()) === before + 1 && /@tool:[A-Za-z0-9_.-]+/.test(withTool), { previewed, withTool });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId('rte-menu').waitFor({ timeout: 10_000 });
+      const wideToolbarHidden = !(await page.getByTestId('rte-toolbar').isVisible());
+      await page.getByTestId('rte-menu').click();
+      const menuItems = await Promise.all(['rte-menu-insert-tool', 'rte-menu-insert-knowledge', 'rte-menu-insert-skill', 'rte-menu-insert-path', 'rte-menu-view-formatted', 'rte-menu-view-markdown'].map((id) => page.getByTestId(id).isVisible()));
+      await page.getByTestId('rte-menu-insert-skill').click();
+      await page.getByTestId('reference-picker').waitFor({ timeout: 30_000 });
+      const dialogBox = await page.getByTestId('reference-picker').boundingBox();
+      await page.keyboard.press('Escape');
+      await page.getByTestId('reference-picker').waitFor({ state: 'hidden', timeout: 10_000 });
+      // Let the text's own save land first, so the view switch below is the only change in flight.
+      await saveSkill(page);
+      await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 60_000 });
+      await showView(page, 'markdown');
+      const narrowText = await savedText();
+      await showView(page, 'formatted');
+      check(
+        '37 at 390 the bar is one menu with every insert and both views, the insert dialog fits, and the page does not scroll sideways',
+        wideToolbarHidden && menuItems.every(Boolean) && dialogBox && dialogBox.x >= 0 && dialogBox.x + dialogBox.width <= 391 && narrowText === withTool && !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)),
+        { wideToolbarHidden, menuItems, dialogBox },
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await saveSkill(page);
+      }
       // A skill publish waiting on Maya, the way the walk made one: the team's skill publishes always need a review.
       const policy = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(PRIYA)), body: JSON.stringify({ value: { skills: 'always' } }) });
       // A policy change ends the tokens issued before it.

@@ -1,4 +1,5 @@
 import { composeHead } from '@/lib/brief-sections';
+import { mentionsIn } from '@/lib/mentions';
 import type { Agent, AgentBrief, InstructionSection } from '@/lib/types/domain';
 import type { AgentPublishCheck, PublishBlocker } from '@/lib/types/references';
 
@@ -22,7 +23,6 @@ export const SEED_BRIEF: AgentBrief = {
   sections: [],
 };
 
-const TOKEN = /@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9_.-]*[A-Za-z0-9_])/g;
 const FIELDS: [keyof AgentBrief, string][] = [
   ['purpose', 'Purpose'],
   ['goal', 'Goal'],
@@ -30,15 +30,18 @@ const FIELDS: [keyof AgentBrief, string][] = [
   ['examples', 'Examples'],
 ];
 
-/** What the publish check finds in a brief agent: an empty Purpose, and a reference the team no longer offers. */
-export function publishCheckOf(a: Pick<Agent, 'brief' | 'promptMode'>): AgentPublishCheck {
+/** What the publish check finds: an empty Purpose, and a reference the team no longer offers in the brief or, in full prompt mode, in the prompt. */
+export function publishCheckOf(a: Pick<Agent, 'brief' | 'promptMode' | 'instructions'>): AgentPublishCheck {
   const problems: PublishBlocker[] = [];
   const b = a.brief;
+  const missing = (field: string, text: string) => {
+    for (const r of mentionsIn(text))
+      if (!isOffered(`${r.kind}:${r.id}`)) problems.push({ kind: 'missing_reference', id: `${r.kind}:${r.id}`, position: { field, step: null, index: null }, message: `${r.id} is no longer offered to this team.` });
+  };
+  if (a.promptMode === 'full') missing('instructions', a.instructions);
   if (b) {
     if (!b.purpose.trim()) problems.push({ kind: 'missing_field', id: null, position: { field: 'brief.purpose', step: null, index: null }, message: 'Job is empty. Say what this agent is for.' });
-    for (const [key] of FIELDS)
-      for (const m of String(b[key]).matchAll(TOKEN))
-        if (!isOffered(`${m[1]}:${m[2]}`)) problems.push({ kind: 'missing_reference', id: `${m[1]}:${m[2]}`, position: { field: `brief.${key}`, step: null, index: null }, message: `${m[2]} is no longer offered to this team.` });
+    for (const [key] of FIELDS) missing(`brief.${key}`, String(b[key]));
   }
   return { canRequest: problems.length === 0, problems, blockers: problems.map((p) => ({ node: null, field: p.position?.field ?? null, level: 'error' as const, code: p.kind, message: p.message })) };
 }

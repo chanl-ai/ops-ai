@@ -1,0 +1,1 @@
+{"date": "2026-11-26", "title": "A missing mention now blocks publishing a plain prompt", "description": "An agent written as plain text can no longer be sent for publish while its prompt names a tool, knowledge base or skill the agent does not have, and the editor checks mentions inside tables, lists and code too.", "tag": "fix"}

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 
+import { parseText } from '@/components/shared/instruction-document/document-model';
 import { InstructionDocument, referencesIn, type Block, type DocumentValue, type InstructionDocumentHandle } from '@/components/shared/instruction-document';
 import { CUSTOM_ID, CUSTOM_NAME_MAX, offeredSections, placesOf, sectionProblem, titled } from '@/lib/brief-sections';
 import { CUSTOM_PLACEHOLDER, SECTION_PLACEHOLDER } from '@/components/agents/brief-headings';
@@ -9,7 +10,7 @@ import { FormField } from '@/components/shared/form-field';
 import { GroupedPicker, type PickerGroup, type PickerItem } from '@/components/shared/grouped-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor } from '@/components/shared/rich-text-editor';
 import { useInstructionSections } from '@/hooks/instruction-sections';
 import { useReferenceLabels, useReferenceSearch } from '@/hooks/references-queries';
 import type { AgentBrief, BriefSection, InstructionSection, InstructionSectionList, PromptMode } from '@/lib/types/domain';
@@ -92,6 +93,7 @@ export function AgentBriefEditor({
   mode,
   instructions,
   onInstructions,
+  onMissingChange,
   readOnly,
   problems,
   onInsert,
@@ -100,7 +102,6 @@ export function AgentBriefEditor({
   footer,
   cardFooter,
   cardHeader,
-  textareaRef,
 }: {
   agentId: string;
   name: string;
@@ -109,6 +110,8 @@ export function AgentBriefEditor({
   mode: PromptMode;
   instructions: string;
   onInstructions: (next: string) => void;
+  /** The plain prompt's mentions the team does not hold, whenever that set changes. */
+  onMissingChange?: (refs: Ref[]) => void;
   readOnly?: boolean;
   /** The publish check's problems: one that names a heading is written under it. */
   problems?: PublishBlocker[];
@@ -122,7 +125,6 @@ export function AgentBriefEditor({
   cardFooter?: React.ReactNode;
   /** The brief card's header actions (Draft); not shown while the agent is plain text. */
   cardHeader?: React.ReactNode;
-  textareaRef?: React.Ref<HTMLTextAreaElement>;
 }) {
   const context = React.useMemo(() => ({ forAgent: agentId }), [agentId]);
   const only = mode === 'full' ? 'never' : 'all';
@@ -132,6 +134,9 @@ export function AgentBriefEditor({
   const document = React.useMemo(() => toValue(brief, only, entries), [brief, only, entries]);
   const ids = React.useMemo(() => referencesIn(document).map((r) => `${r.kind}:${r.id}`), [document]);
   const labels = useReferenceLabels(context, ids);
+  // The plain-text prompt's own mentions, named the same way.
+  const textIds = React.useMemo(() => [...new Set(parseText(instructions).flatMap((x) => (x.t === 'ref' ? [`${x.kind}:${x.id}`] : [])))], [instructions]);
+  const textLabels = useReferenceLabels(context, textIds);
   const search = useReferenceSearch(context);
   const invalid = React.useMemo(
     () =>
@@ -172,7 +177,9 @@ export function AgentBriefEditor({
       {mode === 'full' && (
         <div className="flex flex-col gap-2">
           {toolbar && <div className="flex flex-wrap justify-end gap-2">{toolbar}</div>}
-          <Textarea ref={textareaRef} value={instructions} onChange={(e) => onInstructions(e.target.value)} disabled={readOnly} rows={12} className="bg-card font-mono text-xs leading-relaxed" aria-label="Instructions" data-testid="agent-plain-text" />
+          <div className="rounded-lg border bg-card" data-testid="agent-plain-text">
+            <RichTextEditor value={instructions} onChange={onInstructions} readOnly={readOnly} context={context} labels={textLabels.data} labelsError={textLabels.isError ? { retry: () => void textLabels.refetch() } : undefined} onMissingChange={onMissingChange} ariaLabel="Instructions" />
+          </div>
           <p className="text-xs text-muted-foreground">Brief fields other than Never are not used while this is on. Never is written after your text.</p>
           {footer}
         </div>

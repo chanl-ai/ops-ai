@@ -16,7 +16,8 @@ import type { PublishBlocker, Ref, RefKind, ReferenceItem } from '@/lib/types/re
 import { cn } from '@/lib/utils';
 import { KIND_ICON } from '@/components/shared/reference-kinds';
 
-import { type IfNot, chipFor, refToken, refsInNode, runsIndex } from './document-model';
+import { mentionToken } from '@/lib/mentions';
+import { type IfNot, chipFor, refsInNode, runsIndex } from './document-model';
 
 export { KIND_ICON };
 
@@ -341,7 +342,7 @@ export function ReferenceBadge({ reference, resolved, runs = false }: { referenc
       role={runs ? 'group' : undefined}
       aria-label={runs ? `This step runs ${chip.label}` : undefined}
       data-testid="reference-chip"
-      data-ref={refToken(reference)}
+      data-ref={mentionToken(reference)}
       data-state={chip.state}
       data-runs={runs ? '' : undefined}
     >

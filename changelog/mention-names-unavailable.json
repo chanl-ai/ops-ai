@@ -1,0 +1,1 @@
+{"date": "2026-11-26", "title": "Saving when mention names do not load", "description": "If the names of the mentions in an agent's prompt or a skill's steps cannot be loaded, the editor now says so with a Retry button and the text still saves as written.", "tag": "fix"}

@@ -72,7 +72,7 @@ export function SkillWhenSection({
 
   React.useImperativeHandle(controls, () => ({ check: () => trigger(undefined, { shouldFocus: true }) }), [trigger]);
 
-  if (!needsUseWhen && !showNotWhen) return null;
+  if (!needsUseWhen && !(showNotWhen && (!disabled || !!value.notWhen.trim()))) return null;
   const used = watch('useWhen')?.length ?? 0;
   return (
     <SettingsSection title="Use when">
@@ -82,7 +82,8 @@ export function SkillWhenSection({
             <Textarea id="sk-usewhen" rows={2} className="min-h-16 bg-card" placeholder="The request this skill handles. e.g. a customer says their power is out or asks when it will be back." aria-invalid={!!errors.useWhen} data-testid="skill-use-when" {...register('useWhen')} />
           </FormField>
         )}
-        {showNotWhen && (
+        {/* A read-only skill with no not-when line has nothing to show there. */}
+        {showNotWhen && (!disabled || !!value.notWhen.trim()) && (
           <FormField id="sk-notwhen" label="Not when" optional hint="When the agent should leave this skill alone." error={errors.notWhen?.message ?? notWhenProblem}>
             <Textarea id="sk-notwhen" rows={2} className="bg-card" placeholder="When to leave this skill alone. e.g. the customer is reporting a gas smell." aria-invalid={!!errors.notWhen || !!notWhenProblem} data-testid="skill-not-when" {...register('notWhen')} />
           </FormField>
