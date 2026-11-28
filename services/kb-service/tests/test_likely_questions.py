@@ -16,7 +16,7 @@ import pytest
 from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_ingest import ModelBudgetSpent, ModelUnavailable
+from ops_ingest import ModelBudgetSpent, ModelReplyUnusable, ModelUnavailable
 from ops_kb.ai import AiClient, models_clients
 from ops_kb.files import KnowledgeFiles
 from ops_service_kit.settings import Endpoint
@@ -191,3 +191,15 @@ def test_models_services_ceiling_refusals_stop_the_step_and_send_the_runs_ceilin
     with pytest.raises(ModelBudgetSpent, match="source's ceiling"):
         client.complete("Write questions", alias="default", max_tokens=10)
     assert (sent[0].headers["x-run-id"], sent[0].headers["x-run-spend-cap"]) == ("airun_1", "5.00")
+    # One piece's reply cut off is skipped, not read as the model being down; a real outage still is.
+    cut = {"choices": [{"message": {"role": "assistant", "content": "1. Can I"}, "finish_reason": "length"}]}
+    inner.http = httpx.Client(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=cut)), base_url="http://m"
+    )
+    with pytest.raises(ModelReplyUnusable, match="reply_cut_off"):
+        client.complete("Write questions", alias="default", max_tokens=10)
+    down = httpx.MockTransport(lambda _: httpx.Response(503, json={"error": {"code": "provider_unreachable"}}))
+    inner.http = httpx.Client(transport=down, base_url="http://m")
+    with pytest.raises(ModelUnavailable) as refused:
+        client.complete("Write questions", alias="default", max_tokens=10)
+    assert not isinstance(refused.value, ModelReplyUnusable)

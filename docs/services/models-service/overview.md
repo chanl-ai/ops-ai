@@ -72,7 +72,13 @@ Services that are not agents call through one client, `ops_service_kit.model_cal
 billed tokens to; tools-service's sending check, kb-service's query rewrite and rerank, documents-service's
 extraction), `ModelCalls.embed` (vectors and their tokens; kb-service's index) and `IngestModel.complete` (ingestion's
 AI steps, blocking, in a worker thread). A refusal keeps this service's code on `ModelCallError.code`, and an answer in
-another shape is `models_answer_unreadable`. No other module names this service's model routes:
+another shape is `models_answer_unreadable`. A reply this service billed but that holds no answer is refused after
+its tokens are counted, each by its own code: `reply_cut_off` (`finish_reason` `length`), `reply_declined` (the model's
+`refusal`, kept on `ModelCallError.refusal`, at most 300 characters), `reply_filtered` (`content_filter`) and
+`reply_empty`. A call that gets no answer in time is `models_timeout`; the provider timing out behind this service is
+its own `provider_timeout`. `structured` takes `max_tokens`, sent as `max_completion_tokens`; documents-service sends
+`OPS_EXTRACT_OUTPUT_TOKENS` (default 8,000). The chat route passes the provider's `length` and `content_filter` endings
+and its `refusal` through. No other module names this service's model routes:
 `ops_service_kit.standards` fails on one (rule SC1, `make test PKG=packages/ops_service_kit T=tests/test_standards.py`).
 Agent turns, and the judge, guardrail and memory steps inside them, go through the agent kernel instead. The environment's one embedding model is `OPS_EMBEDDING_ALIAS` (default `bank-embed`) at
 `OPS_EMBEDDING_WIDTH` (default 1,536); a width above 1,998 stops every service at start-up, since no vector index on

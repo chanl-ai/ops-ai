@@ -26,7 +26,14 @@ from pydantic_ai import (
     ToolDenied,
 )
 from pydantic_ai.capabilities import ToolSearch
-from pydantic_ai.exceptions import ApprovalRequired, ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded
+from pydantic_ai.exceptions import (
+    ApprovalRequired,
+    ContentFilterError,
+    IncompleteToolCall,
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -49,6 +56,7 @@ from pydantic_ai.usage import UsageLimits
 from ops_contracts.skill_run import SkillRunState, grant_token
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
+from ops_service_kit.model_calls import CUT_OFF, FILTERED
 from ops_service_kit.narrow import json_object
 
 from . import answer_check, guard, judge, pii, present, prompt_writer, search, step_tools, steps, tool_cache
@@ -963,6 +971,16 @@ def _names(req: TurnRequest) -> dict[str, str]:
     return names
 
 
+def _ended(messages: list[ModelMessage], e: Exception | None = None) -> tuple[str, str] | None:
+    """The code and sentence for a reply the provider cut off or filtered; None when the last reply ended normally."""
+    if isinstance(e, ContentFilterError):
+        return ENDED["content_filter"]
+    if isinstance(e, IncompleteToolCall):
+        return ENDED["length"]
+    last = next((m for m in reversed(messages) if isinstance(m, ModelResponse)), None)
+    return ENDED.get(last.finish_reason or "") if last is not None else None
+
+
 def _model_settings(req: TurnRequest) -> ModelSettings | None:
     """The settings sent with each model request; None when the agent sets none, so the model's defaults hold.
 
@@ -1071,6 +1089,11 @@ STEP_LIMIT_REACHED = "I reached the step limit for one reply before I could answ
 # a complete one.
 CUT_SHORT_TOOLS = "\n\n(Reply cut short: the agent reached the most tool calls it may make in one reply.)"
 CUT_SHORT_STEPS = "\n\n(Reply cut short: the agent reached its step limit for one reply.)"
+# A reply the provider ended at its length limit or by its content filter fails with the kit's code and one of these,
+# never as a complete answer and never with the model library's own wording.
+REPLY_CUT_OFF = "The reply was cut off at the model's length limit. Ask again for a shorter answer."
+REPLY_FILTERED = "The model provider's content filter stopped this reply. Rephrase the question and ask again."
+ENDED = {"length": (CUT_OFF, REPLY_CUT_OFF), "content_filter": (FILTERED, REPLY_FILTERED)}
 BUDGET_REACHED = "This conversation reached its budget before I could answer."
 CUT_SHORT_BUDGET = "\n\n(Reply cut short: the conversation reached its budget.)"
 # The one request a reply may still make at its budget, with no tool offered (ports.BudgetReachedError.closing).
@@ -1608,6 +1631,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     except UnexpectedModelBehavior as e:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
+        if (ended := _ended(events.all_messages() if events is not None else [], e)) is not None:
+            yield finish("failed", "error", error=ended[1], error_code=ended[0])
+            return
         if req.output_schema is None and state.last_step(state.step):
             # A model that calls a tool on the last step, where none is offered, ends the turn at the step limit.
             notice = CUT_SHORT_STEPS if state.text else STEP_LIMIT_REACHED
@@ -1645,6 +1671,14 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
         yield finish("failed", "error", error=f"The model call failed: {type(e).__name__}: {e}")
+        return
+
+    if (ended := _ended(all_messages)) is not None:
+        if (cleared := _withhold(state, guarded)) is not None:
+            yield cleared
+        for closed in _close_open(state, ended[1]):
+            yield closed
+        yield finish("failed", "error", error=ended[1], error_code=ended[0])
         return
 
     if isinstance(output, DeferredToolRequests) and output.approvals:

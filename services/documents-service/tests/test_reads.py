@@ -7,6 +7,7 @@ proposal that loses its file."""
 from __future__ import annotations
 
 import io
+import json
 from typing import Any
 
 import httpx
@@ -137,6 +138,43 @@ async def test_a_spent_budget_and_a_busy_model_are_told_apart_from_a_model_that_
         "tenant_budget_exhausted": ("failed", "budget_exhausted"),
         "rate_limited": ("failed", "model_rate_limited"),
     }, said
+
+
+def _cut_off() -> tuple[ModelsService, list[object]]:
+    """A reply cut at the output limit: its answer's arguments stop partway. Keeps each request's output limit."""
+    limits: list[object] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        limits.append(json.loads(request.content).get("max_completion_tokens"))
+        call = {"id": "c1", "type": "function", "function": {"name": "final_result", "arguments": '{"invoice": "IN'}}
+        choice = {"message": {"role": "assistant", "content": None, "tool_calls": [call]}, "finish_reason": "length"}
+        return httpx.Response(200, json={"choices": [choice], "usage": {"prompt_tokens": 50, "completion_tokens": 9}})
+
+    http = httpx.AsyncClient(base_url="http://models", transport=httpx.MockTransport(answer))
+    return ModelsService(http, "key", output_tokens=1200), limits
+
+
+async def test_a_reply_cut_off_at_its_limit_fails_the_read_with_its_reason_and_saves_no_field(make: Make) -> None:
+    models, limits = _cut_off()
+    s = make(models, Floor())
+    async with s.client as c:
+        body = (await read(c, await s.stored(NOTICE), fields=[{"key": "invoice", "type": "text"}])).json()["data"]
+    assert (body["status"], body["error"]["code"]) == ("failed", "reply_cut_off"), body
+    assert "cut off" in body["error"]["message"] and not body.get("fields"), body
+    assert limits == [1200], "the read's output limit reaches models-service, and a cut reply is not asked again"
+    assert await s.extractor.store.tokens_per_call(None) == (50.0, 9.0), "the failed read records what it was billed"
+
+
+async def test_a_declined_read_says_what_the_model_said_cut_to_300_characters(make: Make) -> None:
+    said = "I can't read identity documents. " + "x" * 400
+    declined = {"message": {"role": "assistant", "content": None, "refusal": said}, "finish_reason": "stop"}
+    answer = httpx.MockTransport(lambda _: httpx.Response(200, json={"choices": [declined]}))
+    s = make(ModelsService(httpx.AsyncClient(base_url="http://models", transport=answer), "key"), Floor())
+    async with s.client as c:
+        body = (await read(c, await s.stored(NOTICE), fields=[{"key": "invoice", "type": "text"}])).json()["data"]
+    error = body["error"]
+    assert (body["status"], error["code"]) == ("failed", "reply_declined"), body
+    assert error["message"].endswith(f"It said: {said[:300]}"), error["message"]
 
 
 async def test_an_answer_in_a_shape_the_client_cannot_read_fails_the_read_in_words_a_person_can_act_on(
