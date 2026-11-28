@@ -65,6 +65,12 @@ class CallPeople:
         run = await runs.row(ctx.run_id)
         return person_of((await first_run(runs, run)).created_by) if run is not None else None
 
+    async def for_person(self, email: str, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]:
+        """The header naming `email`, for an approval of a call they asked for; none without a tenant and team."""
+        if not tenant_id or not team_id or "@" not in email:
+            return {}
+        return {ACTING_FOR_HEADER: await self.tokens.token(tenant_id=tenant_id, email=email, team_id=team_id)}
+
     async def headers(self, ctx: RunContext, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]:
         if ctx.team_account:
             return {}

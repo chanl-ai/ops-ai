@@ -4,12 +4,10 @@ nothing changes without the binding. Only models-service's "no such alias" falls
 
 from __future__ import annotations
 
+import dataclasses
 import time
 
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.models import Model
-from pydantic_ai.models.fallback import FallbackModel
-
+from .contract import ModelEndpoint
 from .ports import ModelSource
 
 # models-service logs every refused call, so an unbound alias is not asked again for a minute; a binding made with
@@ -18,19 +16,19 @@ UNBOUND_SECONDS = 60.0
 _unbound_until: dict[tuple[int, str], float] = {}
 
 
-def preferred(source: ModelSource | None, alias: str, fallback: Model) -> Model:
+def preferred(source: ModelSource | None, alias: str, fallback: ModelEndpoint) -> ModelEndpoint:
     """`alias` through models-service, or `fallback` while models-service has no such alias."""
     key = (id(source), alias)
     if source is None or time.monotonic() < _unbound_until.get(key, 0.0):
         return fallback
 
-    def unbound(e: Exception) -> bool:
-        if isinstance(e, ModelHTTPError) and e.status_code == 404 and "alias_not_found" in str(e.body):
+    def unbound(status: int, body: object) -> bool:
+        if status == 404 and "alias_not_found" in str(body):
             _unbound_until[key] = time.monotonic() + UNBOUND_SECONDS
             return True
         return False
 
-    return FallbackModel(source.model_for(alias), fallback, fallback_on=unbound)
+    return dataclasses.replace(source.model_for(alias), fallback=fallback, falls_back=unbound)
 
 
 class PreferredAlias:
@@ -39,5 +37,5 @@ class PreferredAlias:
     def __init__(self, source: ModelSource, alias: str) -> None:
         self.source, self.alias = source, alias
 
-    def model_for(self, alias: str) -> Model:
+    def model_for(self, alias: str) -> ModelEndpoint:
         return preferred(self.source, self.alias, self.source.model_for(alias))

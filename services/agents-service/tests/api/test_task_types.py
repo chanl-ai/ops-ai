@@ -11,7 +11,6 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -22,6 +21,7 @@ from ops_agents.store.task_types import TaskTypeStore
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.http import JsonList
+from tests.conftest import scripted_model
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, VIEWER, person
 
 from .role_app import ok, role_app
@@ -31,7 +31,7 @@ OTHER_TEAM = person("omar", "team_fraud", "builder")
 
 @pytest.fixture
 async def c() -> AsyncIterator[AsyncClient]:
-    async with role_app(TestModel()) as client:
+    async with role_app(scripted_model()) as client:
         yield client
 
 

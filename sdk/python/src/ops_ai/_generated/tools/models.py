@@ -98,12 +98,35 @@ class AppViewCounts(TypedDict, closed=True):
     connected: int
 
 
+class ApprovalBindingIn(TypedDict, closed=True):
+    inputHash: str
+    runId: NotRequired[str | None]
+    step: str
+    system: NotRequired[bool]
+    threadId: NotRequired[str | None]
+    tool: str
+    workflow: NotRequired[str]
+
+
+class ApprovalIn(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str] | None]
+    approvers: list[str]
+    binding: ApprovalBindingIn
+    environment: NotRequired[str | None]
+    input: dict[str, Any]
+
+
 class ApprovalRequestIn(TypedDict, closed=True):
     environment: Literal["dev", "test", "production"]
     expiresInDays: int
     justification: str
     operations: list[str]
     workflowId: str
+
+
+class ApprovalToken(TypedDict, closed=True):
+    expiresAt: str
+    token: str
 
 
 class BackgroundProcessOut(TypedDict, closed=True):
@@ -305,6 +328,15 @@ class CredentialSecretIn(TypedDict, closed=True):
     clientSecret: str
 
 
+class DecideResult(TypedDict, closed=True):
+    approversNeeded: int
+    code: NotRequired[str | None]
+    editable: bool
+    inputHash: str
+    reason: str
+    verdict: Literal["allow", "needs_review", "refuse"]
+
+
 class DecisionIn(TypedDict, closed=True):
     decision: Literal["approved", "rejected"]
     reason: NotRequired[str | None]
@@ -363,8 +395,18 @@ class EnvelopeAppUsers(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeApprovalToken(TypedDict, closed=True):
+    data: ApprovalToken
+    success: Literal[True]
+
+
 class EnvelopeCredentialDeleted(TypedDict, closed=True):
     data: CredentialDeleted
+    success: Literal[True]
+
+
+class EnvelopeDecideResult(TypedDict, closed=True):
+    data: DecideResult
     success: Literal[True]
 
 

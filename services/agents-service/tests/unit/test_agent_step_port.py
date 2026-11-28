@@ -6,16 +6,14 @@ anyway."""
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.ports import KernelPorts, KnowledgeUnavailableError, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, Script, Structured, ToolCall, tool_names
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.engine_agents import KernelAgents, StepRules
@@ -23,7 +21,7 @@ from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.base import metadata
 from ops_engine.ports import AgentRequest, PromptRequest
 from ops_service_kit.http import Json
-from tests.conftest import SEED, structured
+from tests.conftest import SEED, calls_in, model_on
 
 SCHEMA: dict[str, Any] = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
 
@@ -45,17 +43,8 @@ class NoDirectory:
         return []
 
 
-def stream_of(reply: Any) -> Any:
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        for i, part in enumerate(reply(messages, info).parts):
-            if isinstance(part, ToolCallPart):
-                yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-    return stream
-
-
-def answers(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-    return ModelResponse(parts=[ToolCallPart("final_result", {"summary": "never asked"})])
+def answers(messages: list[Json], tools: list[Json]) -> Answer:
+    return Reply(tool_calls=[ToolCall("final_result", {"summary": "never asked"})])
 
 
 async def test_a_turn_without_its_answer_takes_the_error_port_without_a_retry(local_tenant: None) -> None:
@@ -67,7 +56,7 @@ async def test_a_turn_without_its_answer_takes_the_error_port_without_a_retry(lo
     port = KernelAgents(
         db,
         load_catalog(SEED),
-        KernelPorts(FunctionModel(answers), NoTools(), KnowledgeDown()),
+        KernelPorts(model_on(answers), NoTools(), KnowledgeDown()),
         NoDirectory(),
         "default",  # type: ignore[arg-type]
     )
@@ -98,9 +87,9 @@ class OneTool:
         ]
 
 
-def keeps_reading(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+def keeps_reading(messages: list[Json], tools: list[Json]) -> Answer:
     # A new customer each time: the kernel answers a repeated identical call from its first result instead.
-    return ModelResponse(parts=[ToolCallPart("get_customer", {"customerId": f"C-{len(messages)}"})])
+    return Reply(tool_calls=[ToolCall("get_customer", {"customerId": f"C-{len(messages)}"})])
 
 
 async def port_on(model: Any, tools: Any, *, spec: dict[str, Any] | None = None) -> tuple[KernelAgents, str]:
@@ -115,14 +104,14 @@ async def port_on(model: Any, tools: Any, *, spec: dict[str, Any] | None = None)
 
 async def test_the_steps_tool_cap_bounds_a_model_that_keeps_calling_tools(local_tenant: None) -> None:
     reads = Reads()
-    port, aid = await port_on(FunctionModel(keeps_reading, stream_function=stream_of(keeps_reading)), reads)
+    port, aid = await port_on(model_on(keeps_reading), reads)
     req = AgentRequest(agent_id=aid, message="Summarise", turn_id="r:s:1", output_schema=SCHEMA, max_tool_calls=2)
     result = await port.turn(req)
     assert (result.ok, result.code, reads.calls) == (False, "no_output", 2), (result, reads.calls)
 
 
 async def test_a_step_model_the_agent_does_not_allow_takes_the_error_port(local_tenant: None) -> None:
-    port, aid = await port_on(FunctionModel(answers), Reads())
+    port, aid = await port_on(model_on(answers), Reads())
     req = AgentRequest(
         agent_id=aid, message="Summarise", turn_id="r:s:1", output_schema=SCHEMA, model_alias="not-allowed"
     )
@@ -131,20 +120,12 @@ async def test_a_step_model_the_agent_does_not_allow_takes_the_error_port(local_
     assert result.error and "not-allowed" in result.error
 
 
-def _streamed(reply: Any) -> FunctionModel:
-    """`reply` as a streamed model: the kernel streams every turn, a native structured answer as its JSON text."""
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        for part in reply(messages, info).parts:
-            if isinstance(part, TextPart):
-                yield part.content
-            elif isinstance(part, ToolCallPart):
-                yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-    return FunctionModel(reply, stream_function=stream)
+def _streamed(reply: Script) -> ModelEndpoint:
+    """`reply` as the kernel's model, answering at the HTTP edge."""
+    return model_on(reply)
 
 
-def _prompt_port(model: FunctionModel) -> KernelAgents:
+def _prompt_port(model: ModelEndpoint) -> KernelAgents:
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     return KernelAgents(
         db, load_catalog(SEED), KernelPorts(model, NoTools(), KnowledgeDown()), NoDirectory(), "default"
@@ -155,9 +136,9 @@ async def test_an_ai_step_call_offers_the_model_no_tools_and_returns_its_answer(
     """An AI step has no saved agent, so the model must be offered nothing to call and no knowledge."""
     offered: list[list[str]] = []
 
-    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        offered.append([t.name for t in info.function_tools])
-        return structured(info, {"summary": "Priya holds two accounts."})
+    def answer(messages: list[Json], tools: list[Json]) -> Answer:
+        offered.append(sorted(tool_names(tools)))
+        return Structured({"summary": "Priya holds two accounts."})
 
     port = _prompt_port(_streamed(answer))
     result = await port.prompt(
@@ -172,10 +153,10 @@ async def test_an_ai_step_call_offers_the_model_no_tools_and_returns_its_answer(
 async def test_an_ai_step_answer_outside_its_schema_is_an_error_not_a_retry() -> None:
     calls = 0
 
-    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    def answer(messages: list[Json], tools: list[Json]) -> Answer:
         nonlocal calls
         calls += 1
-        return structured(info, {"wrong": True})
+        return Structured({"wrong": True})
 
     result = await _prompt_port(_streamed(answer)).prompt(
         PromptRequest(instructions="Summarise.", message="x", turn_id="r:sum:2", output_schema=SCHEMA)
@@ -194,10 +175,10 @@ class Rules:
 
 async def test_an_ai_steps_output_stays_real_for_the_steps_after_it() -> None:
     """A masked output gave a later Send step "[email]" to send to. Masking is where people read."""
-    said = {"summary": "Ann Lee, SSN 123-45-6789, ann.lee@example.com."}
+    said: Json = {"summary": "Ann Lee, SSN 123-45-6789, ann.lee@example.com."}
 
-    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return structured(info, said)
+    def answer(messages: list[Json], tools: list[Json]) -> Answer:
+        return Structured(said)
 
     request = PromptRequest(
         instructions="Summarise.", message="x", turn_id="r:sum:3", output_schema=SCHEMA, run_id="wfrun_x"
@@ -212,10 +193,10 @@ async def test_an_ai_step_whose_team_turned_ai_steps_off_is_refused_at_run() -> 
     steps; the prompt port now refuses them without a model call."""
     calls = 0
 
-    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    def answer(messages: list[Json], tools: list[Json]) -> Answer:
         nonlocal calls
         calls += 1
-        return structured(info, {"summary": "x"})
+        return Structured({"summary": "x"})
 
     port = _prompt_port(_streamed(answer))
     port.rules = Rules(allowed=False)
@@ -246,10 +227,10 @@ async def test_a_workflow_agent_step_searches_only_its_agents_bases_whatever_the
     team's, read knowledge the agent was never given."""
     asks = {"query": "salary bands", "collections": ["kb_hr_private"], "allTeamKnowledgeBases": True}
 
-    def reply(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if len(messages) == 1:
-            return ModelResponse(parts=[ToolCallPart("search_knowledge", asks)])
-        return structured(info, {"summary": "Nothing found."})
+    def reply(messages: list[Json], tools: list[Json]) -> Answer:
+        if not calls_in(messages):
+            return Reply(tool_calls=[ToolCall("search_knowledge", asks)])
+        return Structured({"summary": "Nothing found."})
 
     searches = Searches()
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})

@@ -13,7 +13,7 @@ Detail on the kernel is in agent-kernel, on nodes in
 |---|---|---|
 | Runtime API | `ops_agents/api/app.py`, `routers/` | Thread, run, state, migrate, versions, approvals, step-up, route-to-people, timers, deployments, inbox, chat routes (a facade over agent_wrapper threads). Its lifespan starts the sweeper and the timer poller in the same process |
 | Run executor | `ops_agents/api/runs.py` | `execute()`: one path for routes, sweeper, timers and inbox drain. Takes the lease, raises the checkpoint fence, streams the graph with `durability="sync"`, heartbeats, journals, syncs timers, releases, drains the inbox |
-| Agent kernel | `packages/ops_agent_kernel` | One agent turn on Pydantic AI: context assembly, the loop, tool calls through a `ToolExecutor` port with idempotency keys, a gated write ends the turn as an `Interrupt`, resume from a decision, kernel events (status, text delta, tool input and output, citations, interrupted, finished). Holds no state between turns |
+| Agent kernel | `packages/ops_agent_kernel` | One agent turn on the Strands loop: context assembly, the loop, tool calls through a `ToolExecutor` port with idempotency keys, a gated write ends the turn as an `Interrupt`, resume from a decision, kernel events (status, text delta, tool input and output, citations, interrupted, finished). Holds no state between turns |
 | Workflows as tools | `api/child_runs.py`, `graphs/common.py` (`WorkflowRunner`, `WorkflowTools`) | An agent granted `workflow:<id>` calls a published workflow as a tool; a child thread on it is linked by `parent_thread_id`, and its result or review handle comes back as the tool result ([workflows-as-tools.md](workflows-as-tools.md)) |
 | Graphs | `ops_agents/graphs/` | Three code graphs and the definition compiler; `common.py` bridges a kernel turn into a node |
 | Definition compiler | `graphs/definition.py` | Validates a definition, builds a LangGraph `StateGraph`, caches compiled graphs by digest |
@@ -23,8 +23,8 @@ Detail on the kernel is in agent-kernel, on nodes in
 | Activities | `ops_agents/activities/` | Seed catalogue, local tools, keyword knowledge store, `GatewayToolExecutor` for tools-service |
 | Channels | `api/channels/inbox.py`, `store/channels.py` | Input delivered to a busy thread; the deployments store |
 | Metering | `graphs/metering.py`, `api/metering.py`, `api/usage.py`, `packages/ops_metering` | A usage row per model call; the budget check before each call, which pauses the thread when spent |
-| Model-call ledger | `api/model_ledger.py` | Records each completed model response by thread, replay key and request hash, under the alias it ran on: a chat turn's key is its LangGraph task, a workflow step's its step id (`step_calls`); a re-run after a crash replays it instead of calling the model again |
-| Model source | `ops_agent_kernel/models.py`, `ports.py` (`ModelSource`), `api/model_ledger.py` (`LedgerSource`) | The model a turn runs on, by its agent's alias: through models-service when it is configured, else the one direct model ([Which model a turn runs on](#which-model-a-turn-runs-on)) |
+| Budgets and replay | `api/budgets.py` | Every model call names its budget (`X-Budget-Id`: `thread:<id>` for a chat, `step:<run>:<node>` for a workflow step, the chain root's for a specialist), a replay key (`X-Replay-Key`: `turn:<thread>:<task>` or `run:<run>:<node>:<iteration>`) and its purpose (`X-Call-Purpose`). models-service holds the budget and the record: a call past the cap is refused with 429 `budget_reached` and the reply ends with one closing call; a re-run after a crash is answered from the record instead of calling the model again |
+| Model source | `ops_agent_kernel/models.py`, `ports.py` (`ModelSource`), `api/budgets.py` (`BudgetedSource`) | The model a turn runs on, by its agent's alias: through models-service when it is configured, else the one direct model ([Which model a turn runs on](#which-model-a-turn-runs-on)) |
 | Route to people | `api/routing.py`, `routers/routing.py` | Stops a definition workflow at the next step end with no write in flight, journals the skipped steps, and raises the built-in `manual_handling` step |
 
 ## One turn and one run
@@ -33,10 +33,10 @@ Console chat takes the same path: a message is a run on the conversation's agent
 
 A run is `graph.astream(input, config, stream_mode=["tasks", "custom", "updates"], durability="sync")` under the
 thread's lease, with `max_concurrency` 4 and `recursion_limit` 60. An agent node calls the kernel; the kernel runs the
-Pydantic AI loop with deferred tools, so a write the agent asks for ends the turn with `DeferredToolRequests`. The node
+Strands loop, and a write the agent asks for pauses the loop and ends the turn with an `Interrupt`. The node
 returns the request, the graph moves to an approval node that does nothing before `interrupt()`, and the run ends
 `interrupted`. On resume LangGraph re-runs the approval node from its start, returns the decision, and the next node
-resumes the kernel with `DeferredToolResults`.
+resumes the kernel with the decision (`Resume`).
 
 | Rule | Why |
 |---|---|
@@ -158,5 +158,5 @@ network facts that shape the architecture:
 | The checkpointer is our own on SQLAlchemy Core (asyncpg on PostgreSQL, Apache-2.0), not LangGraph's psycopg (LGPL-3.0) saver | The lock has no LGPL or GPL package |
 | certifi and orjson are MPL-2.0, which is copyleft per file | Using them unmodified carries no obligation on our code; a modified file must be published |
 | tiktoken downloads its BPE encoding on first use | Vendor the encoding file into the image and set `TIKTOKEN_CACHE_DIR` to it |
-| langsmith and genai-prices can call out | A deployment sets no `LANGSMITH_TRACING` or key; the runtime never calls the price update; `make run` sets `PYDANTIC_AI_NO_BANNER=1` |
+| langsmith can call out | A deployment sets no `LANGSMITH_TRACING` or key; nothing else in the runtime calls out on its own |
 | Under a socket guard the service made zero outbound attempts except tiktoken with an empty cache | Default-deny egress catches anything missed |

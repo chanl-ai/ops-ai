@@ -1,5 +1,6 @@
-"""The clients agents-service runs on, driven against models-service in process: the OpenAI SDK and Pydantic AI's
-OpenAI model, streamed and not, with a tool turn, so a shape the SDK cannot parse fails here and not in a live turn."""
+"""The client agents-service runs on, driven against models-service in process: the OpenAI SDK as agents-service's
+loop and one-off calls use it, streamed and not, with a tool turn, so a shape the SDK cannot parse fails here and not
+in a live turn."""
 
 from __future__ import annotations
 
@@ -10,11 +11,8 @@ from uuid import uuid4
 import httpx
 import httpx2
 import pytest
-from openai import AsyncOpenAI, RateLimitError
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.usage import RunUsage
+from openai import AsyncOpenAI, AsyncStream, RateLimitError
+from openai.types.chat import ChatCompletionChunk, ChatCompletionToolParam
 
 from ops_models.app import create_models_app
 
@@ -35,51 +33,93 @@ def _openai(models: Models, secret: str) -> AsyncOpenAI:
     )
 
 
-def _agent(models: Models, secret: str, alias: str = "bank-standard") -> Agent[None, str]:
-    model = OpenAIChatModel(alias, provider=OpenAIProvider(openai_client=_openai(models, secret)))
-    agent = Agent(model)
+LOOKUP: ChatCompletionToolParam = {
+    "type": "function",
+    "function": {"name": "lookup_case", "description": "Looks up the case.", "parameters": {"type": "object"}},
+}
 
-    @agent.tool_plain
-    def lookup_case() -> str:  # pyright: ignore[reportUnusedFunction]
-        """Looks up the case."""
-        return "case DSP-2210 is open"
 
-    return agent
+class Turn:
+    """One agent turn on the OpenAI SDK, the way agents-service's loop runs one: offer `lookup_case`, run each call it
+    asks for, ask again with the results, until the model answers in text."""
+
+    def __init__(self, client: AsyncOpenAI, alias: str) -> None:
+        self.client, self.alias = client, alias
+        self.called: list[str] = []
+        self.returned: list[str] = []
+        self.input_tokens: int = 0
+        self.output_tokens: int = 0
+
+    async def run(self, prompt: str, *, stream: bool) -> str:
+        messages: list[Any] = [{"role": "user", "content": prompt}]
+        while True:
+            text, calls = await (self._streamed(messages) if stream else self._whole(messages))
+            if not calls:
+                return text
+            messages.append({"role": "assistant", "content": text or None, "tool_calls": calls})
+            for call in calls:
+                self.called.append(call["function"]["name"])
+                self.returned.append("case DSP-2210 is open")
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": self.returned[-1]})
+
+    async def _whole(self, messages: list[Any]) -> tuple[str, list[dict[str, Any]]]:
+        r = await self.client.chat.completions.create(model=self.alias, messages=messages, tools=[LOOKUP])
+        if r.usage:
+            self.input_tokens += r.usage.prompt_tokens
+            self.output_tokens += r.usage.completion_tokens
+        message = r.choices[0].message
+        calls = [c.model_dump(include={"id", "type", "function"}) for c in message.tool_calls or []]
+        return message.content or "", calls
+
+    async def _streamed(self, messages: list[Any]) -> tuple[str, list[dict[str, Any]]]:
+        stream: AsyncStream[ChatCompletionChunk] = await self.client.chat.completions.create(
+            model=self.alias,
+            messages=messages,
+            tools=[LOOKUP],
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+        text, calls = "", dict[int, dict[str, Any]]()
+        async for chunk in stream:
+            if chunk.usage:
+                self.input_tokens += chunk.usage.prompt_tokens
+                self.output_tokens += chunk.usage.completion_tokens
+            for choice in chunk.choices:
+                text += choice.delta.content or ""
+                for d in choice.delta.tool_calls or []:
+                    call = calls.setdefault(
+                        d.index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                    )
+                    call["id"] = d.id or call["id"]
+                    if d.function is not None:
+                        call["function"]["name"] += d.function.name or ""
+                        call["function"]["arguments"] += d.function.arguments or ""
+        return text, [calls[i] for i in sorted(calls)]
+
+
+def _agent(models: Models, secret: str, alias: str = "bank-standard") -> Turn:
+    return Turn(_openai(models, secret), alias)
 
 
 @pytest.mark.parametrize("stream", [False, True])
 async def test_a_text_turn_runs_through_the_openai_client(models: Models, stream: bool) -> None:
     key_id, secret = await models.key(budget="5")
     agent = _agent(models, secret)
-    usage: RunUsage
-    if stream:
-        async with agent.run_stream("Summarise the dispute") as run:
-            text = await run.get_output()
-            usage = run.usage
-    else:
-        result = await agent.run("Summarise the dispute")
-        text, usage = result.output, result.usage
+    text = await agent.run("Summarise the dispute", stream=stream)
     assert text == "scripted reply from scripted-standard"
     rows = await models.calls(key_id)
     assert [(r["outcome"], r["alias"]) for r in rows] == [("ok", "bank-standard")]
     assert rows[0]["inputTokens"] > 0 and rows[0]["outputTokens"] > 0
     # The caller meters the same tokens models-service charged, streamed or not.
-    assert (usage.input_tokens, usage.output_tokens) == (rows[0]["inputTokens"], rows[0]["outputTokens"])
+    assert (agent.input_tokens, agent.output_tokens) == (rows[0]["inputTokens"], rows[0]["outputTokens"])
 
 
 @pytest.mark.parametrize("stream", [False, True])
 async def test_a_tool_turn_carries_the_tool_call_and_its_result(models: Models, stream: bool) -> None:
     key_id, secret = await models.key(budget="5")
     agent = _agent(models, secret)
-    if stream:
-        async with agent.run_stream("please call lookup_case") as run:
-            await run.get_output()
-            messages = run.all_messages()
-    else:
-        messages = (await agent.run("please call lookup_case")).all_messages()
-    called = [p.tool_name for m in messages for p in m.parts if p.part_kind == "tool-call"]
-    returned = [p.content for m in messages for p in m.parts if p.part_kind == "tool-return"]
-    assert called == ["lookup_case"] and returned == ["case DSP-2210 is open"]
+    await agent.run("please call lookup_case", stream=stream)
+    assert agent.called == ["lookup_case"] and agent.returned == ["case DSP-2210 is open"]
     # The tool call and the reply after its result are two model calls.
     assert [r["outcome"] for r in await models.calls(key_id)] == ["ok", "ok"]
 
@@ -155,11 +195,7 @@ async def test_an_openai_compatible_provider_gets_the_tools_and_returns_the_call
         assert (await client.post("/v1/models/aliases", json=version, headers=SERVICE)).status_code == 201
         key_id, secret = await models.key(budget="5")
         agent = _agent(Models(client, models.engine, app), secret, alias=alias)
-        if stream:
-            async with agent.run_stream("look it up") as run:
-                text = await run.get_output()
-        else:
-            text = (await agent.run("look it up")).output
+        text = await agent.run("look it up", stream=stream)
     assert text == "done"
     # The provider saw its own model id, the tool the agent offered, and the credential models-service holds.
     assert [(s["model"], s["auth"]) for s in seen] == [("gpt-up", "Bearer sk-upstream")] * 2

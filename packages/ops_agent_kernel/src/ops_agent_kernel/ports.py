@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Protocol
-
-from pydantic_ai.models import Model
 
 from ops_contracts.chat import SignedIn
 from ops_service_kit.http import Json
 
+from .contract import ModelEndpoint
 from .tool_cache import ToolCaches
 from .types import Passage
 
@@ -31,6 +27,9 @@ class ToolOutcome:
     for_model: Any = None
     # Whose login of the app the call ran as (the gateway's `signedIn`: the team's or the person's), for the chat card.
     signed_in: SignedIn | None = None
+    # With `needs_review`: the pause belongs to another turn this call ran (a helper agent's, on its own thread), so the
+    # asking turn's interrupt names it ({threadId, interruptId}) and its decision is that turn's.
+    nested: dict[str, Any] | None = None
 
 
 class ToolExecutor(Protocol):
@@ -41,36 +40,22 @@ class ToolExecutor(Protocol):
 
 class BudgetReachedError(Exception):
     """Raised by the model port in place of a model call the turn's budget no longer covers. The kernel ends the
-    reply: `closing` says whether it may first make one more call, with no tools, to answer from what it has."""
+    reply, first asking for one closing answer with no tools (purpose "closing"), which the gateway admits once per
+    replay key; a refused closing call ends the reply with the budget notice alone."""
 
-    def __init__(self, *, closing: bool) -> None:
+    def __init__(self) -> None:
         super().__init__("The budget this reply spends from is spent.")
-        self.closing = closing
 
 
-# Set while the kernel finishes a reply already under way: the closing answer at the budget, and the checks and
-# corrections of an answer already written. A model port that refuses calls at a budget lets these through.
-_FINISHING: ContextVar[bool] = ContextVar("ops_kernel_finishing", default=False)
-
-
-@contextmanager
-def finishing() -> Generator[None]:
-    """Never held across a yield of the turn's event stream: it wraps single awaited calls."""
-    token = _FINISHING.set(True)
-    try:
-        yield
-    finally:
-        _FINISHING.reset(token)
-
-
-def is_finishing() -> bool:
-    return _FINISHING.get()
+# Sent on every model call: what the call is for. The models gateway admits a "closing" call once per replay key past
+# a spent budget, and "check" or "judge" calls up to its cap; a "turn" call is refused there.
+PURPOSE_HEADER = "X-Call-Purpose"
 
 
 class ModelSource(Protocol):
-    """The model a turn runs on, by the alias its agent was published with."""
+    """Where a turn's model calls go, by the alias its agent was published with."""
 
-    def model_for(self, alias: str) -> Model: ...
+    def model_for(self, alias: str) -> ModelEndpoint: ...
 
 
 class KnowledgeUnavailableError(Exception):
@@ -86,7 +71,7 @@ class KnowledgePort(Protocol):
 
 @dataclass(frozen=True)
 class KernelPorts:
-    model: Model
+    model: ModelEndpoint
     tools: ToolExecutor
     knowledge: KnowledgePort
     # When set, each turn runs on `models.model_for(settings.model_alias)`; otherwise every turn runs on `model`.

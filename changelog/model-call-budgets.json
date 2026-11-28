@@ -1,0 +1,1 @@
+{"date": "2026-11-26", "title": "Model calls stay inside each conversation's budget", "description": "Each model call is checked against its conversation's budget first, and a reply repeated after a restart is not paid twice.", "tag": "new"}

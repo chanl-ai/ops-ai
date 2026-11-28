@@ -42,8 +42,8 @@ def judge_for(rt: Runtime) -> JudgeFn:
 
 
 def prices_of(rt: Runtime) -> PriceTable:
-    """The service's model prices (OPS_PRICES), the table the usage ledger prices calls with."""
-    return rt.usage.prices if rt.usage is not None else PriceTable.parse(rt.settings.prices)
+    """The service's model prices (OPS_PRICES)."""
+    return PriceTable.parse(rt.settings.prices)
 
 
 async def run_saved(rt: Runtime, me: Principal, row: AgentRow, *, trigger: str) -> Json:

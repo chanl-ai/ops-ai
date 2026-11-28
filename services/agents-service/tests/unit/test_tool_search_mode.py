@@ -6,19 +6,19 @@ off changing behaviour, and the agents-service catalog dropping the deployment's
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import KernelEvent, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names
 from ops_agent_kernel.types import (
     TOOL_SEARCH_ABOVE,
     AgentSettings,
+    LoopSettings,
     PromptFragment,
     Resume,
     ToolGrant,
@@ -26,7 +26,9 @@ from ops_agent_kernel.types import (
     TurnResult,
 )
 from ops_agents.activities.catalog import load_catalog
+from ops_service_kit.http import Json
 from tests.conftest import SEED as SEED_DIR
+from tests.conftest import model_on
 
 SCHEMA: dict[str, Any] = {"type": "object", "properties": {"customerId": {"type": "string"}}}
 # 40 tools from systems a bank, an insurer and a retailer connect, plus the one each test needs.
@@ -59,7 +61,7 @@ class NoKnowledge:
         return []
 
 
-Step = Callable[[list[ModelMessage]], ModelResponse]
+Step = Callable[[list[Json]], Answer]
 
 
 class Model:
@@ -69,38 +71,20 @@ class Model:
         self.steps = steps
         self.offered: list[list[str]] = []
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        self.offered.append(sorted(t.name for t in info.function_tools))
+    def respond(self, messages: list[Json], tools: list[Json]) -> Answer:
+        self.offered.append(sorted(tool_names(tools)))
         return self.steps[min(len(self.offered), len(self.steps)) - 1](messages)
 
-    def build(self) -> FunctionModel:
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for i, part in enumerate(self.respond(messages, info).parts):
-                if isinstance(part, TextPart):
-                    yield part.content
-                elif isinstance(part, ToolCallPart):
-                    yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-        return FunctionModel(self.respond, stream_function=stream)
+    def build(self) -> ModelEndpoint:
+        return model_on(self.respond)
 
 
 def call(tool: str, args: dict[str, Any]) -> Step:
-    return lambda _m: ModelResponse(parts=[ToolCallPart(tool, args)])
+    return lambda _m: Reply(tool_calls=[ToolCall(tool, args)])
 
 
 def say(text: str) -> Step:
-    return lambda _m: ModelResponse(parts=[TextPart(text)])
-
-
-def found(messages: list[ModelMessage]) -> list[str]:
-    """What the last search returned to the model."""
-    for m in reversed(messages):
-        for p in getattr(m, "parts", []):
-            if isinstance(p, ToolReturnPart) and p.tool_name == "search_tools":
-                return [x["name"] for x in json.loads(json.dumps(p.model_response_object())).get("discovered", [])]
-    return []
+    return lambda _m: text
 
 
 async def turn(model: Model, tools: Tools, grants: list[ToolGrant], **kw: Any) -> TurnResult:
@@ -142,11 +126,13 @@ async def test_a_found_gated_write_pauses_and_resumes() -> None:
         call("place_hold", {"customerId": "CUS-1002"}),
         say("The hold is in place."),
     ]
-    first = await turn(Model(steps), tools, [*FILLER, HOLD], user_turn="Hold Priya's account.")
+    # Single-step: the found write pauses on the step after the search, with no plan step between.
+    single = LoopSettings("single")
+    first = await turn(Model(steps), tools, [*FILLER, HOLD], user_turn="Hold Priya's account.", loop=single)
     assert first.status == "interrupted" and first.interrupt is not None and tools.calls == []
     resume = Resume(first.interrupt, "approved", approval_token="tok")
     model = Model([say("The hold is in place.")])
-    result = await turn(model, tools, [*FILLER, HOLD], resume=resume)
+    result = await turn(model, tools, [*FILLER, HOLD], resume=resume, loop=single)
     assert result.status == "completed", result.error
     assert tools.calls == [("place_hold", "tok")], "the approved write runs once, with its token"
 

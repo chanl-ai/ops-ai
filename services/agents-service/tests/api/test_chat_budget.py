@@ -6,6 +6,7 @@ recorded; a raise that leaves the paused cap where it was; a new cost cap printe
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 import pytest
@@ -17,12 +18,17 @@ from ops_agents.api.deps import Runtime
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_metering import Budget
 from ops_policy import mint
-from tests.api.test_write_approval_policy import (
-    PLATFORM,
-    dev_platform,  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
-)
+from tests.api.test_write_approval_policy import PLATFORM
+from tests.model_gateway import platform_through_gateway
 
 LOOKUP = "Look up CHQ-2219"
+
+
+@pytest.fixture
+async def dev_platform(database_url: str) -> AsyncIterator[AsyncClient]:
+    """The chat with its budget held at the model gateway."""
+    async with platform_through_gateway(database_url) as c:
+        yield c
 
 
 def who(sub: str, role: str) -> dict[str, str]:
@@ -72,7 +78,7 @@ async def paused(client: AsyncClient) -> tuple[str, dict[str, Any]]:
     return tid, thread
 
 
-async def test_a_chat_starts_with_the_agents_conversation_caps(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_chat_starts_with_the_agents_conversation_caps(dev_platform: AsyncClient) -> None:
     made = await dev_platform.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": []}, headers=OWNER)
     rt = rt_of(dev_platform)
     assert rt.usage is not None
@@ -80,7 +86,7 @@ async def test_a_chat_starts_with_the_agents_conversation_caps(dev_platform: Asy
     assert budget is not None and budget.max_calls == PLATFORM_CONVERSATION_CALLS and budget.max_cost is not None
 
 
-async def test_a_spent_budget_is_a_budget_card_with_the_ledgers_numbers(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_spent_budget_is_a_budget_card_with_the_ledgers_numbers(dev_platform: AsyncClient) -> None:
     tid, thread = await paused(dev_platform)
     reply = thread["messages"][-1]
     rt = rt_of(dev_platform)
@@ -96,7 +102,7 @@ async def test_a_spent_budget_is_a_budget_card_with_the_ledgers_numbers(dev_plat
     assert again.status_code == 409 and again.json()["error"]["code"] == "budget_paused"
 
 
-async def test_only_the_owner_continues_and_continue_finishes_the_turn(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_only_the_owner_continues_and_continue_finishes_the_turn(dev_platform: AsyncClient) -> None:
     tid, _ = await paused(dev_platform)
     refused = await dev_platform.post(f"/chat/threads/{tid}/budget", json={"action": "continue"}, headers=OTHER)
     assert refused.status_code == 403, refused.text
@@ -115,7 +121,7 @@ async def test_only_the_owner_continues_and_continue_finishes_the_turn(dev_platf
 
 
 @pytest.mark.parametrize("person", [OTHER])
-async def test_only_a_team_admin_raises(dev_platform: AsyncClient, person: dict[str, str]) -> None:  # noqa: F811
+async def test_only_a_team_admin_raises(dev_platform: AsyncClient, person: dict[str, str]) -> None:
     tid, _ = await paused(dev_platform)
     refused = await dev_platform.post(
         f"/chat/threads/{tid}/budget", json={"action": "raise", "maxCalls": 10}, headers=person
@@ -137,7 +143,7 @@ async def test_only_a_team_admin_raises(dev_platform: AsyncClient, person: dict[
     assert card["budget"]["state"] == "raised" and card["budget"]["newCap"] == "10"
 
 
-async def test_the_run_api_never_answers_a_chats_budget_pause(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_the_run_api_never_answers_a_chats_budget_pause(dev_platform: AsyncClient) -> None:
     tid, _ = await paused(dev_platform)
     url = f"/v1/threads/{tid}/runs/stream"
     raised = await dev_platform.post(
@@ -153,7 +159,7 @@ async def test_the_run_api_never_answers_a_chats_budget_pause(dev_platform: Asyn
     assert budget is not None and budget.max_calls == 1
 
 
-async def test_a_run_api_agent_thread_takes_the_agents_caps_or_a_lower_one(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_run_api_agent_thread_takes_the_agents_caps_or_a_lower_one(dev_platform: AsyncClient) -> None:
     rt = rt_of(dev_platform)
     assert rt.usage is not None
     caps: list[int | None] = []
@@ -168,7 +174,7 @@ async def test_a_run_api_agent_thread_takes_the_agents_caps_or_a_lower_one(dev_p
     assert caps == [PLATFORM_CONVERSATION_CALLS, PLATFORM_CONVERSATION_CALLS, 3]
 
 
-async def test_an_answer_needs_the_lease_and_the_current_pause(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_an_answer_needs_the_lease_and_the_current_pause(dev_platform: AsyncClient) -> None:
     tid, thread = await paused(dev_platform)
     pause_id = thread["messages"][-1]["budget"]["id"]
     url = f"/chat/threads/{tid}/budget"
@@ -186,7 +192,7 @@ async def test_an_answer_needs_the_lease_and_the_current_pause(dev_platform: Asy
     assert went.status_code == 200, went.text
 
 
-async def test_a_raise_lifts_the_cap_that_paused_the_turn(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_raise_lifts_the_cap_that_paused_the_turn(dev_platform: AsyncClient) -> None:
     tid, _ = await paused(dev_platform)
     wrong = await dev_platform.post(
         f"/chat/threads/{tid}/budget", json={"action": "raise", "maxCost": 9}, headers=ADMIN
@@ -198,7 +204,7 @@ def test_a_new_cost_cap_reads_like_the_cap_it_replaces() -> None:
     assert chat_threads._like("5.00", "7.500000") == "7.50"  # pyright: ignore[reportPrivateUsage]
 
 
-async def test_a_run_api_thread_answers_its_budget_pause_by_the_chats_rules(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_run_api_thread_answers_its_budget_pause_by_the_chats_rules(dev_platform: AsyncClient) -> None:
     made = await dev_platform.post(
         "/v1/threads", json={"graph": "agent:ag_fraud", "budget": {"maxCalls": 1}}, headers=OWNER
     )
@@ -230,7 +236,7 @@ async def test_a_run_api_thread_answers_its_budget_pause_by_the_chats_rules(dev_
 FORGED = {"budgetAllotment": {"maxCalls": 100000, "maxCost": "100000"}, "ownerEmail": "someone@else.example"}
 
 
-async def test_a_caller_cannot_forge_a_threads_allotment_or_owner(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_caller_cannot_forge_a_threads_allotment_or_owner(dev_platform: AsyncClient) -> None:
     rt = rt_of(dev_platform)
     assert rt.usage is not None
     caps: list[int | None] = []
@@ -250,7 +256,7 @@ async def test_a_caller_cannot_forge_a_threads_allotment_or_owner(dev_platform: 
     assert caps == [PLATFORM_CONVERSATION_CALLS, PLATFORM_CONVERSATION_CALLS]
 
 
-async def test_a_continue_adds_the_agents_allotment_not_a_forged_one(dev_platform: AsyncClient) -> None:  # noqa: F811
+async def test_a_continue_adds_the_agents_allotment_not_a_forged_one(dev_platform: AsyncClient) -> None:
     body = {"graph": "agent:ag_fraud", "budget": {"maxCalls": 1}, "metadata": FORGED}
     tid = (await dev_platform.post("/v1/threads", json=body, headers=OWNER)).json()["data"]["threadId"]
     url = f"/v1/threads/{tid}/runs/stream"

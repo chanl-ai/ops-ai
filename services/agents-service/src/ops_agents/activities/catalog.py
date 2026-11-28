@@ -20,6 +20,7 @@ from ops_agent_kernel.types import (
     Access,
     AgentSettings,
     Guardrail,
+    LoopSettings,
     PromptFragment,
     Skill,
     SkillInput,
@@ -237,6 +238,31 @@ class AgentDefinition(_Model):
     parallel_reads: bool = True
     # The version's model settings by knob name (agent_registry.model_settings_of).
     model_settings: dict[str, float | int | str] = {}
+    # The spec's `loop` as written (camelCase keys), and whether the spec has a workspace.
+    loop: dict[str, Any] = {}
+    sandbox: bool = False
+    # The agents a swarm turn may hand the conversation to: the spec's `agents` with `use: handoff`.
+    handoffs: list[str] = []
+
+    def loop_settings(self) -> LoopSettings:
+        """The turn's loop: the spec's kind and its own settings, defaults where the spec leaves one out."""
+        lp, d = self.loop, LoopSettings()
+        return LoopSettings(
+            kind=lp.get("kind") or d.kind,
+            max_steps=int(lp["maxSteps"]) if lp.get("maxSteps") is not None else None,
+            max_tool_calls=int(lp["maxToolCalls"]) if lp.get("maxToolCalls") is not None else None,
+            parallel_reads=bool(lp["parallelReads"]) if lp.get("parallelReads") is not None else None,
+            replans=int(lp.get("replans", d.replans)),
+            show_plan=bool(lp.get("showPlan", d.show_plan)),
+            review_plan=bool(lp.get("reviewPlan", d.review_plan)),
+            max_handoffs=int(lp.get("maxHandoffs", d.max_handoffs)),
+            workflow=lp.get("workflow"),
+            workflow_input={str(k): str(v) for k, v in dict(lp.get("input") or {}).items()},
+            rubric=lp.get("rubric"),
+            judge_alias=lp.get("judge") or d.judge_alias,
+            max_rounds=int(lp.get("maxRounds", d.max_rounds)),
+            sandbox=self.sandbox,
+        )
 
 
 class ApprovalTemplate(_Model):

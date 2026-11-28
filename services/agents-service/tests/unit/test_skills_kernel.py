@@ -5,26 +5,28 @@ tool-call budget; a loaded skill's guardrails not applied, or applied when it ne
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-    UserPromptPart,
-)
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
 from ops_agent_kernel import skills as skillset
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import SkillLoaded, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
-from ops_agent_kernel.types import AgentSettings, PromptFragment, Resume, Skill, ToolGrant, TurnRequest, TurnResult
+from ops_agent_kernel.testing import Answer, Reply, Structured, ToolCall, last_user_text, system_text, tool_names
+from ops_agent_kernel.types import (
+    AgentSettings,
+    LoopSettings,
+    PromptFragment,
+    Resume,
+    Skill,
+    ToolGrant,
+    TurnRequest,
+    TurnResult,
+)
+from ops_service_kit.http import Json
+from tests.conftest import model_on, returned
 
 HARDSHIP = Skill(
     "sk_1",
@@ -54,15 +56,6 @@ class NoKnowledge:
         return []
 
 
-def _last_user(messages: list[ModelMessage]) -> str:
-    for m in reversed(messages):
-        if isinstance(m, ModelRequest):
-            for p in m.parts:
-                if isinstance(p, UserPromptPart) and isinstance(p.content, str):
-                    return p.content
-    return ""
-
-
 class Model:
     """Loads the slugs in `loads` one call at a time, then answers `answer`. Classification calls answer
     `classify(message)`. Records each answering request's instructions and offered tools."""
@@ -73,34 +66,19 @@ class Model:
         self.offered: list[list[str]] = []
         self.results: list[Any] = []
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        prompt = _last_user(messages)
+    def respond(self, messages: list[Json], tools: list[Json]) -> Answer:
+        prompt = last_user_text(messages)
         if prompt.startswith("Blocked topics:"):
-            return ModelResponse(
-                parts=[ToolCallPart("final_result", {"topic": self.classify(prompt.split("Message:\n", 1)[1])})]
-            )
-        self.instructions.append(str(info.instructions or ""))
-        self.offered.append([t.name for t in info.function_tools])
-        last = messages[-1]
-        if isinstance(last, ModelRequest):
-            self.results += [p.content for p in last.parts if isinstance(p, ToolReturnPart)]
+            return Structured({"topic": self.classify(prompt.split("Message:\n", 1)[1])})
+        self.instructions.append(system_text(messages))
+        self.offered.append(sorted(tool_names(tools)))
+        self.results += returned(messages)
         if self.loads:
-            return ModelResponse(
-                parts=[ToolCallPart("load_skill", {"slug": self.loads.pop(0), "matched": "cannot pay"})]
-            )
-        return ModelResponse(parts=[TextPart(self.answer)])
+            return Reply(tool_calls=[ToolCall("load_skill", {"slug": self.loads.pop(0), "matched": "cannot pay"})])
+        return self.answer
 
-    def build(self) -> FunctionModel:
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for i, part in enumerate(self.respond(messages, info).parts):
-                if isinstance(part, TextPart):
-                    yield part.content
-                elif isinstance(part, ToolCallPart):
-                    yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-        return FunctionModel(self.respond, stream_function=stream)
+    def build(self) -> ModelEndpoint:
+        return model_on(self.respond)
 
 
 async def turn(model: Model, skills: list[Skill], *, max_tool_calls: int = 6) -> tuple[TurnResult, list[Any]]:
@@ -216,31 +194,20 @@ class Script:
         self.actions, self.classify = list(actions), classify
         self.answered = 0
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        prompt = _last_user(messages)
+    def respond(self, messages: list[Json], tools: list[Json]) -> Answer:
+        prompt = last_user_text(messages)
         if prompt.startswith("Blocked topics:"):
-            return ModelResponse(
-                parts=[ToolCallPart("final_result", {"topic": self.classify(prompt.split("Message:\n", 1)[1])})]
-            )
+            return Structured({"topic": self.classify(prompt.split("Message:\n", 1)[1])})
         self.answered += 1
         kind, value = self.actions.pop(0)
         if kind == "load":
-            return ModelResponse(parts=[ToolCallPart("load_skill", {"slug": value, "matched": "cannot pay"})])
+            return Reply(tool_calls=[ToolCall("load_skill", {"slug": value, "matched": "cannot pay"})])
         if kind == "call":
-            return ModelResponse(parts=[ToolCallPart(value, {})])
-        return ModelResponse(parts=[TextPart(value)])
+            return Reply(tool_calls=[ToolCall(value, {})])
+        return value
 
-    def build(self) -> FunctionModel:
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for i, part in enumerate(self.respond(messages, info).parts):
-                if isinstance(part, TextPart):
-                    yield part.content
-                elif isinstance(part, ToolCallPart):
-                    yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-        return FunctionModel(self.respond, stream_function=stream)
+    def build(self) -> ModelEndpoint:
+        return model_on(self.respond)
 
 
 async def _run(req: TurnRequest, model: Script, tools: Recording) -> tuple[TurnResult, list[Any]]:
@@ -252,7 +219,15 @@ async def test_a_skill_loaded_before_an_approval_still_guards_the_answer_after_i
     settings = AgentSettings("ag_advisor", 1, [PromptFragment("You help bankers.")], "m", skills=[HARDSHIP])
     tools = Recording()
     first, _ = await _run(
-        TurnRequest("t1", "th1", settings, [HOLD], user_turn="My client cannot pay; hold the payment."),
+        # A single-step agent: the write pauses on the step after the load, with no plan between.
+        TurnRequest(
+            "t1",
+            "th1",
+            settings,
+            [HOLD],
+            user_turn="My client cannot pay; hold the payment.",
+            loop=LoopSettings("single"),
+        ),
         Script([("load", "hardship-request-triage"), ("call", "place_hold")]),
         tools,
     )
@@ -260,7 +235,7 @@ async def test_a_skill_loaded_before_an_approval_still_guards_the_answer_after_i
     assert [s["skillId"] for s in first.interrupt.loaded_skills] == ["sk_1"]
     resume = Resume(first.interrupt, "approved", approval_token="tok")
     after, events = await _run(
-        TurnRequest("t2", "th1", settings, [HOLD], resume=resume),
+        TurnRequest("t2", "th1", settings, [HOLD], resume=resume, loop=LoopSettings("single")),
         Script([("say", "Done, and I promise a payment deferral.")], _deferral),
         tools,
     )
@@ -296,11 +271,11 @@ async def test_the_matched_words_are_one_short_line_in_the_journal() -> None:
     model.loads = ["hardship-request-triage"]
     original = model.respond
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        out = original(messages, info)
-        for p in out.parts:
-            if isinstance(p, ToolCallPart) and p.tool_name == "load_skill":
-                p.args = {"slug": "hardship-request-triage", "matched": "cannot\npay " + "x" * 500}
+    def respond(messages: list[Json], tools: list[Json]) -> Answer:
+        out = original(messages, tools)
+        if isinstance(out, Reply) and out.tool_calls and out.tool_calls[0].name == "load_skill":
+            matched = {"slug": "hardship-request-triage", "matched": "cannot\npay " + "x" * 500}
+            return Reply(tool_calls=[ToolCall("load_skill", matched)])
         return out
 
     model.respond = respond  # type: ignore[method-assign]

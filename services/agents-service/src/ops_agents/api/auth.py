@@ -163,7 +163,7 @@ DEV_TOTP = "123456"
 
 def step_up_signer(rt: Runtime) -> HmacSigner:
     """Derived from the review key for this one purpose, so an approval token can never pass as a step-up."""
-    return HmacSigner.derived(rt.settings.review_key.get_secret_value(), "step-up")
+    return HmacSigner.derived(rt.settings.session_token_key.get_secret_value(), "step-up")
 
 
 def step_up_ref(token: str | None) -> str | None:

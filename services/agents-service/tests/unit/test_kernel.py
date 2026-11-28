@@ -5,18 +5,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import CitationsReady, KernelEvent, TextDelta, ToolOutput, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names
 from ops_agent_kernel.types import (
     AgentSettings,
+    LoopSettings,
     Passage,
     PromptFragment,
     Resume,
@@ -24,8 +23,10 @@ from ops_agent_kernel.types import (
     TurnRequest,
     TurnResult,
 )
+from ops_agents.graphs.common import interrupt_from_state, interrupt_to_state
+from ops_service_kit.http import Json
 from ops_service_kit.ids import input_hash
-from tests.conftest import looping_model, scripted_model
+from tests.conftest import looping_model, model_on, scripted, scripted_model
 
 HOLD = ToolGrant(
     "place_wire_hold",
@@ -38,6 +39,7 @@ HOLD = ToolGrant(
     },
 )
 SETTINGS = AgentSettings("ag_fraud", 7, [PromptFragment("You help Fraud Operations.")], "test-model")
+SINGLE = LoopSettings(kind="single")
 LIMITS = Passage(
     "doc_wire_limits",
     "Wire Transfer Policy",
@@ -49,6 +51,11 @@ LIMITS = Passage(
 HOLDS = Passage(
     "doc_wire_holds", "Wire Transfer Policy", "5.1 New-payee holds", "v6", "New payee wires held 24 hours.", "kb_people"
 )
+
+
+def first_step(messages: list[Json]) -> bool:
+    """Whether a request is the turn's first: no tool has answered yet."""
+    return not any(m.get("role") == "tool" for m in messages)
 
 
 class RecordingTools:
@@ -209,24 +216,16 @@ async def test_an_agent_capped_at_one_model_call_a_reply_is_offered_no_tool_and_
     assert result.text and "step limit" not in result.text, result.text
 
 
-def at_once_model(tool: str, args: dict[str, Any], count: int) -> FunctionModel:
+def at_once_model(tool: str, args: dict[str, Any], count: int) -> ModelEndpoint:
     """A model whose first response calls `tool` `count` times at once and whose next answers in text: an agent asked
     to do five things together that reaches for one kernel tool five times."""
-    said = "Here is what I found."
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if len(messages) > 1:
-            return ModelResponse(parts=[TextPart(said)])
-        return ModelResponse(parts=[ToolCallPart(tool, args, tool_call_id=f"c{i}") for i in range(count)])
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        if not first_step(messages):
+            return "Here is what I found."
+        return Reply(tool_calls=[ToolCall(tool, args, id=f"c{i}") for i in range(count)])
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        if len(messages) > 1:
-            yield said
-            return
-        for i in range(count):
-            yield {i: DeltaToolCall(name=tool, json_args=json.dumps(args), tool_call_id=f"c{i}")}
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(script)
 
 
 async def test_kernel_tools_called_together_past_their_cap_are_refused_and_the_turn_goes_on_to_answer() -> None:
@@ -260,25 +259,14 @@ async def test_a_reply_cut_short_after_some_text_says_so() -> None:
     assert isinstance(events[-2], TextDelta) or any(isinstance(e, TextDelta) and "cut short" in e.delta for e in events)
 
 
-def repeating_model(tool: str, args: dict[str, Any]) -> FunctionModel:
+def repeating_model(tool: str, args: dict[str, Any]) -> ModelEndpoint:
     """A model that calls `tool` with the same `args` for as long as it is offered, then answers from what it has: the
     staging summary turn that called "Get human task" five times and never wrote the summary."""
 
-    def offered(info: AgentInfo) -> bool:
-        return any(t.name == tool for t in info.function_tools)
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        return Reply(tool_calls=[ToolCall(tool, args)]) if tool in tool_names(tools) else ANSWERED
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if offered(info):
-            return ModelResponse(parts=[ToolCallPart(tool, args)])
-        return ModelResponse(parts=[TextPart(ANSWERED)])
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        if offered(info):
-            yield {1: DeltaToolCall(name=tool, json_args=json.dumps(args))}
-        else:
-            yield ANSWERED
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(script)
 
 
 ANSWERED = "Two tasks wait for you this week."
@@ -345,51 +333,30 @@ async def test_the_same_call_twice_in_one_step_reaches_the_system_once() -> None
 
     tools = SlowTools()
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if any(t.name == "get_human_task" for t in info.function_tools) and len(messages) == 1:
-            return ModelResponse(
-                parts=[ToolCallPart("get_human_task", {"taskId": "REV-1"}, tool_call_id=f"c{i}") for i in (1, 2)]
-            )
-        return ModelResponse(parts=[TextPart(ANSWERED)])
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        if any(t.name == "get_human_task" for t in info.function_tools) and len(messages) == 1:
-            yield {
-                i: DeltaToolCall(name="get_human_task", json_args='{"taskId": "REV-1"}', tool_call_id=f"c{i}")
-                for i in (1, 2)
-            }
-        else:
-            yield ANSWERED
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        if "get_human_task" in tool_names(tools) and first_step(messages):
+            return Reply(tool_calls=[ToolCall("get_human_task", {"taskId": "REV-1"}, id=f"c{i}") for i in (1, 2)])
+        return ANSWERED
 
     req = TurnRequest("t1", "th1", replace(SETTINGS, max_tool_calls=5), [TASK], user_turn="What is REV-1?")
     _, result = await run(
         req,
-        KernelPorts(model=FunctionModel(respond, stream_function=stream), tools=tools, knowledge=FixedKnowledge([])),
+        KernelPorts(model=model_on(script), tools=tools, knowledge=FixedKnowledge([])),
     )
     assert len(tools.calls) == 1, tools.calls
     first, second = result.tool_calls
     assert second.output == {"repeatOf": first.tool_call_id}, result.tool_calls
 
 
-def reading_model(reads: int) -> FunctionModel:
+def reading_model(reads: int) -> ModelEndpoint:
     """A model that makes `reads` reads in one step, then answers from the results it got."""
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if len(messages) == 1:
-            return ModelResponse(parts=[ToolCallPart("get_human_task", {"taskId": f"REV-{i}"}) for i in range(reads)])
-        return ModelResponse(parts=[TextPart(ANSWERED)])
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        if first_step(messages):
+            return Reply(tool_calls=[ToolCall("get_human_task", {"taskId": f"REV-{i}"}) for i in range(reads)])
+        return ANSWERED
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        part = respond(messages, info).parts
-        if isinstance(part[0], TextPart):
-            yield part[0].content
-        else:
-            yield {
-                i: DeltaToolCall(name="get_human_task", json_args=json.dumps({"taskId": f"REV-{i}"}))
-                for i in range(len(part))
-            }
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(script)
 
 
 async def test_reads_past_the_tool_budget_are_told_to_stop_and_the_reply_answers_from_the_rest() -> None:
@@ -414,22 +381,14 @@ SEARCH = ToolGrant(
 )
 
 
-def searching_model(collections: list[str]) -> FunctionModel:
+def searching_model(collections: list[str]) -> ModelEndpoint:
     """A model that searches knowledge once, naming `collections`, then answers."""
     args = {"query": "wire limits", "collections": collections}
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if len(messages) == 1:
-            return ModelResponse(parts=[ToolCallPart("search_knowledge", args, tool_call_id="s1")])
-        return ModelResponse(parts=[TextPart(ANSWERED)])
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        return Reply(tool_calls=[ToolCall("search_knowledge", args, id="s1")]) if first_step(messages) else ANSWERED
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        if len(messages) == 1:
-            yield {0: DeltaToolCall(name="search_knowledge", json_args=json.dumps(args), tool_call_id="s1")}
-        else:
-            yield ANSWERED
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(script)
 
 
 async def searched(collections: list[str], kb_ids: list[str], *, all_team: bool = False) -> RecordingTools:
@@ -455,3 +414,39 @@ async def test_an_agent_searches_only_its_own_knowledge_bases_unless_it_may_sear
     assert no_bases.calls == [], "an agent with no bases never reaches the tool"
     team = await searched([], [], all_team=True)
     assert [a.get("allTeamKnowledgeBases") for _, a, _, _ in team.calls] == [True]
+
+
+def counted(said: list[list[Json]]) -> ModelEndpoint:
+    """The conftest script, with each request's messages kept in `said`."""
+
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        said.append(messages)
+        return scripted(messages, tools)
+
+    return model_on(script)
+
+
+def ports_on(model: ModelEndpoint, tools: RecordingTools) -> KernelPorts:
+    return KernelPorts(model=model, tools=tools, knowledge=FixedKnowledge([]))
+
+
+async def test_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> None:
+    before: list[list[Json]] = []
+    paused_tools = RecordingTools()
+    # A single-step agent: the pause comes on the first model step, with no plan before it.
+    req = TurnRequest("t1", "th1", SETTINGS, [HOLD], user_turn="Hold wire W-88213", loop=SINGLE)
+    _, first = await run(req, ports_on(counted(before), paused_tools))
+    assert first.interrupt is not None and len(before) == 1, first
+    assert paused_tools.calls == [], "the write ran before a person approved it"
+    # What another server reads: the checkpoint's JSON, with new ports, a new transport and new tools.
+    stored = interrupt_from_state(json.loads(json.dumps(interrupt_to_state(first.interrupt))))
+    after: list[list[Json]] = []
+    tools = RecordingTools()
+    resume = Resume(stored, "approved", approval_token="tok")
+    _, result = await run(
+        TurnRequest("t2", "th1", SETTINGS, [HOLD], resume=resume, loop=SINGLE), ports_on(counted(after), tools)
+    )
+    assert result.status == "completed", result
+    assert [(tool, token) for tool, _, _, token in tools.calls] == [("place_wire_hold", "tok")]
+    assert len(after) == 1, f"the resume asked the model {len(after)} times"
+    assert any(m.get("role") == "tool" for m in after[0]), "the resume asked the model the paused step again"

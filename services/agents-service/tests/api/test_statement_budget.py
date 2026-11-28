@@ -252,8 +252,9 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
                 ids.update(mailbox_id="mbx_budget500", deployment_id="wd_budget500")
                 # The thread routes keep the seeded thread; a review and a graph run's events read the waiting run.
                 swaps[f"/reviews/{ids['thread_id']}"] = f"/reviews/{waiting}"
-                events = f"/v1/threads/{ids['thread_id']}/runs/{ids['run_id']}/events"
-                swaps[events] = f"/v1/threads/{waiting}/runs/{graph_run}/events"
+                for read in ("events", "trace"):
+                    path = f"/v1/threads/{ids['thread_id']}/runs/{ids['run_id']}/{read}"
+                    swaps[path] = f"/v1/threads/{waiting}/runs/{graph_run}/{read}"
         # A batch of `n` rows at each size, so its page and its results file grow with the rows.
         with tenant_scope(DEV_TENANT):
             batch = await Batches(served[0].state.runtime.db).create(

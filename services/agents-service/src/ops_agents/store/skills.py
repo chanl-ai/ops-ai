@@ -56,8 +56,9 @@ registry_skills = sa.Table(
     # The published version's loading (on_match or always), kept on the row so the agent page's picker filters it in
     # the query; null until a first publish.
     sa.Column("published_loading", sa.String(16)),
-    # A skill's name is unique within its team only, so many teams can hold a copy of the same template.
-    sa.UniqueConstraint("team_id", "slug", name="uq_registry_skills_team_slug"),
+    # A skill's name is unique within its tenant's team only, so many teams, in any tenant, can hold a copy of the same
+    # template (team ids are chosen per tenant).
+    sa.UniqueConstraint("tenant_id", "team_id", "slug", name="uq_registry_skills_team_slug"),
     sa.Index("ix_registry_skills_tenant_team", "tenant_id", "team_id"),
     # The skills list filters one team's skills by owner team and by origin (agents 0113).
     sa.Index("ix_registry_skills_team_owner", "tenant_id", "team_id", "owner_team"),

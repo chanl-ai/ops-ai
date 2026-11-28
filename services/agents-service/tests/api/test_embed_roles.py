@@ -9,8 +9,8 @@ from collections.abc import AsyncIterator
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 
+from tests.conftest import scripted_model
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER
 
 from .role_app import ok, role_app
@@ -21,7 +21,7 @@ EMBED = {"name": "Intranet help", "agentId": AGENT, "origins": ["https://intrane
 
 @pytest.fixture
 async def c() -> AsyncIterator[AsyncClient]:
-    async with role_app(TestModel()) as client:
+    async with role_app(scripted_model()) as client:
         yield client
 
 

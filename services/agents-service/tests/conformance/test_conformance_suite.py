@@ -21,9 +21,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from ops_agent_kernel.contract import ModelEndpoint
+from ops_agent_kernel.testing import Answer
 from ops_agents.activities import gateway as gw
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
@@ -37,9 +37,10 @@ from ops_agents.store.leases import Leases
 from ops_checkpointer import LeaseSupersededError
 from ops_policy import input_hash
 from ops_service_kit import narrow
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
-from tests.conftest import FakeGraphModels, fixture_knowledge, scripted, scripted_stream, sse_events
+from tests.conftest import FakeGraphModels, fixture_knowledge, model_on, scripted, sse_events
 from tests.gateway.conftest import REVIEW_KEY, SEED, Gateway, engine, gateway, gateway_db_url
 
 __all__ = ["engine", "gateway", "gateway_db_url"]  # pytest fixtures, used by name
@@ -54,19 +55,12 @@ class Counter:
 
     calls: int = 0
 
-    def model(self) -> FunctionModel:
-        def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    def model(self) -> ModelEndpoint:
+        def turn(messages: list[Json], tools: list[Json]) -> Answer:
             self.calls += 1
-            return scripted(messages, info)
+            return scripted(messages, tools)
 
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            self.calls += 1
-            async for chunk in scripted_stream(messages, info):
-                yield chunk
-
-        return FunctionModel(turn, stream_function=stream)
+        return model_on(turn)
 
 
 @dataclass
@@ -363,8 +357,9 @@ async def test_an_agent_interrupt_survives_a_restart_and_resumes_the_same_call(g
         assert a.model.calls - before == 1  # only the closing answer; the approved call is not asked for again
 
 
-# 12a. Agent activity retried after a crash repeats model or tool calls.
-async def crash_after_the_resume_turn(adapter: Adapter, monkeypatch: pytest.MonkeyPatch) -> tuple[str, int]:
+# 12a. Agent activity retried after a crash repeats tool calls. A repeated model call is answered from models-service's
+# replay record (tests/engine/test_model_replay.py).
+async def crash_after_the_resume_turn(adapter: Adapter, monkeypatch: pytest.MonkeyPatch) -> str:
     """The worker dies after the resumed kernel turn has run the approved tool, before the node's checkpoint.
     E2's sweeper continues the thread, so the resume node runs again from its start."""
     tid = await wire_waiting(adapter)
@@ -379,28 +374,20 @@ async def crash_after_the_resume_turn(adapter: Adapter, monkeypatch: pytest.Monk
         return result
 
     monkeypatch.setattr("ops_agents.graphs.agent_wrapper.kernel_turn", turn_then_die)
-    before = adapter.model.calls
     await second_approval(adapter, tid)
     assert (await adapter.last_run(tid))["status"] == "error"
     assert await recover(adapter.rt, tid, (await adapter.runs(tid))[-1]["runId"]) is not None
-    return tid, adapter.model.calls - before
+    return tid
 
 
 async def test_an_agent_retry_after_a_crash_repeats_no_tool_call(
     adapter: Adapter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    tid, _ = await crash_after_the_resume_turn(adapter, monkeypatch)
+    tid = await crash_after_the_resume_turn(adapter, monkeypatch)
     assert [(t, o) for t, _, o in await adapter.effects(tid)] == [
         ("place_wire_hold", "ok"),
         ("place_wire_hold", "replayed"),
     ]
-
-
-async def test_an_agent_retry_after_a_crash_repeats_no_model_call(
-    adapter: Adapter, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, model_calls = await crash_after_the_resume_turn(adapter, monkeypatch)
-    assert model_calls == 1
 
 
 # 13. R9 cancels an in-flight write.

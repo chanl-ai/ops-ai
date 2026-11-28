@@ -1,12 +1,14 @@
 """uc-085 an agent keeps its guardrails, api layer: docs/usecases/agents-service/agent-guardrails-blocked-topics.md.
 
-The banker demo stack (fake OpenAI behind models-service). Each model request a turn makes is a row in
-model_call_records with its response; a classification is the `final_result` call, an answer is text, so "the
-answering model was never called" is read from what the model returned rather than from the reply alone."""
+The banker demo stack (fake OpenAI behind models-service). models-service keeps each answered model request of a
+turn under its replay key (`turn:<thread>:<task>`) in model_replays; a classification is the `final_result` call, an
+answer is text, so "the answering model was never called" is read from what the model returned rather than from the
+reply alone."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Any
 
@@ -30,15 +32,16 @@ def model_calls(tid: str) -> list[str]:
     async def go() -> list[Any]:
         engine = create_async_engine(pg_url())
         async with engine.connect() as c:
-            q = sa.text("select response from model_call_records where thread_id = :t order by created_at")
-            rows = (await c.execute(q, {"t": tid})).scalars().all()
+            q = sa.text("select response from model_replays where replay_key like :k order by created_at")
+            rows = (await c.execute(q, {"k": f"turn:{tid}:%"})).scalars().all()
         await engine.dispose()
         return list(rows)
 
     out: list[str] = []
     for r in asyncio.run(go()):
-        parts = r.get("parts") or []
-        out.append("classify" if any(p.get("tool_name") == "final_result" for p in parts) else "answer")
+        calls = json.loads(r).get("tool_calls") or []
+        named = {str(c.get("name") or (c.get("function") or {}).get("name")) for c in calls}
+        out.append("classify" if "final_result" in named else "answer")
     return out
 
 

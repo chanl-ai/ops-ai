@@ -1,0 +1,431 @@
+# JSON Schema (draft 2020-12) for the agent spec file, apiVersion ops.ai/v2, written as YAML.
+# Status: proposed design, 2026-11-26. The service owns the model; this file is generated from it once built.
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ops.ai/schemas/agent-spec/v2
+title: Agent spec
+type: object
+additionalProperties: false
+required: [apiVersion, name, role]
+properties:
+  apiVersion:
+    const: ops.ai/v2
+  id:
+    description: The agent's id. Left out in a file that creates an agent; set by export.
+    type: string
+    pattern: "^ag_[a-z0-9_]{1,60}$"
+  name:
+    type: string
+    minLength: 1
+    maxLength: 80
+  role:
+    description: What the agent is for, in one or two sentences. Helper agents are chosen by this text.
+    type: string
+    minLength: 1
+    maxLength: 400
+  instructions:
+    description: What the agent is told, as one text. Use either this or brief.
+    type: string
+    maxLength: 40000
+  brief:
+    description: The instructions as headed sections, as the console edits them.
+    type: object
+    additionalProperties: false
+    properties:
+      sections:
+        type: array
+        maxItems: 20
+        items:
+          type: object
+          additionalProperties: false
+          required: [heading, text]
+          properties:
+            heading: { type: string, minLength: 1, maxLength: 80 }
+            text: { type: string, maxLength: 8000 }
+  promptMode:
+    enum: [brief, full]
+  model:
+    description: A model alias. The model gateway picks the provider.
+    type: string
+    maxLength: 120
+  modelSettings:
+    description: Settings the alias allows, such as temperature. fallback names a second alias used when the first fails.
+    type: object
+    maxProperties: 12
+    propertyNames: { pattern: "^[a-z][a-zA-Z0-9_]{0,39}$" }
+    additionalProperties:
+      anyOf:
+        - { type: number }
+        - { type: string, maxLength: 120 }
+  channels:
+    type: array
+    uniqueItems: true
+    items: { enum: [voice, chat, email, api] }
+  toolIds:
+    type: array
+    uniqueItems: true
+    maxItems: 200
+    items: { type: string, pattern: "^[a-z0-9_]+(\\.[a-z0-9_]+)+$" }
+  collections:
+    description: Knowledge bases the agent may search.
+    type: array
+    uniqueItems: true
+    items: { type: string, pattern: "^kb_[a-z0-9_]+$" }
+  allTeamKnowledgeBases:
+    type: boolean
+    default: false
+  skills:
+    type: array
+    maxItems: 50
+    items:
+      anyOf:
+        - { type: string, pattern: "^sk_[a-z0-9_]+$" }
+        - type: object
+          additionalProperties: false
+          required: [id]
+          properties:
+            id: { type: string, pattern: "^sk_[a-z0-9_]+$" }
+            version: { type: integer, minimum: 1 }
+  skillMenu:
+    enum: [team, attached, "off"]
+    default: team
+  accounts:
+    description: Which account of an app the agent uses, by app id.
+    type: object
+    maxProperties: 20
+    additionalProperties: { type: string, minLength: 1, maxLength: 200 }
+  guardrails:
+    description: Blocked-topic guardrail records, by id. A version pins one; left out, the newest published one is used.
+    type: array
+    maxItems: 50
+    items:
+      anyOf:
+        - { type: string, pattern: "^gr_[a-z0-9_]+$" }
+        - type: object
+          additionalProperties: false
+          required: [id]
+          properties:
+            id: { type: string, pattern: "^gr_[a-z0-9_]+$" }
+            version: { type: integer, minimum: 1 }
+            enabled: { type: boolean, default: true }
+  privacy:
+    type: object
+    additionalProperties: false
+    properties:
+      maskPersonalData: { type: boolean, default: true }
+  whenUnsure:
+    enum: [handoff, ask, decline]
+    default: handoff
+  memory:
+    type: object
+    additionalProperties: false
+    properties:
+      enabled: { type: boolean, default: true }
+      kinds:
+        type: array
+        uniqueItems: true
+        items: { enum: [fact, preference, episode] }
+  widgets:
+    type: object
+    additionalProperties: false
+    properties:
+      pins:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: [id]
+          properties:
+            id: { type: string }
+            version: { type: integer, minimum: 1 }
+      compose: { type: boolean, default: false }
+      perTurn: { type: integer, minimum: 0, maximum: 10 }
+  limits:
+    type: object
+    additionalProperties: false
+    properties:
+      budget:
+        description: US dollars per conversation. A caller may lower the default, never pass the ceiling.
+        type: object
+        additionalProperties: false
+        required: [ceilingUsd]
+        properties:
+          defaultUsd: { type: number, exclusiveMinimum: 0 }
+          ceilingUsd: { type: number, exclusiveMinimum: 0 }
+      allowedModels:
+        type: array
+        items: { type: string }
+      temperature:
+        type: object
+        additionalProperties: false
+        properties:
+          min: { type: number, minimum: 0 }
+          max: { type: number, maximum: 2 }
+      allowedKnowledgeBaseIds:
+        type: array
+        items: { type: string }
+      switchableToolIds:
+        type: array
+        items: { type: string }
+      callersMayAddInstructions: { type: boolean, default: false }
+  loop:
+    description: How the agent works. Left out, it is automatic.
+    oneOf:
+      - $ref: "#/$defs/loopAuto"
+      - $ref: "#/$defs/loopSingle"
+      - $ref: "#/$defs/loopPlanExecute"
+      - $ref: "#/$defs/loopSupervisor"
+      - $ref: "#/$defs/loopSwarm"
+      - $ref: "#/$defs/loopWorkflow"
+      - $ref: "#/$defs/loopEvaluator"
+      - $ref: "#/$defs/loopLongRunning"
+  agents:
+    description: Helper agents. Each must be a published agent of the same team.
+    type: array
+    maxItems: 12
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, use]
+      properties:
+        id: { type: string, pattern: "^ag_[a-z0-9_]{1,60}$" }
+        use: { enum: [tool, handoff] }
+        version: { type: integer, minimum: 1 }
+  sandbox:
+    description: A workspace for code and files. Release 1.5.0.
+    type: object
+    additionalProperties: false
+    required: [image]
+    properties:
+      image: { type: string, pattern: "^[a-z0-9][a-z0-9-]{0,62}$" }
+      size: { enum: [small, standard, large], default: standard }
+      limits:
+        type: object
+        additionalProperties: false
+        properties:
+          commandMinutes: { type: number, exclusiveMinimum: 0, maximum: 120 }
+          idleMinutes: { type: number, exclusiveMinimum: 0, maximum: 120 }
+      network:
+        type: object
+        additionalProperties: false
+        properties:
+          allow:
+            description: Hosts the workspace may reach. Each must also be on the tenant's egress list.
+            type: array
+            uniqueItems: true
+            maxItems: 50
+            items: { type: string, format: hostname }
+      secrets:
+        description: Secret names added at the exit gate for the allowed hosts. Never visible inside the workspace.
+        type: array
+        uniqueItems: true
+        maxItems: 20
+        items:
+          anyOf:
+            - { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" }
+            - type: object
+              additionalProperties: false
+              required: [name, hosts]
+              properties:
+                name: { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" }
+                hosts:
+                  type: array
+                  minItems: 1
+                  items: { type: string, format: hostname }
+      approve:
+        type: array
+        uniqueItems: true
+        description: >-
+          Extra approvals. Network grants for any request that is not a read, and every save of a file out of the
+          workspace, always need approval and cannot be switched off here.
+        items: { enum: [delete_files, install_packages, network_read] }
+      files:
+        description: Files placed in every new workspace.
+        type: array
+        maxItems: 50
+        items:
+          type: object
+          additionalProperties: false
+          required: [path]
+          oneOf:
+            - required: [from]
+            - required: [fileId]
+          properties:
+            path: { type: string, pattern: "^[^/\\\\][^\\\\]{0,254}$" }
+            from: { type: string, description: "A local path, read by the command line when the file is applied." }
+            fileId: { type: string, description: "A file in the team's Files. This is what the server stores." }
+  hooks:
+    description: Named policies run at fixed moments. A policy is a record a security admin writes.
+    type: object
+    additionalProperties: false
+    properties:
+      beforeModel: { $ref: "#/$defs/policyIds" }
+      afterModel: { $ref: "#/$defs/policyIds" }
+      beforeTool: { $ref: "#/$defs/policyIds" }
+      afterTool: { $ref: "#/$defs/policyIds" }
+  output:
+    type: object
+    additionalProperties: false
+    properties:
+      schema:
+        description: A JSON Schema the final answer must match.
+        type: object
+      rubric:
+        description: A quality bar in words. A second model scores each answer against it.
+        type: string
+        maxLength: 2000
+      judge: { type: string, description: "The model alias that scores. Default: judge." }
+      maxRounds: { type: integer, minimum: 1, maximum: 5, default: 2 }
+  evals:
+    type: object
+    additionalProperties: false
+    properties:
+      gate:
+        type: object
+        additionalProperties: false
+        properties:
+          passRate: { type: number, minimum: 0, maximum: 1 }
+      repeat: { type: integer, minimum: 1, maximum: 5, default: 1 }
+      cases:
+        type: array
+        maxItems: 200
+        items: { $ref: "#/$defs/evalCase" }
+$defs:
+  policyIds:
+    type: array
+    uniqueItems: true
+    maxItems: 10
+    items: { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" }
+  loopCommon:
+    type: object
+    properties:
+      maxSteps: { type: integer, minimum: 1, maximum: 100 }
+      maxToolCalls: { type: integer, minimum: 1, maximum: 200 }
+      parallelReads: { type: boolean, default: true }
+  loopAuto:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind]
+    properties:
+      kind: { const: auto }
+      replans: { type: integer, minimum: 0, maximum: 5, default: 2 }
+  loopSingle:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind]
+    properties:
+      kind: { const: single }
+  loopPlanExecute:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind]
+    properties:
+      kind: { const: plan_execute }
+      replans: { type: integer, minimum: 0, maximum: 5, default: 2 }
+      showPlan: { type: boolean, default: true }
+      reviewPlan: { type: boolean, default: false, description: "Wait for a person to accept the plan before any step." }
+  loopSupervisor:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind]
+    properties:
+      kind: { const: supervisor }
+  loopSwarm:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind]
+    properties:
+      kind: { const: swarm }
+      maxHandoffs: { type: integer, minimum: 1, maximum: 20, default: 4 }
+  loopWorkflow:
+    type: object
+    unevaluatedProperties: false
+    required: [kind, workflow]
+    properties:
+      kind: { const: workflow }
+      workflow: { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" }
+      input:
+        type: object
+        additionalProperties: { type: string }
+  loopEvaluator:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind, rubric]
+    properties:
+      kind: { const: evaluator }
+      rubric: { type: string, minLength: 1, maxLength: 2000 }
+      judge: { type: string }
+      maxRounds: { type: integer, minimum: 1, maximum: 5, default: 2 }
+  loopLongRunning:
+    type: object
+    unevaluatedProperties: false
+    allOf: [{ $ref: "#/$defs/loopCommon" }]
+    required: [kind]
+    properties:
+      kind: { const: long_running }
+      maxMinutes: { type: integer, minimum: 1, maximum: 720, default: 60 }
+      background: { type: boolean, default: false }
+  evalCase:
+    type: object
+    additionalProperties: false
+    required: [name, say]
+    properties:
+      name: { type: string, minLength: 1, maxLength: 80 }
+      say: { type: string, minLength: 1, maxLength: 8000 }
+      context:
+        type: object
+        additionalProperties: false
+        properties:
+          collections:
+            type: array
+            items: { type: string }
+      expect:
+        type: object
+        additionalProperties: false
+        properties:
+          calls:
+            description: Tools the reply must call.
+            type: array
+            items: { type: string }
+          notCalls:
+            type: array
+            items: { type: string }
+          contains:
+            description: Texts the reply must contain.
+            type: array
+            items: { type: string }
+          refuses: { type: boolean }
+          output:
+            description: Fields the typed answer must carry with these values.
+            type: object
+          mode:
+            description: Modes that are acceptable for this request, alone or together.
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items: { enum: [direct, plan, helpers, sandbox] }
+          handoff: { type: string, description: "The agent the conversation must be handed to." }
+          pausesFor: { enum: [approval, question, plan_review] }
+          pausesOn:
+            description: Tools whose call the reply must pause on, with nothing sent.
+            type: array
+            items: { type: string }
+          files:
+            description: Files the sandbox workspace must hold after the reply.
+            type: array
+            maxItems: 10
+            items:
+              type: object
+              additionalProperties: false
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1, maxLength: 400 }
+                contains: { type: string, maxLength: 400 }
+          maxCostUsd: { type: number, exclusiveMinimum: 0 }
+          maxSeconds: { type: number, exclusiveMinimum: 0 }
+          rubric: { type: string, description: "Scored by the judge model." }

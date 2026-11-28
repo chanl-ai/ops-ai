@@ -47,6 +47,26 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/research/node-sdk-and-forms.md` | Prior art: how workflow tools define nodes, settings forms, credentials, triggers and versions; a recommended Node SDK contract |
 | `design/research/forge-workflow-study.md` | A study of an open-source workflow engine on LangGraph, concern by concern |
 | `design/research/workflow-node-improvements.md` | Ten workflow node improvements compared across workflow products, with what is built since |
+| `design/agents-v2/runtime-contract-and-strands-loop.md` | Agents version 2: the contract between the runtime and the agent loop, Strands behind it, the event mapping, a pause saved and resumed on another server, and each kernel feature ported |
+| `design/agents-v2/model-gateway.md` | Agents version 2: the budget check and the model-call record moved into the model gateway, with cached tokens counted |
+| `design/agents-v2/agent-spec-file.md` | Agents version 2: the one versioned document that describes an agent, its fields, rules, schema and two worked examples |
+| `design/agents-v2/automatic-mode-and-loop-kinds.md` | Agents version 2: how an agent picks direct, plan, helpers or sandbox per request, the seven fixed loop kinds, and hand-overs |
+| `design/agents-v2/chat-builder.md` | Agents version 2: drafting a whole agent spec from a description, approved section by section |
+| `design/agents-v2/tool-gateway.md` | Agents version 2: the tool gateway's tool-server client additions, web search and page fetch |
+| `design/agents-v2/sandbox-service.md` | Agents version 2: one sandbox per conversation, files kept and restored, the exit gate, limits, approvals and the backend port |
+| `design/agents-v2/sandbox-backend-sprites.md` | Agents version 2: running sandboxes on Fly Sprites for hosted tenants |
+| `design/agents-v2/sandbox-backend-docker.md` | Agents version 2: running sandboxes as sealed Docker containers for a small install |
+| `design/agents-v2/sandbox-backend-kubernetes.md` | Agents version 2: running sandboxes as pods with gVisor or small virtual machines in an enterprise's cluster |
+| `design/agents-v2/workflow-teams-and-human-tasks.md` | Agents version 2: teams drawn on the workflow canvas as connected agents and roles, shared notes, human tasks and undo steps |
+| `design/agents-v2/workflow-durability.md` | Agents version 2: rebuilding a run from its journal, run budgets, an agent step that pauses, and the SQL Server statements left to port |
+| `design/agents-v2/evals.md` | Agents version 2: eval checks for the new agent behaviour, the publish gate and team tests |
+| `design/agents-v2/api.md` | Agents version 2: every route the three releases add, change or remove |
+| `design/agents-v2/sdk.md` | Agents version 2: the Python and TypeScript SDK methods and typed errors |
+| `design/agents-v2/cli.md` | Agents version 2: the command line's new commands and exit codes |
+| `design/agents-v2/console-screens.md` | Agents version 2: the nine console screens, their states and the component each region uses |
+| `design/agents-v2/coding-guide.md` | Agents version 2: where code goes, how each protection is enforced and tested, and what never to do |
+| `design/agents-v2/experiments.md` | Agents version 2: fifteen experiments, each with a pass line, the build step it gates and a fallback |
+| `design/agents-v2/README.md` | Agents version 2: the mission, the map of specs, the release split, build order and done-when per release |
 
 ## How the docs site shows a page
 
@@ -172,7 +192,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/decisions/prompt-management.md` | Superseded 2026-10-08: shared text is an always-on skill (spec 11). Instructions stay on agent versions; no external prompt registry in phase 1 |
 | `architecture/decisions/assurance.md` | Governance and testing as one system: one asset lifecycle, one Reviews queue with tier-set approval properties, one eval primitive with calibrated judges, one evidence bundle the model inventory reads |
 | `architecture/decisions/auth-provider-seam.md` | Human sign-in: one AuthProvider seam with mock, oidc and firebase adapters; policy from the API |
-| `architecture/decisions/agent-loop-library.md` | Agent loop library scored; Pydantic AI for Python, AI SDK for TypeScript |
+| `architecture/decisions/agent-loop-library.md` | Agent loop library scored (superseded for Python: the kernel runs on Strands) |
 | `architecture/decisions/execution-engine-seam.md` | Engine seam: Temporal preferred where allowed, LangGraph on PostgreSQL built first, one conformance suite |
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |
@@ -609,6 +629,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-builder-validates-applies-and-test.md` | uc-623: A builder validates, applies and test-runs the three-node workflow |
 | `usecases/agents-service/a-builder-reads-why-a-test-run-failed.md` | uc-workflows-2: A builder reads why a test run failed, at the API, the SDK and the CLI |
 | `usecases/agents-service/an-agents-tools-are-chosen-by-app.md` | uc-agents-1: An agent's tools are chosen by app, at the API and in the console |
+| `usecases/agents-service/an-agent-is-applied-from-a-spec-file.md` | uc-agents-2: An agent is applied from a spec file and read back the same, at the API |
 | `usecases/agents-service/a-builder-runs-the-two-composition.md` | uc-624: A builder runs the two composition Examples |
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |

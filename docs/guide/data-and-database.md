@@ -81,7 +81,7 @@ the keys that pay for each call.*
 | Service | What it keeps |
 |---|---|
 | platform | Your organisation, teams, people, roles and team policies. Sessions and API keys. Sign-in providers, verified domains and password hashes. The audit log |
-| agents | Agents, workflows, skills, guardrails, widgets and their versions, and publish requests. Runs, steps and the work queue. Chat threads and saved run state. Reviews, decisions and timers. Cases, case types and task types. Mailboxes and channel ledgers. Budgets, agent memories and the model call record |
+| agents | Agents, workflows, skills, guardrails, widgets and their versions, and publish requests. Runs, steps and the work queue. Chat threads and saved run state. Reviews, decisions and timers. Cases, case types and task types. Mailboxes and channel ledgers. Agent memories |
 | tools | Tool modules, their operations and versions. Connections and their sign-in tokens. Credentials. The outbound allow-list. Mock answers for tests, rate windows and sending policies. The call log |
 | models | Provider connections, aliases and their versions, model keys with budgets and spend, and the call log (metadata only) |
 | kb | Knowledge bases, their sources, items and versions, searchable chunks and ingestion runs |

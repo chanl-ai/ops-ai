@@ -25,7 +25,7 @@ Status: passing. Id: `uc-085`. Service: `agents-service`. Layers: api, ui.
 Step 3 asks about a customer rather than the wire fee in the spec: the advisor answers fee questions only with the
 policy knowledge base, which the demo wires to `ag_policy`; the customer question is the advisor's own path.
 
-Model calls are read from `model_call_records` by thread: a classification is the response calling `final_result`,
+Model calls are read from models-service's `model_replays` by the turn's replay key (`turn:<thread>:`): a classification is the response calling `final_result`,
 anything else is the answering model.
 
 ## Acceptance layers

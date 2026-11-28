@@ -5,20 +5,17 @@ plan left open, and a plan an earlier turn left open forgotten by the next."""
 from __future__ import annotations
 
 import copy
-import json
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
 from ops_agent_kernel import plan as planner
 from ops_agent_kernel import steps as skill_steps
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import ToolOutput, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.steps import SkillProgram
+from ops_agent_kernel.testing import Answer, Reply, ToolCall, system_text
 from ops_agent_kernel.types import (
     AgentSettings,
     Interrupt,
@@ -39,7 +36,7 @@ from ops_contracts.chat import ChatMessage
 from ops_contracts.skill_run import SkillRunState
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import json_list, json_object
-from tests.conftest import SEED
+from tests.conftest import SEED, model_on
 
 READ = ToolGrant(
     "find_cases", "Ops AI", "Find cases", "read", {"type": "object", "properties": {"q": {"type": "string"}}}
@@ -63,8 +60,8 @@ def plan_args(*statuses: str, title: str = "t") -> Json:
     return {"title": title, "steps": step_args(*statuses)}
 
 
-def plan_call(*statuses: str, **more: Any) -> ToolCallPart:
-    return ToolCallPart("plan", {"title": "Check the loan files", "steps": step_args(*statuses), **more})
+def plan_call(*statuses: str, **more: Any) -> ToolCall:
+    return ToolCall("plan", {"title": "Check the loan files", "steps": step_args(*statuses), **more})
 
 
 class Reads:
@@ -81,28 +78,18 @@ class NoKnowledge:
         return []
 
 
-def scripted(*responses: list[Any] | str) -> tuple[FunctionModel, list[str]]:
+def scripted(*responses: list[ToolCall] | str) -> tuple[ModelEndpoint, list[str]]:
     """A model that answers each request with the next response: a list of tool calls, or text. Records the system
     instructions it was sent."""
     queue = list(responses)
     seen: list[str] = []
 
-    def next_parts(info: AgentInfo) -> list[Any]:
-        seen.append(str(info.instructions or ""))
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        seen.append(system_text(messages))
         r = queue.pop(0) if queue else "Done."
-        return [TextPart(r)] if isinstance(r, str) else r
+        return r if isinstance(r, str) else Reply(tool_calls=r)
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return ModelResponse(parts=next_parts(info))
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        parts = next_parts(info)
-        if isinstance(parts[0], TextPart):
-            yield parts[0].content
-        else:
-            yield {i: DeltaToolCall(name=p.tool_name, json_args=json.dumps(p.args)) for i, p in enumerate(parts)}
-
-    return FunctionModel(respond, stream_function=stream), seen
+    return model_on(script), seen
 
 
 def rows(part: JsonValue) -> list[Json]:
@@ -114,14 +101,14 @@ def hint_title(part: JsonValue) -> JsonValue:
     return json_object(json_object(part)["hint"])["title"]
 
 
-async def run(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[Any]]:
+async def run(model: ModelEndpoint, req: TurnRequest) -> tuple[TurnResult, list[Any]]:
     events = [e async for e in run_turn(req, KernelPorts(model=model, tools=Reads(), knowledge=NoKnowledge()))]
     last = events[-1]
     assert isinstance(last, TurnFinished)
     return last.result, events
 
 
-async def plans(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[Json]]:
+async def plans(model: ModelEndpoint, req: TurnRequest) -> tuple[TurnResult, list[Json]]:
     """The turn's result and each plan part as it was drawn: an event's record changes after it is sent."""
     drawn: list[Json] = []
     result: TurnResult | None = None
@@ -158,8 +145,8 @@ def test_a_step_title_is_masked_as_reply_text_is() -> None:
 async def test_the_plan_ticks_itself_each_step_gets_its_own_budget_and_the_done_plan_reads_did_n_steps() -> None:
     # A plan's second step read nothing (the first had spent the turn's one call), and every tick cost a model step.
     model, seen = scripted(
-        [plan_call("doing", "todo", "todo"), ToolCallPart("find_cases", {"q": "open conditions"})],
-        [ToolCallPart("find_cases", {"q": "renewals"})],
+        [plan_call("doing", "todo", "todo"), ToolCall("find_cases", {"q": "open conditions"})],
+        [ToolCall("find_cases", {"q": "renewals"})],
         "Two files have open conditions and a renewal this month.",
     )
     result, drawn = await plans(model, TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?"))
@@ -180,7 +167,7 @@ class NeedsSignIn:
 
 async def test_a_turn_stopped_by_a_sign_in_marks_the_step_blocked() -> None:
     model, _ = scripted(
-        [plan_call("doing", "todo", "todo"), ToolCallPart("find_cases", {"q": "open conditions"})],
+        [plan_call("doing", "todo", "todo"), ToolCall("find_cases", {"q": "open conditions"})],
         "Connect Salesforce to go on.",
     )
     req = TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?")
@@ -196,7 +183,7 @@ async def test_a_turn_stopped_by_a_sign_in_marks_the_step_blocked() -> None:
 async def test_an_answer_with_nothing_waiting_finishes_the_plan() -> None:
     # A complete answer left its last step drawn as blocked, because the model made no plan call after the last read.
     model, _ = scripted(
-        [plan_call("done", "done", "doing"), ToolCallPart("find_cases", {"q": "renewals"})],
+        [plan_call("done", "done", "doing"), ToolCall("find_cases", {"q": "renewals"})],
         "Two files have open conditions.",
     )
     _, events = await run(model, TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?"))
@@ -207,7 +194,7 @@ async def test_an_answer_with_nothing_waiting_finishes_the_plan() -> None:
 async def test_a_plan_left_open_goes_on_at_its_blocked_step_in_two_model_calls() -> None:
     # After a sign-in the resumed plan took seven model calls: plan updates in steps of their own around two reads.
     carried = plan_args("done", "blocked", "todo", title="Check the loan files")
-    model, seen = scripted([ToolCallPart("find_cases", {"q": "renewals"})], "Finished.")
+    model, seen = scripted([ToolCall("find_cases", {"q": "renewals"})], "Finished.")
     req = TurnRequest(
         "t2", "r2", SETTINGS, [READ], user_turn="I connected Salesforce. Please go ahead.", carried_plan=carried
     )

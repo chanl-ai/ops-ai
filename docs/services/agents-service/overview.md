@@ -17,7 +17,7 @@ credentials of its own.
 | Code | `services/agents-service` (`ops_agents`), with `ops_agent_kernel` (chat turns), `ops_engine` (workflow runs), `ops_checkpointer` (LangGraph state), `ops_service_kit` and `contracts` |
 | Database | Own migration chain (`services/agents-service/migrations`, the default `alembic_version` table). Its store modules and the tables each defines are listed in the generated [inventory](../../architecture/data.md#inventory); it also creates the `ops_engine` tables (`engine_definitions`, `engine_runs`, `engine_steps`, `engine_work`, `engine_waits`) and the checkpointer's (`ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences`) |
 | Isolation | Every transaction runs as `ops_runtime_tenant` (`services/agents-service/src/ops_agents/store/tenancy.py:35`), the role the checkpointer's row-level security uses too (`packages/ops_checkpointer/src/ops_checkpointer/saver.py:57`); the team policy on every team-owned table is checked by `scripts/tests/test_team_boundary.py` |
-| Secrets it holds | Its model key for models-service (`OPS_MODELS_KEY`), or a provider key on the direct path; the HMAC key that signs approval tokens (`OPS_REVIEW_KEY`, shared with tools-service, whose OPA verifies them); its service signing key. Widget mint keys, which a bank's server uses to start widget chats, are stored as a SHA-256 of the secret only (`services/agents-service/src/ops_agents/store/widget_keys.py`). No system's credentials: mailbox passwords and app accounts stay in tools-service |
+| Secrets it holds | Its model key for models-service (`OPS_MODELS_KEY`), or a provider key on the direct path; the HMAC key that signs its step-up, widget-session and resume-link tokens (`OPS_SESSION_TOKEN_KEY`, held by no other service). It holds no key that signs approvals: it asks the gateway (`POST /v1/approvals`), which decides the call again and mints; its service signing key. Widget mint keys, which a bank's server uses to start widget chats, are stored as a SHA-256 of the secret only (`services/agents-service/src/ops_agents/store/widget_keys.py`). No system's credentials: mailbox passwords and app accounts stay in tools-service |
 | Calls out to | tools-service (`POST /v1/calls` for every tool call, grantable operations, mailbox reads); models-service (every turn and AI step); kb-service (grounding and the knowledge tools); files-service and documents-service (attachments and Extract from file); platform-service (people's names, API key summaries, policies, acting-for tokens) (`scripts/stack.sh:132`) |
 | Called by | The console, the embed app, the SDK and CLI; tools-service (`GET /v1/workflow-refs`, `POST /v1/publish-requests`); platform-service (`GET /v1/teams/usage`) |
 | Events it receives | `POST /v1/events` from tools-service, files-service, documents-service and kb-service, each limited to the names it owns (`EVENT_OWNERS`, `services/agents-service/src/ops_agents/api/service_events.py:145`), and `POST /v1/platform-events` from platform-service and tools-service (`team.created`, `policy.changed`, `api_key.changed`) |
@@ -98,7 +98,7 @@ State is saved after every node by the checkpointer, so a pause survives a resta
 | Tool gateway | `OPS_GATEWAY_URL` | none: tools then run in process from the fixture catalogue (unit tests only); the stack sets tools-service |
 | Seed directory | `OPS_SEED_DIR` | `services/agents-service/seed/` in dev; unset outside dev, so production starts empty. Tests name `tests/fixtures/seed/` |
 | Seeded agents | `OPS_AGENTS_SEED_FILE` | `chat_agents.json` in the seed directory |
-| Tool search (install flag `tool_search`) | `OPS_FLAGS` naming `tool_search`; `OPS_TOOL_SEARCH_ABOVE` | off. On, an agent with more granted tools than `OPS_TOOL_SEARCH_ABOVE` (default 20; 0 means always) is sent none of their schemas: each is `defer_loading` and pydantic-ai's tool search (`ops_agent_kernel/search.py` `strategy`, the same word scoring as `search_tools`) reveals the ones the model finds, which it then calls by their own name through the same approval, sign-in, budget and audit. A name outside the grants is recorded as a failed call with server `none` and nothing is sent (uc-610) |
+| Tool search (install flag `tool_search`) | `OPS_FLAGS` naming `tool_search`; `OPS_TOOL_SEARCH_ABOVE` | off. On, an agent with more granted tools than `OPS_TOOL_SEARCH_ABOVE` (default 20; 0 means always) is sent none of their schemas: the kernel's tool search (`ops_agent_kernel/search.py`, the same word scoring as `search_tools`) reveals the ones the model finds, which it then calls by their own name through the same approval, sign-in, budget and audit. A name outside the grants is recorded as a failed call with server `none` and nothing is sent (uc-610) |
 
 Values carry the `OPS_` prefix because a shared secret store may already define `DATABASE_URL` for another
 service. Without a model key the service starts, `/health` reports the missing key and sending a message returns 503.
@@ -382,6 +382,25 @@ reads. A thread that named one keeps its name, and a later turn tells the agent 
 | Reply usage | Each reply in a thread carries `usage`: model calls, tokens, cost and seconds, joined from the model call records and the run's start and finish. |
 | Who may decide | Every review step pauses for a click, also in a run started by someone who may decide it. A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide unless the team's two-person rule is on and they are not an Admin of the team, as the starter does. |
 | Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone; a stopping worker waits for it. |
+
+## An agent as a spec file
+
+The spec routes read and save an agent as one document ([agent spec file](../../design/agents-v2/agent-spec-file.md)),
+mapped onto the stored agent version, so the console's editor and a spec save read and refuse the same copy.
+
+| Route | Answers |
+|---|---|
+| `GET /v1/agents/{id}/spec` | The newest version (or `?version=`) as a document, with `version` and the stored version's `digest` |
+| `PUT /v1/agents/{id}/spec` | Saves a draft from `spec`, `baseVersion` and `baseDigest`; 422 `spec_invalid` with a JSON pointer per problem, 409 `stale_base`, 503 `dependency_unavailable` when a lookup cannot answer |
+| `POST /v1/agents/spec/validate` | `ok`, the problems and a summary, nothing saved |
+| `POST /v1/agents/{id}/spec/diff` | The changes against the newest draft or, with `against: live`, the published version |
+
+| Part | Detail |
+|---|---|
+| Mapping | `domain/agent_spec.py`: fields today's version holds (tools, knowledge, skills, guardrails, privacy, limits, memory, widgets) are written to its keys; `loop`, `agents`, `sandbox`, `hooks`, `output`, `evals`, `brief`, `promptMode` and `modelSettings.fallback` live only in the version's `specDocument` |
+| Read back as written | Each field is exported as written while the stored keys still match the digest taken at the save; a console edit of that field makes the export rebuild it from the stored keys |
+| Publish | Runs the spec's checks again, so a draft whose helper, skill or tool went after its save is refused (`cannot_publish`) |
+| Not checked | Hook policies, the sandbox's image, sizes, egress and secrets, and the team's budget policy cap: nothing records them yet |
 
 ## Microsoft 365 mailboxes
 

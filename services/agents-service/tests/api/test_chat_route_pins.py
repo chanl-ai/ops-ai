@@ -5,20 +5,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 from fastapi import FastAPI
-from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.types import Message
 
-from ops_agents.api.app import create_app
-from ops_service_kit.settings import Settings
-from tests.conftest import SEED, empty_engine, fixture_knowledge, scripted, scripted_stream, sse_events
+from ops_agent_kernel.testing import Answer
+from ops_service_kit.http import Json
+from tests.conftest import empty_engine, scripted, sse_events
+from tests.model_gateway import through_gateway
 
 from .test_reply_pins import FIXTURES, answer, compare
 
@@ -68,27 +65,10 @@ class HeldModel:
         self.engine, self.asked, self.held = engine, asyncio.Event(), asyncio.Event()
         self.go = asyncio.Event()
 
-    async def stream(
-        self, messages: list[ModelMessage], info: AgentInfo
-    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    async def answer(self, messages: list[Json], tools: list[Json]) -> Answer:
         self.asked.set()
         await self.go.wait()
-        async for piece in scripted_stream(messages, info):
-            yield piece
-
-    def model(self) -> FunctionModel:
-        return FunctionModel(scripted, stream_function=self.stream)
-
-
-def _app(engine: AsyncEngine, database_url: str, model: FunctionModel, graph_models: Any) -> FastAPI:
-    return create_app(
-        Settings(database_url=database_url, seed_dir=SEED),
-        model=model,
-        engine=engine,
-        checkpointer=InMemorySaver(),
-        graph_models=graph_models,
-        knowledge=fixture_knowledge(),
-    )
+        return scripted(messages, tools)
 
 
 async def _send_and_leave(app: FastAPI, thread_id: str, held: HeldModel) -> list[bytes]:
@@ -134,13 +114,11 @@ async def _send_and_leave(app: FastAPI, thread_id: str, held: HeldModel) -> list
 
 
 async def test_a_turn_finishes_and_is_counted_when_its_reader_leaves(database_url: str, graph_models: Any) -> None:
+    # Through the gateway in process: a reply's usage is read from the gateway's call log.
     async with empty_engine(database_url) as engine:
         held = HeldModel(engine)
-        app = _app(engine, database_url, held.model(), graph_models)
-        async with (
-            app.router.lifespan_context(app),
-            httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c,
-        ):
+        async with through_gateway(engine, graph_models, held.answer) as g:
+            app, c = g.app, g.client
             tid = (await c.post("/chat/threads", json=NEW)).json()["data"]["id"]
             await _send_and_leave(app, tid, held)
             held.go.set()

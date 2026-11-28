@@ -23,6 +23,7 @@ from ops_agents.api.child_runs import ChildRuns, acting_for
 from ops_agents.api.deps import Runtime
 from ops_agents.api.ops_tools import ops_assistant_id
 from ops_agents.api.run_person import person_of_thread
+from ops_agents.api.runs import config, pending, resolve
 from ops_agents.graphs.common import Asker
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
@@ -37,8 +38,9 @@ from ops_metering import Budget
 from ops_service_kit.settings import Settings
 from ops_store.isolation import scope
 from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
+from tests.conftest import SEED, FakeGraphModels, empty_engine, fixture_knowledge, scripted_model, sse_events
 from tests.engine.test_lifecycle_rights import TENANT, jwks, person
+from tests.model_gateway import through_gateway
 from tests.saves import save_agent
 
 URL = "/v1/chat/default-agent"
@@ -71,6 +73,18 @@ async def stack() -> AsyncIterator[Stack]:
         AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c,
     ):
         yield c, cast(Runtime, app.state.runtime)
+
+
+@pytest.fixture
+async def budget_stack(database_url: str) -> AsyncIterator[Stack]:
+    """`stack` with its model calls through the model gateway, which holds the chain's budget."""
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    auth = Auth(
+        Identity(audience="agents", jwks=jwks, introspect=introspect, key_cache_s=0),
+        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents"), scopes=settings.service_scopes),
+    )
+    async with empty_engine(database_url) as engine, through_gateway(engine, FakeGraphModels(), auth=auth) as g:
+        yield g.client, g.runtime
 
 
 def live(rt: Runtime, agent_id: str) -> Asker:
@@ -150,6 +164,9 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     events = await say(c, thread, 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}', VIEWER)
     ended = [e["call"] for e in events if e.get("type") == "tool_end"]
     assert [(t["name"], t["output"]["status"]) for t in ended] == [("agent__ag_dispute", "answered")], ended
+    # The person reads the helper being asked, then answering, named as the agents list names it.
+    asked = [(e["agentId"], e["status"], bool(e.get("summary"))) for e in events if e.get("type") == "agent_asked"]
+    assert asked == [("ag_dispute", "started", False), ("ag_dispute", "finished", True)], asked
     assert rt.graph_store is not None
     children = [
         t
@@ -280,8 +297,10 @@ async def test_an_asked_agent_asks_no_one_at_the_default_depth(stack: Stack) -> 
     assert not deeper.ok and deeper.output["code"] == "chain_too_deep", deeper.output
 
 
-async def test_a_guarded_agent_asked_at_the_cap_makes_no_model_call_for_its_guardrail_check(stack: Stack) -> None:
-    c, rt = stack
+async def test_a_guarded_agent_asked_at_the_cap_makes_no_model_call_for_its_guardrail_check(
+    budget_stack: Stack,
+) -> None:
+    c, rt = budget_stack
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     rule = {"name": "No investment advice", "topics": ["investment advice"], "message": "I can't advise on that."}
     made = await c.post("/v1/guardrails", json=rule, headers=ADMIN)
@@ -307,13 +326,17 @@ async def test_a_guarded_agent_asked_at_the_cap_makes_no_model_call_for_its_guar
     assert (asked["status"], asked.get("code"), spent) == ("budget_reached", "chain_budget_reached", 0), asked
 
 
-async def test_an_asked_agents_chain_is_the_same_after_an_approval_pause(stack: Stack) -> None:
-    c, rt = stack
+async def test_an_asked_agents_chain_is_the_same_after_an_approval_pause(budget_stack: Stack) -> None:
+    c, rt = budget_stack
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     thread = (await start(c, VIEWER))["id"]
     events = await say(c, thread, ask("ag_fraud", "Place a 24-hour hold on wire W-88213"), VIEWER)
     (asked,) = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
-    assert asked["status"] == "waiting_review", asked
+    assert asked["status"] == "awaiting_approval", asked
+    # The asking turn pauses on the helper's review; its interrupt names the helper's thread.
+    _, graph = await resolve(rt, thread)
+    (waiting,) = pending(await graph.aget_state(config(thread)))
+    asked = {"threadId": cast(dict[str, Any], waiting["payload"])["nested"]["threadId"]}
     assert rt.graph_store is not None and rt.usage is not None
     with tenant_scope(TENANT):
         before = await rt.graph_store.thread_row(asked["threadId"])
@@ -419,8 +442,8 @@ async def test_a_service_identity_is_offered_only_the_agents_its_scopes_reach(st
     assert offered == ["agent__ag_dispute"], offered
 
 
-async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent(stack: Stack) -> None:
-    c, rt = stack
+async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent(budget_stack: Stack) -> None:
+    c, rt = budget_stack
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     thread = (await start(c, VIEWER))["id"]
     assert rt.usage is not None
@@ -491,9 +514,9 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
 
 
 async def test_a_specialist_makes_no_model_call_past_the_chains_budget_and_the_asking_agent_closes_once(
-    stack: Stack,
+    budget_stack: Stack,
 ) -> None:
-    c, rt = stack
+    c, rt = budget_stack
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     thread = (await start(c, VIEWER))["id"]
     assert rt.usage is not None

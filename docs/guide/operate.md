@@ -24,7 +24,8 @@ unreadable.
 
 | Key | Steps |
 |---|---|
-| Approval key (`OPS_REVIEW_KEY`) | Set the new value for the agents and tools services and restart both. Approvals that are waiting must be given again |
+| Approval key (`OPS_REVIEW_KEY`) | Set the new value for the tools service and restart it. Approvals that are waiting must be given again |
+| Session-token key (`OPS_SESSION_TOKEN_KEY`) | Set the new value for the agents service and restart it and its worker. Open widget chats, step-ups and resume links are made again |
 | A service's signing key | Give the service a new key and key id. Add its public key to every other service's trusted list beside the old one, restart the other services, then restart the service itself. Finally remove the old key id and restart the others again |
 | Sign-in token key (`OPS_PLATFORM_SIGNING_KEY`) | Set a new key and key id and restart every service. People may need to sign in again |
 | Secrets key (`OPS_SECRETS_KEY`) | Avoid changing it for now. Changing it makes every stored credential unreadable, so each one must be entered again, and a rotation that re-encrypts them is planned |

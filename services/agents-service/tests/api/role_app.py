@@ -10,10 +10,10 @@ from typing import Any
 
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.models import Model
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
@@ -27,17 +27,21 @@ async def _no_keys(key: str) -> dict[str, Any] | None:
     return None
 
 
+def role_auth(settings: Settings) -> Auth:
+    return Auth(
+        Identity(audience="agents", jwks=jwks, introspect=_no_keys, key_cache_s=0),
+        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents")),
+    )
+
+
 @asynccontextmanager
-async def role_app(model: Model) -> AsyncGenerator[AsyncClient]:
+async def role_app(model: ModelEndpoint) -> AsyncGenerator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
         await c.run_sync(engine_metadata.create_all)
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
-    auth = Auth(
-        Identity(audience="agents", jwks=jwks, introspect=_no_keys, key_cache_s=0),
-        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents")),
-    )
+    auth = role_auth(settings)
     app = create_app(
         settings,
         model=model,

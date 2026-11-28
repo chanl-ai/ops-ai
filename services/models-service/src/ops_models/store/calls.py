@@ -176,11 +176,15 @@ class KeySpend(Store):
         *,
         untenanted: sa.Executable | None,
         once: bool = False,
+        rated: bool = True,
     ) -> bool:
         """Adds one call to its key's second, day and run, and writes the call's row here (`untenanted`) when it named
-        no tenant. With `once` (a replay's row, written if its id is not), False and nothing added when it was not."""
+        no tenant. With `once` (a replay's row, written if its id is not), False and nothing added when it was not.
+        A call not `rated` (a replayed answer, which reached no provider) skips the second the rate limit counts."""
         second = _second(now)
-        periods = {f"sec:{int(second.timestamp())}": second, f"day:{now.date().isoformat()}": second}
+        periods = {f"day:{now.date().isoformat()}": second}
+        if rated:
+            periods[f"sec:{int(second.timestamp())}"] = second
         if run_id:
             periods[f"run:{run_id}"] = second
         async with self.install_tx(KEY_SPEND, tables=(untenanted_calls, spend)) as c:
@@ -283,7 +287,10 @@ class CallLog(Store):
                     else untenanted_calls.insert().values(**values)
                 )
             run = str(run_id) if run_id else None
-            return await self.spend.record(str(row["key_id"]), cost, run, now, untenanted=untenanted, once=once)
+            rated = row.get("outcome") != "replayed"
+            return await self.spend.record(
+                str(row["key_id"]), cost, run, now, untenanted=untenanted, once=once, rated=rated
+            )
 
     async def totals(self, key_id: str, now: datetime, *, run_id: str | None = None) -> CapTotals:
         return await self.spend.totals(key_id, now, run_id=run_id)

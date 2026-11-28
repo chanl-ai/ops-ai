@@ -86,7 +86,7 @@ def normal_origin(value: str) -> str:
 
 
 def _signer(rt: Runtime) -> HmacSigner:
-    return HmacSigner.derived(rt.settings.review_key.get_secret_value(), "widget-session")
+    return HmacSigner.derived(rt.settings.session_token_key.get_secret_value(), "widget-session")
 
 
 def mint_session(rt: Runtime, deployment: Json, origin: str, person: Principal) -> str:

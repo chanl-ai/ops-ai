@@ -32,7 +32,7 @@ from ops_agents.domain.evals import TRIGGER_CLI, TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
@@ -230,6 +230,14 @@ class EvalCheckInput(In):
     text: str | None = None
     # What a `judge` check asks of the reply, in words; required for that type (422 rubric_required).
     rubric: str | None = None
+    # The checks for the new behaviour (domain/evals.py): output_matches' fields, mode_in's modes, pauses_for's kind,
+    # hands_to's agent, and within's limits.
+    fields: dict[str, JsonValue] | None = None
+    modes: list[Literal["direct", "plan", "helpers", "sandbox"]] | None = None
+    kind: Literal["approval", "question", "plan_review"] | None = None
+    agent: str | None = None
+    max_cost_usd: float | None = None
+    max_seconds: float | None = None
 
 
 class EvalCaseContextInput(In):
@@ -828,7 +836,14 @@ async def _publish_problems(rt: Runtime, row: AgentRow, version: int, spec: Json
     run as stored, and its evals (`eval_gate`). The check and the publish both read this list."""
     brief = cast(list[Json], agent_brief.publish_problems(spec))
     pins = cast(list[Json], await skill_pin_problems(rt, spec))
-    return [*brief, *pins, *await eval_gate.problems(rt, row, version)]
+    # The spec file's rules, read again now: a helper, skill or tool the draft named at its save may have gone since.
+    from .agent_spec import spec_problems  # noqa: PLC0415 - agent_spec imports this module's changeable
+
+    broken: list[Json] = [
+        {"kind": "spec_invalid", "message": f"{p.message} ({p.path or '/'}, {p.code})"}
+        for p in await spec_problems(rt, row, spec)
+    ]
+    return [*brief, *pins, *broken, *await eval_gate.problems(rt, row, version)]
 
 
 @router.get("/{agent_id}/prompt", response_model=Envelope[AgentPrompt])

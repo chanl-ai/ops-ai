@@ -1,6 +1,6 @@
-"""One agent turn on Pydantic AI (spec 15 section 4, ADR-0014).
+"""One agent turn on the Strands loop (spec 15 section 4, docs/design/agents-v2/runtime-contract-and-strands-loop.md).
 
-The library drives model steps; the kernel owns everything that crosses a boundary: context assembly, tool calls
+The loop drives model steps; the kernel owns everything that crosses a boundary: context assembly, tool calls
 through the executor port with idempotency keys, gated writes ending the turn as an `Interrupt`, and resuming from
 one. The agent object is built per turn and holds no state between turns.
 """
@@ -15,43 +15,6 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
 from jsonschema import Draft202012Validator
-from pydantic_ai import (
-    Agent,
-    DeferredToolRequests,
-    DeferredToolResults,
-    ModelRetry,
-    RunContext,
-    Tool,
-    ToolApproved,
-    ToolDenied,
-)
-from pydantic_ai.capabilities import ToolSearch
-from pydantic_ai.exceptions import (
-    ApprovalRequired,
-    ContentFilterError,
-    IncompleteToolCall,
-    ModelHTTPError,
-    UnexpectedModelBehavior,
-    UsageLimitExceeded,
-)
-from pydantic_ai.messages import (
-    FunctionToolCallEvent,
-    FunctionToolResultEvent,
-    ModelMessage,
-    ModelMessagesTypeAdapter,
-    ModelResponse,
-    PartDeltaEvent,
-    PartStartEvent,
-    RetryPromptPart,
-    TextPart,
-    TextPartDelta,
-    ToolCallPart,
-)
-from pydantic_ai.output import NativeOutput, StructuredDict
-from pydantic_ai.run import AgentRunResultEvent
-from pydantic_ai.settings import ModelSettings
-from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.usage import UsageLimits
 
 from ops_contracts.skill_run import SkillRunState, grant_token
 from ops_service_kit.http import Json, JsonList, JsonValue
@@ -59,7 +22,22 @@ from ops_service_kit.ids import action_id, input_hash
 from ops_service_kit.model_calls import CUT_OFF, FILTERED
 from ops_service_kit.narrow import json_object
 
-from . import answer_check, guard, judge, pii, present, prompt_writer, search, step_tools, steps, tool_cache
+from . import (
+    answer_check,
+    contract,
+    guard,
+    judge,
+    loop_kinds,
+    modes,
+    pii,
+    present,
+    prompt_writer,
+    search,
+    step_tools,
+    steps,
+    structured,
+    tool_cache,
+)
 from . import plan as planner
 from . import skills as skillset
 from .context import UnknownVariableError, assemble, cited_numbers
@@ -67,6 +45,8 @@ from .events import (
     CitationsReady,
     Interrupted,
     KernelEvent,
+    ModeChanged,
+    PlanChanged,
     SkillRunChanged,
     StatusChanged,
     TextDelta,
@@ -75,7 +55,8 @@ from .events import (
     ToolOutput,
     TurnFinished,
 )
-from .ports import BudgetReachedError, KernelPorts, KnowledgeUnavailableError, finishing
+from .ports import BudgetReachedError, KernelPorts, KnowledgeUnavailableError
+from .structured import BUDGET_CODES, refusal_code
 from .types import (
     BaseAnswer,
     CitationRef,
@@ -84,6 +65,7 @@ from .types import (
     GuardrailRef,
     Interrupt,
     LoadedSkill,
+    ModeName,
     Passage,
     PendingCall,
     Plan,
@@ -108,9 +90,7 @@ UNGRANTED = "none"
 KERNEL_TOOLS = (present.NAME, search.NAME, skillset.NAME, planner.NAME, *step_tools.NAMES)
 
 
-def refusal_code(body: object) -> str | None:
-    """The `code` of a refusal body, whether the client kept the whole envelope or only its `error` member."""
-    return _refusal_field(body, "code")
+__all__ = ["BUDGET_CODES", "refusal_code", "refusal_text", "run_turn"]
 
 
 def refusal_text(status: int, body: object) -> str:
@@ -127,10 +107,6 @@ def _refusal_field(body: object, name: str) -> str | None:
     inner = fields.get("error")
     value = inner.get(name) if isinstance(inner, dict) else fields.get(name)
     return str(value) if value else None
-
-
-def _args(part: ToolCallPart) -> Json:
-    return part.args_as_dict()
 
 
 @dataclass
@@ -175,12 +151,13 @@ class _TurnState:
     plan_call: str | None = None
     # The model steps (state.step) whose calls to a system succeeded: the plan ticks once each such step ends.
     read_steps: set[int] = field(default_factory=set[int])
-    # The loop's request limit, raised by max_steps each time a plan step is done, and the step count it stands at.
-    limits: UsageLimits | None = None
+    # The loop's request limit, raised by max_steps each time a plan step is done; 0 until the first raise.
     step_limit: int = 0
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
     builtins_refused: int | None = None
+    # Deferred tools a search found, offered from the next step on.
+    revealed: set[str] = field(default_factory=set[str])
     # Passages: the knowledge block's, then each a tool returned (search_knowledge), numbered on from the block's, so
     # the reply cites either with [n] and the chat draws each as a citation.
     passages: list[Passage] = field(default_factory=list[Passage])
@@ -216,8 +193,25 @@ class _TurnState:
     unstarted: str = ""
     # The model that decides a step's sentence check (judge.model_for), and the tokens its calls spent this turn,
     # added to the turn's usage where it finishes.
-    judge_model: Any = None
+    judge_model: contract.ModelEndpoint | None = None
     judge_spent: TokenUsage = field(default_factory=TokenUsage)
+    # The modes the turn named (modes.py), and whether a change was refused for want of a plan.
+    modes: modes.Modes = field(default_factory=lambda: modes.Modes(fixed=False))
+    plan_required: bool = False
+    # Calls refused for want of a plan: kept off the record and the stream; only the model is told.
+    unplanned: set[str] = field(default_factory=set[str])
+
+    def mode(self, name: ModeName, reason: str) -> None:
+        """Names `name` at its first use this turn; its event goes out with the call's result."""
+        if (named := self.modes.first(name, reason, max(self.step, 1))) is not None:
+            self.events.append(ModeChanged(named.mode, named.reason, named.fixed, named.at_step))
+
+    def plan_first(self, grant: ToolGrant) -> str | None:
+        """Why a change may not run yet: the kind plans and the turn has shown no plan."""
+        # Only while the plan tool is on offer: a skill's step names its own tool and offers nothing to plan with.
+        if self.plan is not None or planner.NAME not in self.grants or not self.free():
+            return None
+        return modes.PLAN_FIRST if modes.needs_plan(self.req.loop, grant) else None
 
     def drop_carried(self) -> None:
         """A skill loaded or started in this reply takes the place of the ones carried from earlier replies: one
@@ -295,6 +289,7 @@ class _TurnState:
         if waiting is None:
             return None
         at = self.position()
+        assert self.judge_model is not None
         verdict = await judge.verdict(self.judge_model, waiting.check, self._evidence(waiting, raw))
         u = self.judge_spent
         self.judge_spent = TokenUsage(
@@ -324,10 +319,12 @@ class _TurnState:
     def last_step(self, step: int) -> bool:
         """The last step of a turn offers no tool, so the turn always keeps a step to answer in. A turn of one step
         is all last step: no later step could read a tool's result, so it answers from what it was given."""
-        steps = self.step_limit or self.req.settings.max_steps
-        return step >= steps
+        return step >= self.limit()
 
-    def offered(self, ctx: RunContext[None], *, builtin: bool) -> bool:
+    def limit(self) -> int:
+        return self.step_limit or self.req.settings.max_steps
+
+    def offered(self, ctx: contract.CallContext, *, builtin: bool) -> bool:
         """Whether a tool is offered on the step about to run; `ctx.run_step` is that step's number."""
         return not self.last_step(ctx.run_step) and (builtin or not self.tools_closed)
 
@@ -359,7 +356,7 @@ class _TurnState:
         else:
             key = f"{self.req.run_id}:{self.req.turn_id}:{self.step}:{len(self.order)}"
         # A name the agent is not granted (guessed, or a deferred tool not yet found) is recorded with no server; the
-        # model gets pydantic-ai's retry and nothing is sent anywhere.
+        # model is told the tools it may call and nothing is sent anywhere.
         grant = self.grants.get(tool)
         rec = ToolCallRecord(
             tool_call_id=tool_call_id,
@@ -383,13 +380,13 @@ SHOWN = (
 )
 
 
-def _present(state: _TurnState) -> Tool[None]:
+def _present(state: _TurnState) -> contract.LoopTool:
     """The built-in present tool: a shaped part on the call record, no port behind it (present.py). An agent's widgets
     and composition widen it per turn; each shown part counts toward the agent's widgets per turn."""
     g = state.grants[present.NAME]
     cap = state.req.settings.widgets_per_turn
 
-    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", present.NAME, arguments)
         if (over := state.charge_builtin(ctx.run_step)) is not None:
             rec.status, rec.output = "error", {"error": over}
@@ -430,42 +427,108 @@ def _present(state: _TurnState) -> Tool[None]:
         return {"presented": said}
 
     # Still offered after a refusal: a model that calls it again reaches `call`, which ends the turn. Withdrawing the
-    # tool instead leaves the library answering "unknown tool" and the model retrying until the step limit.
-    tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call),
-        present.NAME,
-        g.description,
-        g.input_schema,
-        takes_ctx=True,
-    )
-    tool.prepare = _offer(state, builtin=True)
-    return tool
+    # tool instead leaves the loop answering "unknown tool" and the model retrying until the step limit.
+    return _builtin(state, g, call, lambda: True)
 
 
-def _offer(
-    state: _TurnState, *, builtin: bool
-) -> Callable[[RunContext[None], ToolDefinition], Awaitable[ToolDefinition | None]]:
-    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        return tool_def if state.offered(ctx, builtin=builtin) else None
+def _builtin(
+    state: _TurnState,
+    grant: ToolGrant,
+    call: Callable[[contract.CallContext, Json], Awaitable[Any]],
+    when: Callable[[], bool],
+) -> contract.LoopTool:
+    """A kernel tool, offered on a step that offers tools at all while `when` holds."""
 
-    return prepare
+    async def offered(ctx: contract.CallContext) -> bool:
+        return when() and state.offered(ctx, builtin=True)
+
+    return contract.LoopTool(grant.name, grant.description, grant.input_schema, call, offered)
+
+
+def _endpoint(model: contract.ModelEndpoint) -> contract.ModelEndpoint:
+    """The turn's endpoint, refused when it has no client: Strands would build its own from the environment's key,
+    which would reach the provider past the gateway's budget and tenant."""
+    if model.client is None:
+        raise TypeError("The turn's model endpoint has no OpenAI-compatible client.")
+    return model
+
+
+def _chat(messages: list[Json]) -> list[Json]:
+    """The loop's messages as chat messages for a call made outside the loop (structured.py)."""
+    from . import strands_loop  # noqa: PLC0415 - the library is large; imported only when a turn runs on it
+
+    return strands_loop.chat_messages(messages)
+
+
+def _response_format(schema: Json | None) -> Json | None:
+    if schema is None:
+        return None
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "final_result",
+            "description": "The step's answer, matching its schema",
+            "schema": schema,
+        },
+    }
+
+
+def _schema_check(state: _TurnState, schema: Json | None) -> Callable[[str], str | None] | None:
+    """What is wrong with a final answer against the turn's schema, or None when it matches."""
+    if schema is None:
+        return None
+    validator = Draft202012Validator(schema)
+
+    def check(text: str) -> str | None:
+        try:
+            value = json.loads(text)
+        except ValueError:
+            state.schema_problem = "the answer: it is not JSON"
+            return state.schema_problem
+        found: list[Any] = list(validator.iter_errors(value))  # pyright: ignore[reportUnknownMemberType]
+        problems = sorted(found, key=lambda e: [str(p) for p in e.absolute_path])
+        if not problems:
+            return None
+        where = "/".join(str(p) for p in problems[0].absolute_path) or "the answer"
+        state.schema_problem = f"{where}: {problems[0].message}"
+        return state.schema_problem
+
+    return check
+
+
+def _loop_raised(e: Exception) -> Exception:
+    """A loop's stop as the exception the turn's endings handle."""
+    if isinstance(e, contract.StepLimitReached):
+        return TurnLimitReached(str(e))
+    if isinstance(e, contract.LoopRefused) and e.status == 429 and refusal_code(e.body) in BUDGET_CODES:
+        return BudgetReachedError()
+    return e
 
 
 async def _closing_answer(
-    model: Any, guard_model: Any, rules: list[Guardrail], system_prompt: str, exchanged: list[ModelMessage]
+    *,
+    endpoint: contract.ModelEndpoint,
+    guard_model: contract.ModelEndpoint,
+    rules: list[Guardrail],
+    system_prompt: str,
+    exchanged: list[Json],
+    params: Json,
 ) -> str:
     """The reply's one request at its budget: an answer in text from what the turn has read, with no tool offered.
     Empty when the request fails, or when a guardrail stops the answer or cannot check it: an unchecked answer is
     never sent."""
     try:
-        with finishing():
-            closer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
-            said = await closer.run(
-                CLOSING_PROMPT, message_history=exchanged, usage_limits=UsageLimits(request_limit=1)
-            )
-            text = said.output.strip()
-            if text and rules and await guard.check(guard_model, rules, text) is not None:
-                return ""
+        said = await structured.ask(
+            endpoint,
+            system=system_prompt,
+            messages=_chat(exchanged),
+            prompt=CLOSING_PROMPT,
+            purpose="closing",
+            params=params,
+        )
+        text = said.text
+        if text and rules and await guard.check(guard_model, rules, text) is not None:
+            return ""
     except Exception:  # the reply then ends with the budget notice alone
         return ""
     return text
@@ -477,19 +540,23 @@ def told_before(refused_on: int | None, run_step: int) -> bool:
     return refused_on is not None and run_step > refused_on
 
 
-class WidgetLimitReached(UsageLimitExceeded):
+class TurnLimitReached(Exception):
+    """A limit ended the turn: the step limit (the loop's request limit), unless a subclass names another."""
+
+
+class WidgetLimitReached(TurnLimitReached):
     """present called after the per-answer widget limit refused it and was withdrawn. Ends the turn with the
     text and widgets it already has."""
 
 
-class BuiltinLimitReached(UsageLimitExceeded):
+class BuiltinLimitReached(TurnLimitReached):
     """A kernel tool called again after max_builtin_calls refused it: the turn ends as at the step limit, its partial
     reply marked cut short."""
 
 
-class ToolLimitExceeded(UsageLimitExceeded):
-    """The agent's tool-call budget, raised by the kernel itself. Any other UsageLimitExceeded is the library's
-    request limit, which is the agent's step limit: the two end a turn for different reasons and say so differently."""
+class ToolLimitExceeded(TurnLimitReached):
+    """The agent's tool-call budget. It ends a turn for a different reason from the step limit and says so
+    differently."""
 
 
 def _with_skills(system_prompt: str, pinned: list[Skill]) -> str:
@@ -549,13 +616,13 @@ def _fired(hit: guard.Hit, when: str) -> GuardrailFired:
     return {"guardrailId": r.guardrail_id, "version": r.version, "name": r.name, "topic": hit.topic, "when": when}
 
 
-def _plan(state: _TurnState) -> Tool[None]:
+def _plan(state: _TurnState) -> contract.LoopTool:
     """The built-in plan tool (plan.py), charged to neither the tool cap nor the built-in cap. The model sends the plan
     once; it then ticks itself as each step's reads come back (_tick_plan), so the tool is offered only while the turn
     has no plan, and no model step is ever spent on ticking it."""
     g = state.grants[planner.NAME]
 
-    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", planner.NAME, arguments)
         if state.plan is not None:
             rec.status, rec.output = "error", {"error": planner.KEPT}
@@ -569,18 +636,13 @@ def _plan(state: _TurnState) -> Tool[None]:
             return {"error": why}
         assert new is not None
         state.plan, state.plan_call = new, rec.tool_call_id
+        state.mode("plan", modes.reason_of(arguments))
+        state.events.append(PlanChanged(new, 1))
         said = planner.answer(new)
         rec.status, rec.output, rec.view = "ok", said, {"part": planner.part(new)}
         return said
 
-    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        return tool_def if state.plan is None and state.free() and state.offered(ctx, builtin=True) else None
-
-    tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call), planner.NAME, g.description, g.input_schema, takes_ctx=True
-    )
-    tool.prepare = prepare
-    return tool
+    return _builtin(state, g, call, lambda: state.plan is None and state.free())
 
 
 def _tick_plan(state: _TurnState) -> ToolOutput | None:
@@ -593,9 +655,7 @@ def _tick_plan(state: _TurnState) -> ToolOutput | None:
     state.plan = planner.ticked(state.plan)
     state.granted_calls, state.cap_told_step = 0, None
     more = state.req.settings.max_steps
-    state.step_limit = (state.step_limit or state.req.settings.max_steps) + more
-    if state.limits is not None and state.limits.request_limit is not None:
-        state.limits.request_limit += more
+    state.step_limit = state.limit() + more
     rec = state.records[state.plan_call]
     rec.view = {"part": planner.part(state.plan)}
     return ToolOutput(rec)
@@ -614,11 +674,11 @@ def _plan_left(state: _TurnState, why: str, *, answered: bool = False) -> ToolOu
     return ToolOutput(rec)
 
 
-def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
+def _load_skill(state: _TurnState, grant: ToolGrant) -> contract.LoopTool:
     """The built-in load_skill tool: returns a pinned on-match skill's body, within the per-turn caps. No port behind
     it and, like present, not charged to the tool-call budget."""
 
-    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", skillset.NAME, arguments)
         if (over := state.charge_builtin(ctx.run_step)) is not None:
             rec.status, rec.output = "error", {"error": over}
@@ -649,22 +709,15 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         rec.status, rec.output = "ok", {"loaded": skill.slug, "version": skill.version}
         return {"skill": skill.name, "version": skill.version, "instructions": skill.instructions}
 
-    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        return tool_def if state.free() and state.offered(ctx, builtin=True) else None
-
-    tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call), skillset.NAME, grant.description, grant.input_schema, takes_ctx=True
-    )
-    tool.prepare = prepare
-    return tool
+    return _builtin(state, grant, call, state.free)
 
 
-def _step_tool(state: _TurnState, grant: ToolGrant) -> Tool[None]:
+def _step_tool(state: _TurnState, grant: ToolGrant) -> contract.LoopTool:
     """One of the step tools (step_tools.py): it moves the running-skill record and tells the model where it now is.
     switch_skill is offered whenever the agent holds a skill with steps; step_done and exit while one runs."""
     cap = step_tools.limit(state.stepped)
 
-    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", grant.name, arguments)
         state.step_calls += 1
         if state.step_calls > cap:
@@ -680,15 +733,7 @@ def _step_tool(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         rec.status, rec.output = "ok", {"now": said}
         return {"now": said}
 
-    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        running = grant.name == step_tools.SWITCH or state.run.running is not None
-        return tool_def if running and state.offered(ctx, builtin=True) else None
-
-    tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call), grant.name, grant.description, grant.input_schema, takes_ctx=True
-    )
-    tool.prepare = prepare
-    return tool
+    return _builtin(state, grant, call, lambda: grant.name == step_tools.SWITCH or state.run.running is not None)
 
 
 def _noted(told: Json, note: str | None) -> Json:
@@ -699,11 +744,11 @@ def _noted(told: Json, note: str | None) -> Json:
     return {**told, "note": f"{told['note']} {note}" if told.get("note") else note}
 
 
-def _search(state: _TurnState) -> Tool[None]:
+def _search(state: _TurnState) -> contract.LoopTool:
     """The built-in search_tools tool over this turn's own offered tools (search.py); no port behind it, and like
     present it is not charged to the tool-call budget."""
 
-    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", search.NAME, arguments)
         if (over := state.charge_builtin(ctx.run_step)) is not None:
             rec.status, rec.output = "error", {"error": over}
@@ -715,25 +760,67 @@ def _search(state: _TurnState) -> Tool[None]:
         rec.status, rec.output = "ok", {"tools": found}
         return {"tools": found}
 
-    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        return tool_def if state.free() and state.offered(ctx, builtin=True) else None
-
-    tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call),
-        search.NAME,
-        search.SEARCH.description,
-        search.SEARCH.input_schema,
-        takes_ctx=True,
-    )
-    tool.prepare = prepare
-    return tool
+    return _builtin(state, search.SEARCH, call, state.free)
 
 
-def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: bool = False) -> Tool[None]:
+def _found(state: _TurnState, searching: bool) -> contract.LoopTool:
+    """The kernel's `search_tools`: over the deferred tools while the agent searches for its tools, else over the
+    tools this turn offers."""
+    return _deferred_search(state) if searching else _search(state)
+
+
+def _deferred_search(state: _TurnState) -> contract.LoopTool:
+    """`search_tools` while the agent's tools are deferred. The matches among the tools that may be called now are
+    offered from the next step on."""
+
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
+        rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", search.NAME, arguments)
+        if (over := state.charge_builtin(ctx.run_step)) is not None:
+            rec.status, rec.output = "error", {"error": over}
+            return {"error": over}
+        queries = [str(q) for q in cast(list[Any], arguments.get("queries") or [])]
+        callable_now = [(t.name, t.description) for t in state.req.tools if state.barred(t.name) is None]
+        names = search.ranked(callable_now, " ".join(queries))
+        state.revealed.update(names)
+        told: Json = {"discovered_tools": [{"name": n} for n in names]}
+        if not names:
+            told["message"] = search.NO_MATCHES
+        rec.status, rec.output = "ok", told
+        return told
+
+    deferred = ToolGrant(search.NAME, search.SERVER, search.DEFERRED, "read", search.QUERIES_SCHEMA)
+    return _builtin(state, deferred, call, state.free)
+
+
+def _revealed(history: bytes) -> set[str]:
+    """The tools the searches of a paused Strands run found: every `discovered_tools` its messages carry."""
+    names: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for value in cast(dict[str, Any], node).values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in cast(list[Any], node):
+                walk(value)
+        elif isinstance(node, str) and "discovered_tools" in node:
+            try:
+                told: Any = json.loads(node)
+            except ValueError:
+                return
+            if isinstance(told, dict):
+                found = cast(list[Any], cast(Json, told).get("discovered_tools") or [])
+                names.update(str(cast(Json, m).get("name")) for m in found if isinstance(m, dict))
+
+    walk(json.loads(history))
+    return names
+
+
+def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: bool = False) -> contract.LoopTool:
     resume = state.req.resume
     token = resume.approval_token if resume and resume.decision == "approved" else None
 
-    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
         tool_call_id = ctx.tool_call_id or f"call_{len(state.order)}"
         if grant.name == SEARCH_KNOWLEDGE:
             own = _own_knowledge(state.req, arguments)
@@ -748,9 +835,15 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec = state.record(tool_call_id, grant.name, arguments)
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
-        if grant.gated and not ctx.tool_call_approved:
-            # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
-            raise ApprovalRequired()
+        if (why := state.plan_first(grant)) is not None:
+            # Refused in code, so the rule never depends on the model remembering it; nothing reaches the gateway.
+            # Only the model reads the refusal: the person sees the plan, then the call it was made for.
+            state.plan_required = True
+            state.unplanned.add(tool_call_id)
+            return {"error": why}
+        if modes.is_helper(grant) or modes.is_workspace(grant):
+            state.mode("helpers" if modes.is_helper(grant) else "sandbox", modes.reason_of(arguments))
+            arguments = {k: v for k, v in arguments.items() if k != "why"}
         # Where the running skill stood when this call started, when it is that step's tool: its result is checked
         # for that step only, so a result that arrives after the step moved changes nothing.
         at = state.position() if steps.target(state.run) == grant.name else None
@@ -808,7 +901,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             if outcome.needs_review is not None and not ctx.tool_call_approved:
                 # The gateway would not send it without a person: the turn pauses for approval with the reason.
                 rec.status = "gated"
-                raise ApprovalRequired(metadata={"reason": outcome.needs_review})
+                raise contract.LoopPause(outcome.needs_review, outcome.nested)
             rec.duration_ms = int((time.monotonic() - started) * 1000)
             rec.status = "ok" if outcome.ok else "error"
             if outcome.ok:
@@ -849,29 +942,23 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             done.set()
             state.inflight.pop((grant.name, asked), None)
 
-    tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call),
+    async def offered(ctx: contract.CallContext) -> bool:
+        if not state.offered(ctx, builtin=False) or state.barred(grant.name) is not None:
+            return False
+        # Above the agent's tool-search threshold its schema is sent only once a search finds it, except the running
+        # step's own tool: the step cannot pass without it.
+        return not deferred or grant.name in state.revealed or grant.name == steps.target(state.run)
+
+    return contract.LoopTool(
         grant.name,
         grant.description,
         grant.input_schema,
-        takes_ctx=True,
-        # Reads may run side by side; anything that can change a system (a write, a workflow, another agent) runs
-        # one at a time, in the order the model asked.
-        sequential=grant.access != "read" or grant_token(grant.name) is not None,
+        call,
+        offered,
+        gated=grant.gated,
+        # A change refused for want of a plan is not asked about: its body says what to do first.
+        barred=lambda: state.barred(grant.name) or state.plan_first(grant),
     )
-    # Above the agent's tool-search threshold its schema is sent only once a search finds it.
-    tool.defer_loading = deferred
-
-    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        if not state.offered(ctx, builtin=False) or state.barred(grant.name) is not None:
-            return None
-        if deferred and grant.name == steps.target(state.run):
-            # Sent with its schema even when the agent searches for its tools: the step cannot pass without it.
-            return replace(tool_def, defer_loading=False)
-        return tool_def
-
-    tool.prepare = prepare
-    return tool
 
 
 def _numbered(state: _TurnState, output: JsonValue) -> Any:
@@ -971,36 +1058,28 @@ def _names(req: TurnRequest) -> dict[str, str]:
     return names
 
 
-def _ended(messages: list[ModelMessage], e: Exception | None = None) -> tuple[str, str] | None:
-    """The code and sentence for a reply the provider cut off or filtered; None when the last reply ended normally."""
-    if isinstance(e, ContentFilterError):
-        return ENDED["content_filter"]
-    if isinstance(e, IncompleteToolCall):
-        return ENDED["length"]
-    last = next((m for m in reversed(messages) if isinstance(m, ModelResponse)), None)
-    return ENDED.get(last.finish_reason or "") if last is not None else None
-
-
-def _model_settings(req: TurnRequest) -> ModelSettings | None:
-    """The settings sent with each model request; None when the agent sets none, so the model's defaults hold.
+def _loop_params(req: TurnRequest) -> Json:
+    """The request body fields sent with each model request; empty when the agent sets none, so the model's defaults
+    hold.
 
     The agent version's saved knobs go in the request body under their knob names; models-service turns each into
     the field its provider reads and fits it to the alias's model (`ops_models.catalog`), so no knob is named here.
     A caller's temperature within the agent's limits wins over the saved one. The older `thinking` pattern applies
-    only when the version saved neither a thinking budget nor an effort."""
-    sent = ModelSettings()
+    only when the version saved neither a thinking budget nor an effort; it is sent as the gateway's
+    `reasoning_effort`."""
+    sent: Json = {}
     knobs: dict[str, float | int | str] = dict(req.settings.model_settings)
     if req.settings.temperature is not None:
         sent["temperature"] = req.settings.temperature
         if knobs:
             knobs["temperature"] = req.settings.temperature
     if req.settings.thinking in ("low", "medium", "high") and not {"thinking_budget", "reasoning_effort"} & set(knobs):
-        sent["thinking"] = req.settings.thinking
+        knobs["reasoning_effort"] = req.settings.thinking
     if not req.settings.parallel_reads:
         sent["parallel_tool_calls"] = False
     if knobs:
-        sent["extra_body"] = knobs
-    return sent or None
+        sent["extra_body"] = cast(Json, knobs)
+    return sent
 
 
 def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
@@ -1014,19 +1093,21 @@ def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
     return closed
 
 
-def _reason(requests: DeferredToolRequests, call_id: str) -> str | None:
-    """The reason a call raised for its approval (the gateway's check before sending), when it gave one."""
-    meta = requests.metadata.get(call_id) or {}
-    return str(meta["reason"]) if meta.get("reason") else None
-
-
-def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[ModelMessage]) -> Interrupt:
-    part = requests.approvals[0]
-    arguments = _args(part)
-    rec = state.record(part.tool_call_id, part.tool_name, arguments)
+def _paused(
+    state: _TurnState,
+    *,
+    tool_call_id: str,
+    tool: str,
+    arguments: Json,
+    why: str | None,
+    history: bytes,
+    nested: Json | None = None,
+) -> Interrupt:
+    """The turn's pause at one call, with the loop's own record of the run (`history`) to resume it from."""
+    rec = state.record(tool_call_id, tool, arguments)
     rec.status = "gated"
     pending = PendingCall(
-        tool_call_id=part.tool_call_id,
+        tool_call_id=tool_call_id,
         key=rec.key,
         action_id=action_id(rec.key),
         tool=rec.tool,
@@ -1038,13 +1119,14 @@ def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[
     return Interrupt(
         interrupt_id=rec.key,
         kind="approval",
-        needed=f"Approval to run {rec.tool}" + (f": {why}" if (why := _reason(requests, part.tool_call_id)) else ""),
+        needed=f"Approval to run {rec.tool}" + (f": {why}" if why else ""),
         pending_call=pending,
-        history=ModelMessagesTypeAdapter.dump_json(history),
+        history=history,
         loaded_skills=[e for s, e in zip(state.loaded, state.loads, strict=True) if s.loading == "on_match"],
         plan=state.plan,
         run=state.run.model_copy(deep=True) if state.tracks else None,
         held={k: list(v) for k, v in state.held.items()},
+        nested=nested,
     )
 
 
@@ -1095,8 +1177,15 @@ REPLY_CUT_OFF = "The reply was cut off at the model's length limit. Ask again fo
 REPLY_FILTERED = "The model provider's content filter stopped this reply. Rephrase the question and ask again."
 ENDED = {"length": (CUT_OFF, REPLY_CUT_OFF), "content_filter": (FILTERED, REPLY_FILTERED)}
 BUDGET_REACHED = "This conversation reached its budget before I could answer."
+BAR_RETRY = "Your answer does not meet the bar it is checked against: {reason} Answer again, using only what you found."
+
+
+def _added(a: TokenUsage, b: TokenUsage) -> TokenUsage:
+    return TokenUsage(a.input_tokens + b.input_tokens, a.output_tokens + b.output_tokens, a.requests + b.requests)
+
+
 CUT_SHORT_BUDGET = "\n\n(Reply cut short: the conversation reached its budget.)"
-# The one request a reply may still make at its budget, with no tool offered (ports.BudgetReachedError.closing).
+# The one request a reply may still make at its budget, with no tool offered (ports.BudgetReachedError).
 CLOSING_PROMPT = (
     "The budget for this conversation is spent, so you can make no more tool calls. Answer now, in text, from what "
     "you already have, and say plainly what you could not finish."
@@ -1131,7 +1220,7 @@ def _base_withholds(state: _TurnState, block: int, asked: bool) -> str | None:
 
 
 async def _end_check(
-    state: _TurnState, model: Any, system_prompt: str, history: list[ModelMessage], block: int
+    state: _TurnState, model: contract.ModelEndpoint, system_prompt: str, history: list[Json], block: int
 ) -> tuple[str | None, TokenUsage]:
     """The end-clean check (answer_check.py) on the finished answer: None when it is clean, else the one correction,
     made by a tool-less agent told each defect. A correction that fails, comes back empty or has more defects than the
@@ -1158,18 +1247,17 @@ async def _end_check(
     if not found:
         return None, TokenUsage()
     try:
-        fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
-        with finishing():
-            again = await fixer.run(
-                answer_check.correction_prompt(found),
-                message_history=history,
-                usage_limits=UsageLimits(request_limit=1),
-            )
+        again = await structured.ask(
+            model,
+            system=system_prompt,
+            messages=_chat(history),
+            prompt=answer_check.correction_prompt(found),
+            purpose="check",
+        )
     except Exception:  # a correction that fails leaves the answer as written
         return None, TokenUsage()
-    u = again.usage
-    spent = TokenUsage(u.input_tokens, u.output_tokens, u.requests)
-    corrected = again.output.strip()
+    spent = again.usage
+    corrected = again.text
     if not corrected:
         return None, spent
     still = answer_check.defects(
@@ -1189,6 +1277,10 @@ async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[Kernel
     """Streams one turn's events, ending with exactly one `TurnFinished`. With the agent's redactPii on, what
     the turn shows and returns has personal data masked (pii.py); what the model reads, and the history a pause keeps,
     are not."""
+    # The loop kind decides which of the spec's tools the turn holds (loop_kinds.py), once, before anything reads them.
+    req = replace(
+        req, tools=loop_kinds.offered(req.loop, req.tools), settings=loop_kinds.limits(req.loop, req.settings)
+    )
     if not req.settings.redact_pii:
         async for event in _turn(req, ports):
             yield event
@@ -1226,24 +1318,24 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # call with no tools (memory extraction, a workflow's AI step) answers with its schema's JSON only, so it is offered
     # nothing to call.
     builtins = bool(req.tools) or req.output_schema is None
-    # Many tools: each is deferred and pydantic-ai's tool search (search.strategy) reveals the ones the model finds;
-    # its `search_tools` replaces the kernel's own, so that one is not added.
+    # Many tools: each is deferred and the kernel's deferred `search_tools` reveals the ones the model finds.
     above = req.settings.tool_search_above
     searching = builtins and above is not None and len(req.tools) > above
+    plans = builtins and loop_kinds.has_plan(req.loop)
     state = _TurnState(
         req=req,
         grants={
             **{t.name: t for t in req.tools},
-            **(
-                {present.NAME: present.grant(req.settings), search.NAME: search.SEARCH, planner.NAME: planner.GRANT}
-                if builtins
-                else {}
-            ),
+            **({present.NAME: present.grant(req.settings), search.NAME: search.SEARCH} if builtins else {}),
+            **({planner.NAME: planner.GRANT} if plans else {}),
         },
+        modes=modes.Modes(fixed=req.loop.kind != "auto"),
     )
     tools = [_tool(state, ports, g, deferred=searching) for g in sorted(req.tools, key=lambda t: t.name)] + (
-        [_present(state), _plan(state), *([] if searching else [_search(state)])] if builtins else []
+        [_present(state), *([_plan(state)] if plans else []), _found(state, searching)] if builtins else []
     )
+    if searching and req.resume:
+        state.revealed = _revealed(req.resume.interrupt.history)
     # Skills that run step by step are driven by their own tools, and the record of the one running is read before
     # anything can end the turn, so every way out returns it.
     state.stepped = step_tools.stepped(req.settings.skills) if builtins else []
@@ -1315,15 +1407,19 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             (picked if how == "picked" else carried).append(skill)
             state.restored += 1
     state.carried = carried
-    # A person rejected the call the turn paused on. The library answers the model for it and the tool never runs,
+    # A person rejected the call the turn paused on. The loop answers the model for it and the tool never runs,
     # so the skill whose step called it ends here, as failed.
     rejected = req.resume.interrupt.pending_call.tool if req.resume and req.resume.decision == "rejected" else None
     if rejected is not None and steps.target(state.run) == rejected:
         state.moved(steps.denied(state.run, state.stepped))
     passages: list[Passage] = []
     digest: dict[str, str] = {}
-    all_messages: list[ModelMessage] = []
+    # The run's messages once it ended (done or paused), for the end check and the guardrail's correction.
+    all_messages: list[Json] = []
     usage = TokenUsage()
+    # Where the loop's calls go, and the messages it exchanged so far, for the closing answer at the budget.
+    endpoint: contract.ModelEndpoint | None = None
+    loop_messages: list[Json] = []
 
     # Filled once the turn's rules are known; a turn that ends before then checked none.
     checked: list[Guardrail] = []
@@ -1339,7 +1435,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             reason = extra.get("error") or state.text or f"The turn ended ({stop}) without an answer."
             status, stop, extra = "failed", "no_output", {**extra, "error": reason, "error_code": "no_output"}
         records = [state.records[i] for i in state.order]
-        answered = next((m.model_name for m in reversed(all_messages) if isinstance(m, ModelResponse)), None)
+        answered = endpoint.model_id if endpoint is not None and all_messages else None
         every = state.passages
         cited = [CitationRef(n, every[n - 1]) for n in cited_numbers(state.text) if 0 < n <= len(every)]
         return TurnFinished(
@@ -1363,6 +1459,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 guardrails_checked=[ref(g) for g in dict.fromkeys(checked)],
                 guardrails_off=[ref(g) for g in req.settings.guardrails_off],
                 run=state.run.model_copy(deep=True) if state.tracks else None,
+                modes=list(state.modes.steps),
+                plan_required=state.plan_required,
                 **extra,
             )
         )
@@ -1390,7 +1488,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     if rules and req.user_turn and not req.resume:
         # A question about a blocked topic gets the guardrail's message; the answering model is never called.
         try:
-            hit = await guard.check(guard_model, rules, req.user_turn)
+            hit = await guard.check(guard_model, rules, req.user_turn, purpose="turn")
         except BudgetReachedError:
             # Nothing is written yet, so there is nothing to close on.
             state.text = BUDGET_REACHED
@@ -1415,17 +1513,11 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield raised
     state.events.clear()
     yield StatusChanged("thinking")
+    history: list[Json] = []
+    user_prompt: str | None = None
     try:
         if req.resume:
-            history: list[ModelMessage] = ModelMessagesTypeAdapter.validate_json(req.resume.interrupt.history)
-            call_id = req.resume.interrupt.pending_call.tool_call_id
-            decision: ToolApproved | ToolDenied = (
-                ToolApproved()
-                if req.resume.decision == "approved"
-                else ToolDenied(f"The reviewer rejected this action: {req.resume.reason or 'no reason given'}")
-            )
-            results = DeferredToolResults(approvals={call_id: decision})
-            system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
+            system_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable)
         else:
             # Attached files' pages come first: they are what the person asked about, numbered before knowledge.
             passages = list(req.attached)
@@ -1453,14 +1545,14 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 attachments=req.attachments,
             )
             digest = ctx.digest
-            history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt
+            history, system_prompt, user_prompt = ctx.history, ctx.system_prompt, ctx.user_prompt
     except UnknownVariableError as e:
         yield finish("failed", "error", error=str(e))
         return
 
     names = _names(req)
 
-    def instructions(_: RunContext[None] | None = None) -> str:
+    def instructions() -> str:
         """The system prompt, written again before every model request: the skill lists and what earlier replies
         left, then what must come last and can change inside a turn: the running skill's current step, its rules,
         and the never rules."""
@@ -1472,44 +1564,6 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         last = prompt_writer.tail(steps.now(state.run, names), req.settings.never, req.settings.never_heading)
         return f"{written}\n\n{last}" if last else written
 
-    # With a schema the answer is the provider's native structured output (a json_schema response format): the model
-    # may call tools, then its final message must match the schema, with no separate answer tool to call or skip.
-    # Free text is then not an answer. Deferred requests stay possible, so a gated write still stops for review.
-    answer_type: Any = (
-        NativeOutput(
-            StructuredDict(req.output_schema, name="final_result", description="The step's answer, matching its schema")
-        )
-        if req.output_schema is not None
-        else str
-    )
-    finder = ToolSearch[None](strategy=search.strategy, max_results=search.LIMIT, tool_description=search.DEFERRED)
-    agent = Agent[None, Any](
-        model,
-        deps_type=type(None),
-        output_type=[answer_type, DeferredToolRequests],
-        tools=tools,
-        instructions=instructions,
-        capabilities=[finder] if searching else None,
-    )
-    if req.output_schema is not None:
-        # The output tool carries the schema to the model but does not hold the answer to it; this does. A mismatch
-        # goes back to the model once (pydantic-ai's retry), then ends the turn with schema_error.
-        check = Draft202012Validator(req.output_schema)
-
-        @agent.output_validator
-        def _matches_schema(output: Any) -> Any:  # pyright: ignore[reportUnusedFunction]
-            if isinstance(output, DeferredToolRequests):
-                return output
-            found: list[Any] = list(check.iter_errors(output))  # pyright: ignore[reportUnknownMemberType]
-            problems = sorted(found, key=lambda e: [str(p) for p in e.absolute_path])
-            if problems:
-                where = "/".join(str(p) for p in problems[0].absolute_path) or "the answer"
-                state.schema_problem = f"{where}: {problems[0].message}"
-                raise ModelRetry(f"{state.schema_problem}. Answer again, matching the schema.")
-            return output
-
-    limits = UsageLimits(request_limit=req.settings.max_steps)
-    state.limits = limits
     if state.plan is not None and state.plan_call is None:
         # A plan this turn goes on with: drawn at once, and ticked like one made here.
         rec = state.record(f"plan_{req.turn_id}", planner.NAME, {"title": state.plan["title"]})
@@ -1518,63 +1572,87 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield ToolOutput(rec)
     writing = False
     output: Any = None
-    # The run's event handle, kept for the messages exchanged so far when the run ends early at the budget.
-    events: Any = None
     try:
         async with asyncio.timeout(req.deadline_seconds):
-            async with agent.run_stream_events(
-                user_prompt,
-                message_history=history,
-                deferred_tool_results=results,
-                usage_limits=limits,
-                model_settings=_model_settings(req),
-            ) as stream:
-                events = stream
-                async for event in stream:
-                    if isinstance(event, PartStartEvent):
-                        if event.index == 0:
-                            if (ticked := _tick_plan(state)) is not None:
-                                yield ticked
-                            state.step += 1
-                        if isinstance(event.part, TextPart) and event.part.content:
-                            if not writing:
-                                writing = True
-                                yield StatusChanged("writing" if streaming else "checking")
-                            state.text += event.part.content
-                            if streaming:
-                                state.shown_text += event.part.content
-                                yield TextDelta(event.part.content)
-                    elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+            from . import strands_loop  # noqa: PLC0415 - the library is large; imported only when a turn runs on it
+
+            endpoint = _endpoint(model)
+            resumed = req.resume
+            try:
+                # With a schema the answer is the provider's native structured output (a json_schema response
+                # format): the model may call tools, then its final message must match the schema. A mismatch goes
+                # back to the model once, then ends the turn with schema_error. A gated write still stops for review.
+                async for step in strands_loop.run(
+                    endpoint=endpoint,
+                    tools=tools,
+                    instructions=instructions,
+                    history=history,
+                    prompt=user_prompt,
+                    step_limit=state.limit,
+                    params=_loop_params(req),
+                    paused=resumed.interrupt.history if resumed else None,
+                    decision=(
+                        resumed.decision == "approved",
+                        f"The reviewer rejected this action: {resumed.reason or 'no reason given'}",
+                    )
+                    if resumed
+                    else None,
+                    response_format=_response_format(req.output_schema),
+                    check=_schema_check(state, req.output_schema),
+                    exchanged=loop_messages,
+                ):
+                    if isinstance(step, contract.StepStarted):
+                        if (ticked := _tick_plan(state)) is not None:
+                            yield ticked
+                        if state.step == 1 and not req.resume and (named := state.modes.direct(1)) is not None:
+                            yield ModeChanged(named.mode, named.reason, named.fixed, named.at_step)
+                        state.step += 1
+                    elif isinstance(step, contract.TextChunk):
                         if not writing:
                             writing = True
                             yield StatusChanged("writing" if streaming else "checking")
-                        state.text += event.delta.content_delta
+                        state.text += step.text
                         if streaming:
-                            state.shown_text += event.delta.content_delta
-                            yield TextDelta(event.delta.content_delta)
-                    elif isinstance(event, FunctionToolCallEvent):
+                            state.shown_text += step.text
+                            yield TextDelta(step.text)
+                    elif isinstance(step, contract.ToolStarted):
                         writing = False
-                        rec = state.record(event.part.tool_call_id, event.part.tool_name, _args(event.part))
+                        # Read as the call starts, after the step's earlier calls ran: the body refuses it the same way.
+                        # Skipped too when the body already refused it, as a plan may have landed since.
+                        if step.tool_call_id in state.unplanned or (
+                            (g := state.grants.get(step.name)) is not None and state.plan_first(g) is not None
+                        ):
+                            state.unplanned.add(step.tool_call_id)
+                            continue
+                        rec = state.record(step.tool_call_id, step.name, step.arguments)
                         yield StatusChanged("calling_tool")
                         yield ToolInputAvailable(rec)
-                    elif isinstance(event, FunctionToolResultEvent):
-                        rec = state.records.get(event.tool_call_id)
-                        if rec is None:
+                    elif isinstance(step, contract.ToolEnded):
+                        rec = state.records.get(step.tool_call_id)
+                        if rec is None or step.tool_call_id in state.unplanned:
                             continue
-                        if isinstance(event.part, RetryPromptPart):
-                            rec.status, rec.output = "error", event.part.model_response()
-                        elif rec.status == "running":
-                            # A call no kernel function recorded (pydantic-ai's search_tools): its result as returned.
-                            rec.status, rec.output = "ok", event.part.content
+                        if rec.status == "running":
+                            rec.status, rec.output = ("ok" if step.ok else "error"), step.content
                         yield ToolOutput(rec)
                         for raised in state.events:
                             yield raised
                         state.events.clear()
-                    elif isinstance(event, AgentRunResultEvent):
-                        output = event.result.output
-                        all_messages = event.result.all_messages()
-                        u = event.result.usage
-                        usage = TokenUsage(u.input_tokens, u.output_tokens, u.requests)
+                    elif isinstance(step, contract.LoopPaused):
+                        output = step
+                        all_messages = step.messages
+                        if not req.resume and (named := state.modes.direct(1)) is not None:
+                            yield ModeChanged(named.mode, named.reason, named.fixed, named.at_step)
+                    else:
+                        if not req.resume and (named := state.modes.direct(1)) is not None:
+                            yield ModeChanged(named.mode, named.reason, named.fixed, named.at_step)
+                        output = json.loads(step.text) if req.output_schema is not None else step.text
+                        all_messages = step.messages
+                        usage = TokenUsage(step.input_tokens, step.output_tokens, step.requests)
+            except Exception as e:
+                raised_as = _loop_raised(e)
+                if raised_as is e:
+                    raise
+                raise raised_as from e
     except TimeoutError:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
@@ -1594,15 +1672,21 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield TextDelta(STEP_LIMIT_REACHED)
         yield finish("completed", "final", error=None)
         return
-    except BudgetReachedError as e:
+    except BudgetReachedError:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
         for closed in _close_open(state, NOT_RUN["budget_reached"]):
             yield closed
         closing = ""
-        if e.closing and req.output_schema is None:
-            exchanged: list[ModelMessage] = events.all_messages() if events is not None else history
-            closing = await _closing_answer(model, guard_model, rules, instructions(), exchanged)
+        if req.output_schema is None and endpoint is not None:
+            closing = await _closing_answer(
+                endpoint=endpoint,
+                guard_model=guard_model,
+                rules=rules,
+                system_prompt=instructions(),
+                exchanged=loop_messages,
+                params=_loop_params(req),
+            )
         said = closing if closing else (CUT_SHORT_BUDGET if state.text else BUDGET_REACHED)
         if closing and state.text:
             said = f"\n\n{closing}"
@@ -1610,7 +1694,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield TextDelta(said)
         yield finish("completed", "budget_reached", error=None)
         return
-    except UsageLimitExceeded as e:
+    except TurnLimitReached as e:
         tools = isinstance(e, ToolLimitExceeded)
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
@@ -1628,24 +1712,19 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield closed
         yield finish("completed", stop, error=None)
         return
-    except UnexpectedModelBehavior as e:
+    except contract.ReplyEnded as e:
+        # The provider cut the reply off at its length limit or filtered it: the turn fails with the kit's code and a
+        # plain sentence, keeping what was written, never as a complete answer or in the loop library's wording.
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
-        if (ended := _ended(events.all_messages() if events is not None else [], e)) is not None:
-            yield finish("failed", "error", error=ended[1], error_code=ended[0])
-            return
-        if req.output_schema is None and state.last_step(state.step):
-            # A model that calls a tool on the last step, where none is offered, ends the turn at the step limit.
-            notice = CUT_SHORT_STEPS if state.text else STEP_LIMIT_REACHED
-            state.text += notice
-            yield TextDelta(notice)
-            for closed in _close_open(state, NOT_RUN["max_steps"]):
-                yield closed
-            yield finish("completed", "max_steps", error=None)
-            return
-        if req.output_schema is None:
-            yield finish("failed", "error", error=f"The model call failed: {type(e).__name__}: {e}")
-            return
+        code, said = ENDED[e.reason]
+        for closed in _close_open(state, said):
+            yield closed
+        yield finish("failed", "error", error=said, error_code=code)
+        return
+    except contract.SchemaMismatch as e:
+        if (cleared := _withhold(state, guarded)) is not None:
+            yield cleared
         # The model did not return output matching the step's schema: a failure any caller sees (a workflow step's
         # error port, a chat turn), never a completed turn without its output.
         yield finish(
@@ -1655,15 +1734,15 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             error_code="schema_error",
         )
         return
-    except ModelHTTPError as e:
+    except contract.LoopRefused as e:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
         code = refusal_code(e.body)
         yield finish(
             "failed",
             "error",
-            error=refusal_text(e.status_code, e.body),
-            error_status=e.status_code,
+            error=refusal_text(e.status, e.body),
+            error_status=e.status,
             error_code=code,
         )
         return
@@ -1673,22 +1752,21 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield finish("failed", "error", error=f"The model call failed: {type(e).__name__}: {e}")
         return
 
-    if (ended := _ended(all_messages)) is not None:
-        if (cleared := _withhold(state, guarded)) is not None:
-            yield cleared
-        for closed in _close_open(state, ended[1]):
-            yield closed
-        yield finish("failed", "error", error=ended[1], error_code=ended[0])
-        return
-
-    if isinstance(output, DeferredToolRequests) and output.approvals:
+    if isinstance(output, contract.LoopPaused):
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
         if (held := _plan_left(state, "waiting for your approval")) is not None:
             yield held
-        interrupt = _interrupt(state, output, all_messages)
-        rec = state.records[interrupt.pending_call.tool_call_id]
-        yield ToolOutput(rec)
+        interrupt = _paused(
+            state,
+            tool_call_id=output.tool_call_id,
+            tool=output.name,
+            arguments=output.arguments,
+            why=output.reason,
+            history=output.state,
+            nested=output.nested,
+        )
+        yield ToolOutput(state.records[interrupt.pending_call.tool_call_id])
         yield Interrupted(interrupt)
         yield finish("interrupted", "interrupt", interrupt=interrupt)
         return
@@ -1696,6 +1774,36 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     if (held := _plan_left(state, "waiting for you", answered=bool(state.text.strip()))) is not None:
         # The turn ends with steps left (a Connect card, a question): the next turn goes on from this step.
         yield held
+    bar_met: bool | None = None
+    if req.loop.rubric and req.output_schema is None and state.text.strip():
+        # The quality bar: the judge reads the answer against the rubric; a fail sends its reason back for another
+        # answer, at most max_rounds times, then the last answer is returned marked as not meeting the bar.
+        rounds, bar_met = 0, False
+        judge_model = state.judge_model or model
+        while True:
+            verdict = await judge.verdict(judge_model, req.loop.rubric, state.text)
+            state.judge_spent = _added(state.judge_spent, verdict.usage)
+            if verdict.passed:
+                bar_met = True
+                break
+            if rounds >= req.loop.max_rounds:
+                break
+            rounds += 1
+            try:
+                again = await structured.ask(
+                    model,
+                    system=instructions(),
+                    messages=_chat(all_messages),
+                    prompt=BAR_RETRY.format(reason=verdict.reason),
+                    purpose="check",
+                )
+            except Exception:  # a retry that fails leaves the last answer, still marked as below the bar
+                break
+            usage = _added(usage, again.usage)
+            if again.text and state.shown_text:
+                yield _replace(state, again.text)
+            elif again.text:
+                state.text = again.text
     if req.settings.end_check and req.output_schema is None and state.text.strip():
         # Checked before any guardrail, so a corrected answer is the one the guardrail checks.
         corrected, spent = await _end_check(state, model, instructions(), all_messages, len(passages))
@@ -1740,8 +1848,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             if streaming:
                 yield StatusChanged("checking")
             try:
-                with finishing():
-                    hit = await guard.check(guard_model, rules, state.text)
+                hit = await guard.check(guard_model, rules, state.text)
             except guard.GuardrailUnavailable as e:
                 yield _replace(state, GUARDRAIL_UNAVAILABLE, guardrail=True)
                 yield finish("failed", "guardrail_unavailable", error=str(e), error_code="guardrail_unavailable")
@@ -1751,15 +1858,15 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     state.withheld = state.text
                 corrected = ""
                 try:
-                    fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=instructions())
-                    with finishing():
-                        again = await fixer.run(
-                            f"Your answer touched a blocked topic ({hit.topic}). Answer the question again without "
-                            "it, using only what you already found.",
-                            message_history=all_messages,
-                            usage_limits=UsageLimits(request_limit=1),
-                        )
-                    corrected = again.output.strip()
+                    again = await structured.ask(
+                        model,
+                        system=instructions(),
+                        messages=_chat(all_messages),
+                        prompt=f"Your answer touched a blocked topic ({hit.topic}). Answer the question again "
+                        "without it, using only what you already found.",
+                        purpose="check",
+                    )
+                    corrected = again.text
                 except Exception:  # a correction that fails leaves only the refusal as safe to send
                     corrected = ""
                 still = hit
@@ -1767,8 +1874,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     # A re-check that cannot run fails the turn closed, as the first check does, rather than passing
                     # for a hit.
                     try:
-                        with finishing():
-                            still = await guard.check(guard_model, rules, corrected)
+                        still = await guard.check(guard_model, rules, corrected)
                     except guard.GuardrailUnavailable as e:
                         yield _replace(state, GUARDRAIL_UNAVAILABLE, guardrail=True)
                         yield finish(
@@ -1787,12 +1893,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield finish("completed", "guardrail", guardrail=fired)
             return
 
-    structured = {"output": output} if req.output_schema is not None else {}
+    shaped = {"output": output} if req.output_schema is not None else {}
     done = finish(
         "completed",
         "final",
+        bar_met=bar_met,
         no_answer=withheld_by_base or bool(asked and req.user_turn and not passages and not state.order),
-        **structured,
+        **shaped,
         **({"guardrail": noted} if noted is not None else {}),
     )
     if done.result.citations:

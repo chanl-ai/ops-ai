@@ -1,0 +1,1 @@
+{"date": "2026-11-27", "title": "Only the tool gateway can approve a change", "description": "Only the tool gateway issues approvals, after checking the change again. Sign-in and resume links use OPS_SESSION_TOKEN_KEY, which an install must set.", "tag": "improved"}

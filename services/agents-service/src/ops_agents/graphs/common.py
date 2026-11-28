@@ -11,6 +11,8 @@ from langgraph.config import get_config, get_stream_writer
 
 from ops_agent_kernel.events import (
     CitationsReady,
+    ModeChanged,
+    PlanChanged,
     SkillLoaded,
     SkillRunChanged,
     StatusChanged,
@@ -212,15 +214,20 @@ class Asker:
 class AgentRunner(Protocol):
     """The API side of specialist agents as tools, so this layer does not import the API."""
 
-    async def offers(self, asker: Asker) -> list[ToolGrant]:
+    async def offers(self, asker: Asker, resuming: str | None = None) -> list[ToolGrant]:
         """`agent__<id>` grants for the agents `asker` may ask on this turn: its own `agent:<id>` grants, every
-        specialist for its team's default agent on a turn with a person, and none its chain refuses."""
+        specialist for its team's default agent on a turn with a person, and none its chain refuses. `resuming` is
+        the key of the paused call a resumed turn goes on with: the agent that call already asked stays offered."""
         ...
 
     async def run(
         self, *, asker: Asker, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
     ) -> ToolOutcome:
         """Runs `agent`'s own turn on the question for the turn's person and returns its reply."""
+        ...
+
+    async def hand_targets(self, wanted: list[str]) -> list[str]:
+        """The agents of `wanted` this turn may hand the conversation to: the checks an ask makes, with no chain."""
         ...
 
 
@@ -247,7 +254,7 @@ class AgentTools:
 
 
 async def ports_with_workflows(
-    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None, version: int = 0
+    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None, version: int = 0, resuming: str | None = None
 ) -> tuple[KernelPorts, list[ToolGrant]]:
     """The ports and extra grants for an agent turn: workflow tools for its granted, published workflows, and the
     specialists the person may ask. `granted` and `version` are those of the definition the turn runs, so a draft
@@ -258,7 +265,7 @@ async def ports_with_workflows(
     ):
         ports, offers = replace(ports, tools=WorkflowTools(ports.tools, deps.workflows)), found
     asker = Asker.of(agent_id, version, granted) if agent_id else None
-    if deps.agents is not None and asker is not None and (specialists := await deps.agents.offers(asker)):
+    if deps.agents is not None and asker is not None and (specialists := await deps.agents.offers(asker, resuming)):
         ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents, asker)), [*offers, *specialists]
     if deps.memory is not None and agent_id and (search := await deps.memory.offers(agent_id)):
         ports, offers = replace(ports, tools=MemoryTools(ports.tools, deps.memory)), [*offers, *search]
@@ -334,8 +341,8 @@ def emit(event: str, node: str, data: Any = None) -> None:
 async def kernel_turn(
     node: str, req: TurnRequest, ports: KernelPorts, meter: Meter | None = None, alias: str = "-"
 ) -> TurnResult:
-    """Runs one kernel turn, streaming its text and tool events from this node, metered as one call (E12)."""
-    return await metered(meter, alias, "turn", lambda: _kernel_turn(node, req, ports), record=False)
+    """Runs one kernel turn, streaming its text and tool events from this node, once its budget is not spent (E12)."""
+    return await metered(meter, lambda: _kernel_turn(node, req, ports))
 
 
 def _call_data(c: ToolCallRecord) -> Json:
@@ -394,6 +401,11 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                 emit("skill_loaded", node, {"skillId": sid, "version": v, "name": name, "matched": matched, **extra})
             case SkillRunChanged(run=run):
                 emit("skill_run", node, run.model_dump(mode="json", by_alias=True))
+            case ModeChanged(mode=mode, reason=reason, fixed=fixed, at_step=at_step):
+                # The run trace's mode steps are read back from these (api/run_trace.py).
+                emit("mode", node, {"mode": mode, "reason": reason, "fixed": fixed, "atStep": at_step})
+            case PlanChanged(plan=plan, revision=revision):
+                emit("plan", node, {"title": plan["title"], "steps": plan["steps"], "revision": revision})
             case TurnFinished(result=r):
                 result = r
                 # The record the next reply goes on from, whichever way the turn ended; an ended skill is kept too.
@@ -415,11 +427,15 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                     {
                         "model": r.model_name,
                         "status": r.status,
+                        # Why the turn ended (TurnResult.stop_reason); the run trace shows it.
+                        "stopReason": r.stop_reason,
                         "noAnswer": r.no_answer,
                         "error": r.error,
                         "errorCode": r.error_code,
                         # Which guardrails this turn checked and which the builder switched off.
                         "guardrails": {"checked": r.guardrails_checked, "off": r.guardrails_off},
+                        "modes": [{"mode": m.mode, "reason": m.reason, "fixed": m.fixed} for m in r.modes],
+                        **({"barMet": r.bar_met} if r.bar_met is not None else {}),
                         # The streamed text is replaced by the checked one when a guardrail rewrote the answer.
                         **({"guardrail": r.guardrail, "text": r.text} if r.guardrail else {}),
                     },
@@ -453,12 +469,14 @@ class PendingApproval(TypedDict):
     # before skills had steps.
     run: NotRequired[Json | None]
     held: NotRequired[dict[str, list[str]]]
+    # A helper agent's pause the turn waits on (Interrupt.nested); absent for the turn's own call.
+    nested: NotRequired[Json]
 
 
 def pending_approval(i: Interrupt) -> PendingApproval:
     """An Interrupt as plain data the checkpointer can store."""
     p = i.pending_call
-    return {
+    out: PendingApproval = {
         "interrupt_id": i.interrupt_id,
         "needed": i.needed,
         "tool_call_id": p.tool_call_id,
@@ -475,6 +493,9 @@ def pending_approval(i: Interrupt) -> PendingApproval:
         "run": i.run.model_dump(mode="json", by_alias=True) if i.run is not None else None,
         "held": {k: [*v] for k, v in i.held.items()},
     }
+    if i.nested:
+        out["nested"] = i.nested
+    return out
 
 
 def interrupt_to_state(i: Interrupt) -> Json:
@@ -507,4 +528,5 @@ def interrupt_from_state(d: Json) -> Interrupt:
         v.get("plan"),
         SkillRunState.model_validate(run) if (run := v.get("run")) else None,
         {k: [*held] for k, held in (v.get("held") or {}).items()},
+        v.get("nested"),
     )

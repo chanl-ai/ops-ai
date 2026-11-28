@@ -10,7 +10,10 @@ recorded response on a re-run instead of calling the model again.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from typing import Any, Protocol
+
+import httpx
 
 from ops_access import BY_KEY, who_can
 from ops_agent_kernel.events import TurnFinished
@@ -28,17 +31,18 @@ from ops_agents.activities.tools import LocalToolExecutor
 from ops_agents.domain.accounts import chosen_accounts
 from ops_engine.ports import AgentRequest, AgentResult, PromptRequest, outside_call
 from ops_identity import ServiceClient
-from ops_metering import PriceTable
+from ops_metering import Budget
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 
+from ..graphs.metering import step_calls
 from ..store.agent_registry import AgentRegistry
 from ..store.engine import AsyncEngine
-from ..store.usage import UsageLedger
 from .agent_registry import definition_of
+from .budgets import BudgetedSource, GatewayBudgets, budgeted, gateway_budgets, spending_from, step_budget
 from .error_words import WordedTools
-from .model_ledger import LedgerModel, LedgerSource, step_calls
 
 
 class AgentUnavailableError(RuntimeError):
@@ -153,6 +157,21 @@ class KernelAgents:
     model_alias: str
     # The rules each AI step's run follows (aiSteps, aiStepsMaskPersonalData); without them every step runs, masked.
     rules: RunRules | None = None
+    # The gateway's budgets: each agent step spends from its own (step:<run>:<node>), set from the agent's
+    # per-conversation caps before the turn. None without models-service, when no budget holds.
+    budgets: GatewayBudgets | None = None
+
+    async def _step_budget(self, agent: AgentDefinition, turn_id: str) -> str | None:
+        if self.budgets is None or turn_id.count(":") < 2:
+            return None
+        run, node, _ = turn_id.rsplit(":", 2)
+        budget_id = step_budget(run, node)
+        team = isolation.team()
+        if team is None:
+            return None
+        caps = Budget(agent.max_conversation_calls, None, Decimal(str(agent.max_conversation_cost)))
+        await self.budgets.put(budget_id, "step", team, caps)
+        return budget_id
 
     async def turn(self, request: AgentRequest) -> AgentResult:
         reg = AgentRegistry(self.db)
@@ -190,6 +209,7 @@ class KernelAgents:
             using_accounts(chosen_accounts(agent=agent.accounts, chat=current_run_context().accounts)),
             outside_call(),
             step_calls(request.turn_id),
+            spending_from(await self._step_budget(agent, request.turn_id)),
         ):
             async for event in run_turn(req, self.ports):
                 if isinstance(event, TurnFinished):
@@ -277,16 +297,17 @@ def kernel_agents(
             model = build_model(settings)
         except NoModelKeyError:
             return None
-    usage = UsageLedger(db, PriceTable.parse(settings.prices))
+    models_http = httpx.AsyncClient(base_url=settings.models_url or "", timeout=10) if through is not None else None
+    budgets = gateway_budgets(settings, models_http, db) if models_http is not None else None
     directory: ToolDirectory = ToolsOperations(tools) if tools is not None else CatalogTools(catalog)
     inner = GatewayToolExecutor(gateway, directory) if gateway is not None else LocalToolExecutor(catalog)
     # A failed call reaches the model in words, its code kept on the call log (error_words.py).
     executor = WordedTools(inner)
     knowledge: Knowledge = KbService(kb) if kb is not None else NoKnowledgeService()
     ports = KernelPorts(
-        model=LedgerModel(model, usage, settings.model_alias, call_headers=through is not None),
+        model=budgeted(model, budgets, settings.model_alias, headers=through is not None),
         tools=executor,
         knowledge=knowledge,
-        models=LedgerSource(through, usage) if through is not None else None,
+        models=BudgetedSource(through, budgets) if through is not None else None,
     )
-    return KernelAgents(db, catalog, ports, directory, settings.model_alias)
+    return KernelAgents(db, catalog, ports, directory, settings.model_alias, budgets=budgets)

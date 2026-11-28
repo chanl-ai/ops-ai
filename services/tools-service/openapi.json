@@ -2303,6 +2303,124 @@
         "title": "AppViewCounts",
         "type": "object"
       },
+      "ApprovalBindingIn": {
+        "additionalProperties": false,
+        "properties": {
+          "inputHash": {
+            "minLength": 1,
+            "title": "Inputhash",
+            "type": "string"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runid"
+          },
+          "step": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Step",
+            "type": "string"
+          },
+          "system": {
+            "default": false,
+            "title": "System",
+            "type": "boolean"
+          },
+          "threadId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threadid"
+          },
+          "tool": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tool",
+            "type": "string"
+          },
+          "workflow": {
+            "default": "",
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "tool",
+          "inputHash"
+        ],
+        "title": "ApprovalBindingIn",
+        "type": "object"
+      },
+      "ApprovalIn": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 50,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounts"
+          },
+          "approvers": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Approvers",
+            "type": "array"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/ApprovalBindingIn"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          }
+        },
+        "required": [
+          "binding",
+          "input",
+          "approvers"
+        ],
+        "title": "ApprovalIn",
+        "type": "object"
+      },
       "ApprovalRequestIn": {
         "additionalProperties": false,
         "properties": {
@@ -2343,6 +2461,25 @@
           "justification"
         ],
         "title": "ApprovalRequestIn",
+        "type": "object"
+      },
+      "ApprovalToken": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ],
+        "title": "ApprovalToken",
         "type": "object"
       },
       "AuthConfig": {
@@ -4249,6 +4386,57 @@
         "title": "CredentialSecretIn",
         "type": "object"
       },
+      "DecideResult": {
+        "additionalProperties": false,
+        "description": "`POST /v1/calls/decide`: whether the call would run, wait for a person, or be refused, and what an approval of\nit would be bound to. `code` is the refusal's code, as `POST /v1/calls` would answer it.",
+        "properties": {
+          "approversNeeded": {
+            "title": "Approversneeded",
+            "type": "integer"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "editable": {
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "inputHash": {
+            "title": "Inputhash",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "allow",
+              "needs_review",
+              "refuse"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "reason",
+          "inputHash",
+          "approversNeeded",
+          "editable"
+        ],
+        "title": "DecideResult",
+        "type": "object"
+      },
       "DecisionIn": {
         "additionalProperties": false,
         "properties": {
@@ -4908,6 +5096,25 @@
         "title": "Envelope[AppUsers]",
         "type": "object"
       },
+      "Envelope_ApprovalToken_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApprovalToken"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ApprovalToken]",
+        "type": "object"
+      },
       "Envelope_BulkResult_": {
         "additionalProperties": false,
         "properties": {
@@ -5020,6 +5227,25 @@
           "data"
         ],
         "title": "Envelope[CredentialDeleted]",
+        "type": "object"
+      },
+      "Envelope_DecideResult_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DecideResult"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[DecideResult]",
         "type": "object"
       },
       "Envelope_DiscoveredNames_": {
@@ -16557,6 +16783,163 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/approvals": {
+      "post": {
+        "description": "Internal (service token): the approval token for one call its approvers decided. The call is decided again,\nthe person it acts for (X-Acting-For) counts as an approver only while the tenant's approval policy lets an\nasker decide (403 requester_cannot_approve), and a step that already sent another write is closed (409\ninterrupt_closed). The token is never stored. Off the request transaction, as a call.",
+        "operationId": "gateway_approvals",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ApprovalToken_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Approvals",
+        "tags": [
+          "gateway"
+        ],
+        "x-ops-public": "internal"
+      }
+    },
     "/v1/apps": {
       "get": {
         "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,\n`category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the\nsearched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to; `hasAccount`\nkeeps the cards with (true) or without (false) a default account.\n`sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared\nlist query; they are named here for the document.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
@@ -22459,6 +22842,163 @@
           }
         },
         "summary": "Abandon",
+        "tags": [
+          "gateway"
+        ],
+        "x-ops-public": "internal"
+      }
+    },
+    "/v1/calls/decide": {
+      "post": {
+        "description": "Internal (service token): what POST /v1/calls would do with this call, from the same checks, with nothing\nsent, claimed or logged. The kernel asks it before a tool runs, so a write that waits for a person pauses\nthere. Off the request transaction, as a call.",
+        "operationId": "gateway_decide",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DecideResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Decide",
         "tags": [
           "gateway"
         ],

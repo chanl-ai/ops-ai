@@ -68,6 +68,26 @@ class VersionedRegistry[H: Out, V: Out](RuntimeStore):
         async with self.tx() as c:
             return await read_rows(c, q, self.version_row)
 
+    async def published_versions(self, record_ids: list[str]) -> dict[str, tuple[frozenset[int], int | None]]:
+        """Each named record the caller sees, with its published version numbers and the one it serves, in one
+        statement however many are named; a record missing here does not exist for the caller."""
+        if not record_ids:
+            return {}
+        h, v = self.head, self.history
+        joined = h.outerjoin(v, sa.and_(v.c[self.subject] == h.c.id, v.c.published_at.is_not(None), *self._scoped(v)))
+        q = (
+            sa.select(h.c.id, h.c.published_version, v.c.version)
+            .select_from(joined)
+            .where(h.c.id.in_(record_ids), *self._scoped(h))
+        )
+        out: dict[str, tuple[set[int], int | None]] = {}
+        async with self.tx() as c:
+            for record_id, serving, version in (await c.execute(q)).all():
+                held = out.setdefault(str(record_id), (set(), serving))
+                if version is not None:
+                    held[0].add(int(version))
+        return {k: (frozenset(vs), serving) for k, (vs, serving) in out.items()}
+
     async def version(self, record_id: str, version: int, c: AsyncConnection | None = None) -> V | None:
         return await self._one(
             self._versions_of(record_id).where(self.history.c.version == version), self.version_row, c

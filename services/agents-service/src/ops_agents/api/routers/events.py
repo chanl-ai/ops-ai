@@ -13,15 +13,22 @@ from collections.abc import AsyncGenerator
 from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sse_starlette import EventSourceResponse
 
+from ops_contracts.loops import RunTrace
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound
+from ops_service_kit.http import Envelope
+from ops_service_kit.narrow import json_object
 
 from ...store.events import EventLog
 from .. import hitl_facade
 from ..auth import Principal, principal
 from ..chat_threads import may_read_thread
 from ..deps import Runtime, runtime
+from ..envelope import ok
+from ..run_trace import trace_of
 from ..runs import graph_store
 from ..schemas import SSE_RESPONSE
 
@@ -98,6 +105,22 @@ async def reattach(
         raise NotFound("Run")
     team = cast(str | None, thread.team_id)
     return EventSourceResponse(run_frames(rt, me, (thread_id, team), run_id, after, follow=follow), sep="\n", ping=15)
+
+
+@router.get("/v1/threads/{thread_id}/runs/{run_id}/trace", response_model=Envelope[RunTrace])
+async def run_trace(rt: Rt, me: Me, _: Tx, thread_id: str, run_id: str) -> JSONResponse:
+    """The run's steps read back from its event log: modes, plans, tool calls, pauses and each turn's model, in order.
+    Not found for a run of a thread the caller may not read (`may_read_thread`). One request transaction: the run
+    has ended or is read as it stood."""
+    store = graph_store(rt)
+    thread = await store.thread_row(thread_id)
+    run = await store.run(run_id)
+    if thread is None or not may_read_thread(thread.model_dump(), me) or run is None or run.thread_id != thread_id:
+        raise NotFound("Run")
+    events = await EventLog(store.engine).run_events(thread_id, run_id, 0)
+    agent = json_object(thread.model_dump().get("meta")).get("agentId")
+    trace = trace_of(thread_id, run_id, events, agent_id=str(agent) if agent else None)
+    return ok(trace.model_dump(mode="json", by_alias=True))
 
 
 @router.get("/v1/events", response_model=None, responses=SSE_RESPONSE)

@@ -65,7 +65,7 @@ async def test_reply_streams_console_frames_and_is_stored(client: AsyncClient) -
     assert [m["role"] for m in stored["messages"]] == ["user", "assistant"]
     assert stored["messages"][1]["id"] == events[0]["messageId"]
     assert stored["messages"][1]["citations"][0]["documentId"] == "doc_wire_limits"
-    assert stored["messages"][1]["model"] == "function:scripted:scripted_stream"
+    assert stored["messages"][1]["model"] == "scripted"
     assert stored["title"].startswith("What is the daily wire limit")
 
 

@@ -272,7 +272,7 @@ async def test_a_session_is_refused_for_another_team_deployment_or_after_expiry(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dep, other = await deploy(client), await deploy(client)
-    signer = HmacSigner.derived(SETTINGS.review_key.get_secret_value(), "widget-session")
+    signer = HmacSigner.derived(SETTINGS.session_token_key.get_secret_value(), "widget-session")
     claims = {"typ": widget_sessions.SESSION_TYPE, "dep": dep["id"], "origin": INTRANET, "email": "x@y.z", "name": "X"}
     forged = mint({**claims, "tenant": "local", "team": "team_security", "sub": "x"}, signer, ttl_s=TEST_TOKEN_TTL_S)
     elsewhere = await session(client, other["id"])

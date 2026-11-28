@@ -2354,6 +2354,45 @@ export interface components {
             /** Connected */
             connected: number;
         };
+        /** ApprovalBindingIn */
+        ApprovalBindingIn: {
+            /** Inputhash */
+            inputHash: string;
+            /** Runid */
+            runId?: string | null;
+            /** Step */
+            step: string;
+            /**
+             * System
+             * @default false
+             */
+            system: boolean;
+            /** Threadid */
+            threadId?: string | null;
+            /** Tool */
+            tool: string;
+            /**
+             * Workflow
+             * @default
+             */
+            workflow: string;
+        };
+        /** ApprovalIn */
+        ApprovalIn: {
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            } | null;
+            /** Approvers */
+            approvers: string[];
+            binding: components["schemas"]["ApprovalBindingIn"];
+            /** Environment */
+            environment?: string | null;
+            /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+        };
         /** ApprovalRequestIn */
         ApprovalRequestIn: {
             /**
@@ -2369,6 +2408,13 @@ export interface components {
             operations: string[];
             /** Workflowid */
             workflowId: string;
+        };
+        /** ApprovalToken */
+        ApprovalToken: {
+            /** Expiresat */
+            expiresAt: string;
+            /** Token */
+            token: string;
         };
         /**
          * AuthConfig
@@ -3028,6 +3074,28 @@ export interface components {
             /** Clientsecret */
             clientSecret: string;
         };
+        /**
+         * DecideResult
+         * @description `POST /v1/calls/decide`: whether the call would run, wait for a person, or be refused, and what an approval of
+         *     it would be bound to. `code` is the refusal's code, as `POST /v1/calls` would answer it.
+         */
+        DecideResult: {
+            /** Approversneeded */
+            approversNeeded: number;
+            /** Code */
+            code?: string | null;
+            /** Editable */
+            editable: boolean;
+            /** Inputhash */
+            inputHash: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "allow" | "needs_review" | "refuse";
+        };
         /** DecisionIn */
         DecisionIn: {
             /**
@@ -3290,6 +3358,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ApprovalToken] */
+        Envelope_ApprovalToken_: {
+            data: components["schemas"]["ApprovalToken"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[BulkResult] */
         Envelope_BulkResult_: {
             data: components["schemas"]["BulkResult"];
@@ -3338,6 +3415,15 @@ export interface components {
         /** Envelope[CredentialDeleted] */
         Envelope_CredentialDeleted_: {
             data: components["schemas"]["CredentialDeleted"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[DecideResult] */
+        Envelope_DecideResult_: {
+            data: components["schemas"]["DecideResult"];
             /**
              * Success
              * @constant

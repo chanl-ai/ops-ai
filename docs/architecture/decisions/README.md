@@ -24,7 +24,7 @@ when the build moves on: its status line says what superseded it, and the curren
 | [ADR-0011](prompt-management.md) | Prompt management | Superseded by ADR-0012: shared text is an always-on skill | [Agent guardrails and skills](../agent-guardrails.md) |
 | [ADR-0012](assurance.md) | Governance and testing as one system | Option; approver rules moved | [Roles and permissions](../roles-and-permissions.md#approvals) |
 | [ADR-0013](auth-provider-seam.md) | The sign-in provider seam | Option | [Identity and tenancy](../identity-and-tenancy.md), [SAML sign-in](../saml-sign-in.md) |
-| [ADR-0014](agent-loop-library.md) | The agent loop library | Option | Pydantic AI ([runtime](../runtime.md)) |
+| [ADR-0014](agent-loop-library.md) | The agent loop library | Superseded | Strands ([runtime contract](../../design/agents-v2/runtime-contract-and-strands-loop.md)) |
 | [ADR-0015](execution-engine-seam.md) | The execution engine seam | Superseded in part: no Temporal adapter | [Workflow runner](../workflow-runner.md) |
 | [ADR-0016](fencing-and-timers.md) | Fencing and timers | Superseded in part: fencing by lease generation carries into `ops_engine` | [Durability, failure and audit](../durability-failure-and-audit.md) |
 | [ADR-0017](database-support.md) | Which databases Ops AI supports | Decided: PostgreSQL, and SQL Server 2025 or Azure SQL; MySQL dropped | [Data](../data.md), [Azure SQL guide](../../guide/azure-sql.md) |

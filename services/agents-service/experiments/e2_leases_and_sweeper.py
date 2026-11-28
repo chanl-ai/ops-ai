@@ -48,7 +48,6 @@ def spawn(name: str, port: int) -> tuple[subprocess.Popen[bytes], Path]:
         "OPS_PORT": str(port),
         "OPS_LEASE_TTL_SECONDS": str(TTL),
         "OPS_SWEEP_INTERVAL_SECONDS": str(SWEEP),
-        "PYDANTIC_AI_NO_BANNER": "1",
     }
     fh = log.open("ab")
     proc = subprocess.Popen([sys.executable, "-m", "ops_agents.api"], cwd=ROOT, env=env, stdout=fh, stderr=fh)

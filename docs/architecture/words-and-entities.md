@@ -33,7 +33,7 @@ Status: current, checked against the code on 2026-11-18. Designed and not built:
 | Delegation token | A short-lived token with `sub` (who the work is for) and `act` (who does it: the graph version) | Partial: acting-for tokens that platform-service signs per person and team travel as `X-Acting-For`; `act` as the graph version is designed |
 | Side-effect class | `none`, `read`, `write` idempotent, `write` not idempotent, `money`. Sets retries and whether a token is needed | Access class in the tools registry: `read` or `write`; how many people approve a write is the operation's approval policy (`approvers` 1 or 2) |
 | Manual handling | Where a failed or stuck run lands for a person. No run ends silently | Reached by route-to-people (built-in `manual_handling` step); from retries and the recursion limit, designed |
-| Budget | Caps on a thread's model calls, tokens and cost. A spent budget pauses the thread for a person | `thread_budgets`; usage per call in `usage_records` |
+| Budget | Caps on a thread's model calls, tokens and cost. A spent budget pauses the thread for a person | models-service `model_budgets`, set by agents-service (`api/budgets.py`); each call in its call log |
 
 ## Entities and how they relate
 

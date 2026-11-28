@@ -15,12 +15,10 @@ import httpx2
 import pdfplumber
 import pytest
 from openai import AsyncOpenAI
-from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agents.graphs.metering import MeteredModels
-from ops_agents.graphs.models import PydanticAiModels
+from ops_agents.graphs.models import GatewayModels, ModelAnswerInvalid
 
 ROOT = Path(__file__).resolve().parents[4]
 FIXTURES = ROOT / "services" / "agents-service" / "tests" / "fixtures" / "mailbox"
@@ -41,12 +39,12 @@ def fake_openai() -> ModuleType:
     return module
 
 
-def models(rules_folder: Path | None) -> PydanticAiModels:
+def models(rules_folder: Path | None) -> GatewayModels:
     fake = fake_openai()
     script = fake.load_script(rules_folder) if rules_folder else fake.Script([], ["default"])
     http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=fake.create_app(script)))
     client = AsyncOpenAI(base_url="http://fake/v1", api_key="fake", max_retries=0, http_client=http)
-    return PydanticAiModels(OpenAIChatModel("default", provider=OpenAIProvider(openai_client=client)))
+    return GatewayModels(ModelEndpoint(client, "default"))
 
 
 def notice_text() -> str:
@@ -70,7 +68,7 @@ async def test_the_rule_yields_one_record_per_person_with_every_field() -> None:
 
 
 async def test_without_the_rule_the_call_fails_instead_of_inventing_records() -> None:
-    with pytest.raises(UnexpectedModelBehavior):
+    with pytest.raises(ModelAnswerInvalid):
         await models(None).extract_records("persons", notice_text())
 
 

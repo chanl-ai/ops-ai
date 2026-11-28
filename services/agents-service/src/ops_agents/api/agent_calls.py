@@ -13,9 +13,9 @@ Each call carries a chain record (`ops_contracts.chain.ChainRecord`), kept on th
 runs for, the thread it started on, the agents on it and how deep it may go. The record decides who may be asked next,
 for the offer and for the call: never an agent already on the path, never past its depth (one today, so a specialist
 asks no one). A specialist
-has no budget of its own: its model calls count against the thread the chain started on (store/usage.py), each one
-checked before it runs (api/model_ledger.py). A specialist stopped at that budget returns what it has written, and the
-asking agent reads `budget_reached`.
+has no budget of its own: its model calls name the budget of the thread the chain started on, which the model gateway
+admits each against (api/budgets.py). A specialist stopped at that budget returns what it has written, with no
+closing call of its own, and the asking agent reads `budget_reached`.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from ops_agent_kernel.types import ToolGrant
 from ops_agents.graphs.common import Asker
 from ops_contracts.chain import ChainRecord, ChainRefusedError
 from ops_contracts.skill_run import called_as
+from ops_identity import Principal as Caller
 from ops_service_kit import narrow
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Json, JsonValue
@@ -69,11 +70,25 @@ async def agent_team(rt: Runtime, agent_id: str) -> str | None:
     return owners[agent_id] or None
 
 
+def _reaches(thread: StoredThread, who: Caller | None, team: str | None, name: str) -> bool:
+    """Whether the turn on `thread`, for caller `who` (None: no person), may reach an agent of `team` named `name`."""
+    if who is None:
+        return refused_with_no_person(thread, team, f"agent {name}") is None
+    # An agent with no team is open to every person of the tenant; a service or a key holds only what its token
+    # lists, so it is checked there too.
+    if team or who.kind != "person":
+        try:
+            can(who, "chat", "run", team=team, what=name)
+        except Forbidden:
+            return False
+    return True
+
+
 class AgentCalls:
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
 
-    async def offers(self, asker: Asker) -> list[ToolGrant]:
+    async def offers(self, asker: Asker, resuming: str | None = None) -> list[ToolGrant]:
         try:
             configurable = get_config().get("configurable") or {}
         except RuntimeError:
@@ -81,7 +96,19 @@ class AgentCalls:
         thread_id = str(configurable.get("thread_id") or "")
         if TURN_PERSON.get() is None and thread_id:
             await self._log_withheld(asker, thread_id, configurable.get("run_id"))
-        return await self.offers_in(asker, thread_id)
+        out = await self.offers_in(asker, thread_id)
+        if resuming and (asked := await self._asked(resuming, thread_id)) is not None:
+            # The resumed call reads the answer of the agent it already asked, whoever the resumed turn runs for.
+            a = self.rt.catalog.agent(str(asked.meta_object().get("agentId") or ""))
+            if a is not None and all(g.name != called_as("agent", a.id) for g in out):
+                out.append(self._grant(a))
+        return out
+
+    async def _asked(self, key: str, parent_thread_id: str) -> StoredThread | None:
+        """The helper thread the call with idempotency key `key` opened from `parent_thread_id`; None when it opened
+        none. It was opened only after the call passed every check, so going on with it needs none again."""
+        row = await graph_store(self.rt).thread_by_key(f"tool:{key}")
+        return row if row is not None and row.parent_thread_id == parent_thread_id else None
 
     async def _log_withheld(self, asker: Asker, thread_id: str, run_id: object) -> None:
         """Records, on the turn's thread, the agent grants the rule for a turn with no person withheld, and why."""
@@ -170,19 +197,33 @@ class AgentCalls:
                 on.extended(a.id, a.version)
             except ChainRefusedError:
                 continue
-            if who is None:
-                if refused_with_no_person(thread, owners[sid] or None, f"agent {a.name}") is not None:
-                    continue
-            # An agent with no team is open to every person of the tenant; a service or a key holds only what its
-            # token lists, so it is checked there too.
-            elif (team := owners[sid]) or who.kind != "person":
-                try:
-                    can(who, "chat", "run", team=team or None, what=a.name)
-                except Forbidden:
-                    continue
+            if not _reaches(thread, who, owners[sid] or None, a.name):
+                continue
             seen.add(sid)
             out.append(self._grant(a))
         return out
+
+    async def hand_targets(self, wanted: list[str]) -> list[str]:
+        """The agents of `wanted` this turn may hand the conversation to: agents of the thread's tenant that the
+        turn's caller may chat with, by the same check an ask makes. A hand-over is no call, so no chain applies."""
+        try:
+            configurable = get_config().get("configurable") or {}
+        except RuntimeError:
+            return []
+        thread_id = str(configurable.get("thread_id") or "")
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        if thread is None or not wanted:
+            return []
+        person = TURN_PERSON.get()
+        who = caller_of(person) if person is not None else None
+        owners = await registry(self.rt).tenant_owners(set(wanted))
+        return [
+            sid
+            for sid in wanted
+            if sid in owners
+            and (a := self.rt.catalog.agent(sid)) is not None
+            and _reaches(thread, who, owners[sid] or None, a.name)
+        ]
 
     async def run(
         self, *, asker: Asker, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
@@ -195,12 +236,17 @@ class AgentCalls:
         person = TURN_PERSON.get()
         callee = self.rt.catalog.agent(agent)
         on = self._chain(parent, asker, parent_run_id)
+        asked = await self._asked(key, parent_thread_id)
         try:
             chain = on.extended(agent, callee.version if callee is not None else 0)
         except ChainRefusedError as e:
             return ToolOutcome(ok=False, output={"error": e.message, "code": e.code, "path": [*on.path]})
-        # Checked again here, not only when offered: a model may name a tool it was never given.
-        if called_as("agent", agent) not in {g.name for g in await self.offers_in(asker, parent_thread_id)}:
+        # Checked again here, not only when offered: a model may name a tool it was never given. A call going on
+        # after a pause reads the thread it opened, which passed this check then.
+        offered = asked is not None and asked.meta_object().get("agentId") == agent
+        if not offered and called_as("agent", agent) not in {
+            g.name for g in await self.offers_in(asker, parent_thread_id)
+        }:
             message = "That agent cannot be asked on this turn."
             return ToolOutcome(ok=False, output={"error": message, "code": "specialist_not_offered"})
         assert callee is not None, "offered above"
@@ -242,8 +288,16 @@ class AgentCalls:
         _, graph = await resolve(self.rt, thread_id)
         snap = await graph.aget_state(config(thread_id))
         base = base | {"threadId": thread_id}
-        if pending(snap):
-            return ToolOutcome(ok=True, output=base | {"status": "waiting_review"})
+        if waiting := pending(snap):
+            # The helper waits on a person: the asking turn pauses on the same decision (the interrupt names the
+            # helper's), and goes on once the helper has answered (hitl_facade carries the resume up).
+            needed = str(narrow.an_object(waiting[0].get("payload") or {}, "the helper's pause").get("needed") or "")
+            return ToolOutcome(
+                ok=True,
+                output=base | {"status": "waiting_review"},
+                needs_review=f"{callee.name}: {needed}" if needed else callee.name,
+                nested={"threadId": thread_id, "interruptId": str(waiting[0]["id"])},
+            )
         runs = await store.runs(thread_id)
         if runs and runs[-1].status == "error":
             return ToolOutcome(ok=False, output=base | {"status": "failed"})

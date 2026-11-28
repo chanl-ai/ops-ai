@@ -7,7 +7,7 @@ from typing import Literal
 
 from ops_contracts.skill_run import SkillRunState
 
-from .types import CitationRef, Interrupt, ToolCallRecord, TurnResult
+from .types import CitationRef, Interrupt, ModeName, Plan, ToolCallRecord, TurnResult
 
 # checking: a guarded answer is written and being checked; nothing of it is shown until it passes.
 Phase = Literal["thinking", "retrieving", "calling_tool", "writing", "checking"]
@@ -80,6 +80,24 @@ class SkillRunChanged:
     run: SkillRunState
 
 
+@dataclass(frozen=True)
+class ModeChanged:
+    """The turn used a mode for the first time (modes.py): the trace's mode step and the stream's `mode` frame."""
+
+    mode: ModeName
+    reason: str
+    fixed: bool
+    at_step: int = 0
+
+
+@dataclass(frozen=True)
+class PlanChanged:
+    """The plan tool accepted a plan (revision 1) or replaced it."""
+
+    plan: Plan
+    revision: int
+
+
 KernelEvent = (
     StatusChanged
     | TextDelta
@@ -89,6 +107,8 @@ KernelEvent = (
     | CitationsReady
     | SkillLoaded
     | SkillRunChanged
+    | ModeChanged
+    | PlanChanged
     | Interrupted
     | TurnFinished
 )

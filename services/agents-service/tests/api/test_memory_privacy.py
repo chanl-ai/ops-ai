@@ -4,6 +4,7 @@ answer, drops their own memory text."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 import pytest
@@ -18,6 +19,7 @@ from tests.api.test_team_default_agent import Stack, say, stack  # noqa: F401  #
 from tests.api.test_write_approval_policy import (
     dev_platform,  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
 )
+from tests.model_gateway import platform_through_gateway
 
 
 def remembered(thread: dict[str, Any]) -> list[dict[str, Any]]:
@@ -39,19 +41,25 @@ async def test_another_reader_of_a_thread_sees_that_something_was_remembered_nev
     assert all(r.get("key") is None and r.get("value") is None for r in theirs), "never the key or the value"
 
 
-async def test_the_budget_answer_keeps_the_owners_memory_text(dev_platform: AsyncClient) -> None:  # noqa: F811
-    made = await dev_platform.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": []}, headers=OWNER)
+@pytest.fixture
+async def budgeted(database_url: str) -> AsyncIterator[AsyncClient]:
+    async with platform_through_gateway(database_url) as c:
+        yield c
+
+
+async def test_the_budget_answer_keeps_the_owners_memory_text(budgeted: AsyncClient) -> None:
+    made = await budgeted.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": []}, headers=OWNER)
     tid = made.json()["data"]["id"]
     stream = {**OWNER, "Accept": "text/event-stream"}
-    first = await dev_platform.post(
+    first = await budgeted.post(
         f"/chat/threads/{tid}/messages", json={"content": "Hello. My timezone is Eastern."}, headers=stream
     )
     assert first.status_code == 200, first.text
-    rt = rt_of(dev_platform)
+    rt = rt_of(budgeted)
     assert rt.usage is not None
     await rt.usage.set_budget(tid, Budget(max_calls=1))
-    await dev_platform.post(f"/chat/threads/{tid}/messages", json={"content": "And what else?"}, headers=stream)
-    answered = await dev_platform.post(f"/chat/threads/{tid}/budget", json={"action": "continue"}, headers=OWNER)
+    await budgeted.post(f"/chat/threads/{tid}/messages", json={"content": "And what else?"}, headers=stream)
+    answered = await budgeted.post(f"/chat/threads/{tid}/budget", json={"action": "continue"}, headers=OWNER)
     assert answered.status_code == 200, answered.text
     kept = remembered(answered.json()["data"])
     assert [r.get("value") for r in kept] == ["Eastern"], kept

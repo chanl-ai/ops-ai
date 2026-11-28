@@ -9,13 +9,13 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 
 from ops_agents.api import hitl_facade
 from ops_agents.api.auth import Principal
 from ops_identity import Principal as Caller
 from ops_service_kit.errors import Forbidden
 from tests.api.role_app import role_app
+from tests.conftest import scripted_model
 from tests.engine.test_lifecycle_rights import person
 
 TEAM = "team_ops"
@@ -25,7 +25,7 @@ CHAT_USER = person("cleo", TEAM, "chat_user")
 
 @pytest.fixture
 async def client() -> Any:
-    async with role_app(TestModel()) as c:
+    async with role_app(scripted_model()) as c:
         yield c
 
 

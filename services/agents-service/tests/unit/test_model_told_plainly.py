@@ -5,17 +5,18 @@ card reaches the model with its code, link and address, which the model then pas
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import Sequence
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall, trailing_tool_results
 from ops_agent_kernel.types import ToolGrant, TurnRequest
 from ops_agents.activities.gateway import GatewayToolExecutor
 from ops_agents.activities.shaper import shape_part
+from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
+from tests.conftest import model_on
 from tests.unit.test_kernel import SETTINGS, FixedKnowledge, run
 
 QUERY = ToolGrant("salesforce_query", "Salesforce", "Run a SOQL query", "read", {"type": "object", "properties": {}})
@@ -35,24 +36,14 @@ NOT_LINKED = {
 }
 
 
-def model(steps: list[ModelResponse], seen: list[Any]) -> FunctionModel:
+def model(steps: Sequence[Answer], seen: list[Any]) -> ModelEndpoint:
     """Answers each model call with the next step; records every tool result it was given."""
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        last = messages[-1]
-        if isinstance(last, ModelRequest):
-            seen.extend(p.content for p in last.parts if isinstance(p, ToolReturnPart))
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        seen.extend(trailing_tool_results(messages))
         return steps[min(len(seen), len(steps) - 1)]
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        r = respond(messages, info)
-        for i, p in enumerate(r.parts):
-            if isinstance(p, ToolCallPart):
-                yield {i: DeltaToolCall(name=p.tool_name, json_args=json.dumps(p.args))}
-            elif isinstance(p, TextPart):
-                yield p.content
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(script)
 
 
 class Drawn:
@@ -75,9 +66,9 @@ class Gateway:
 async def test_rows_a_tool_already_drew_are_not_presented_again() -> None:
     seen: list[Any] = []
     steps = [
-        ModelResponse(parts=[ToolCallPart("salesforce_query", {})]),
-        ModelResponse(parts=[ToolCallPart("present", {"shape": "rows", "data": RECORDS})]),
-        ModelResponse(parts=[TextPart("Case 00044818 is New.")]),
+        Reply(tool_calls=[ToolCall("salesforce_query", {})]),
+        Reply(tool_calls=[ToolCall("present", {"shape": "rows", "data": RECORDS})]),
+        "Case 00044818 is New.",
     ]
     req = TurnRequest("t1", "th1", SETTINGS, [QUERY], user_turn="status of case 00044818")
     _, result = await run(req, KernelPorts(model=model(steps, seen), tools=Drawn(), knowledge=FixedKnowledge([])))
@@ -98,9 +89,9 @@ async def test_a_record_read_after_a_query_that_drew_it_is_not_drawn_again() -> 
             return ToolOutcome(True, out, {"part": shape_part(out, part_id="")})
 
     steps = [
-        ModelResponse(parts=[ToolCallPart("salesforce_query", {})]),
-        ModelResponse(parts=[ToolCallPart("salesforce_get_record", {})]),
-        ModelResponse(parts=[TextPart("Case 00044818 is New.")]),
+        Reply(tool_calls=[ToolCall("salesforce_query", {})]),
+        Reply(tool_calls=[ToolCall("salesforce_get_record", {})]),
+        "Case 00044818 is New.",
     ]
     req = TurnRequest("t1", "th1", SETTINGS, [QUERY, get], user_turn="status of case 00044818")
     tools = QueryThenRead()
@@ -110,7 +101,7 @@ async def test_a_record_read_after_a_query_that_drew_it_is_not_drawn_again() -> 
 
 async def test_a_connect_card_refusal_reaches_the_model_as_a_plain_line() -> None:
     seen: list[Any] = []
-    steps = [ModelResponse(parts=[ToolCallPart("salesforce_query", {})]), ModelResponse(parts=[TextPart("Connect.")])]
+    steps = [Reply(tool_calls=[ToolCall("salesforce_query", {})]), "Connect."]
     tools = GatewayToolExecutor(Gateway({"ok": False, "output": NOT_LINKED}), None)  # type: ignore[arg-type]
     req = TurnRequest("t1", "th1", SETTINGS, [QUERY], user_turn="status of case 00044818")
     _, result = await run(req, KernelPorts(model=model(steps, seen), tools=tools, knowledge=FixedKnowledge([])))

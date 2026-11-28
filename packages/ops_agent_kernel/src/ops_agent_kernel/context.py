@@ -9,7 +9,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
+from ops_service_kit.http import Json
 
 from .types import ATTACHMENT_KB, AgentSettings, AttachedFile, Passage, ToolGrant, TranscriptMessage
 
@@ -31,8 +31,10 @@ class UnknownVariableError(ValueError):
 
 @dataclass(frozen=True)
 class AssembledContext:
+    """`history` is the transcript as the loop's messages: text only, one message per turn."""
+
     system_prompt: str
-    history: list[ModelMessage]
+    history: list[Json]
     user_prompt: str
     digest: dict[str, str]
 
@@ -102,10 +104,8 @@ def assemble(
     stable = [f.text for f in settings.instructions if f.stable]
     volatile = [_fill(f.text, variables) for f in settings.instructions if not f.stable]
     system_prompt = "\n\n".join([*stable, PLATFORM_RULES, *volatile])
-    history: list[ModelMessage] = [
-        ModelRequest(parts=[UserPromptPart(m.content)])
-        if m.role == "user"
-        else ModelResponse(parts=[TextPart(m.content)])
+    history: list[Json] = [
+        {"role": "user" if m.role == "user" else "assistant", "content": [{"text": m.content}]}
         for m in transcript
         if m.content
     ]

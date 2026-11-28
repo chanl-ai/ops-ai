@@ -148,7 +148,7 @@ def wait_up(url: str, seconds: float = 60) -> None:
 
 
 def spawn() -> subprocess.Popen[bytes]:
-    env = {**os.environ, "OPS_PORT": str(RESTART_PORT), "PYDANTIC_AI_NO_BANNER": "1"}
+    env = {**os.environ, "OPS_PORT": str(RESTART_PORT)}
     log = (ROOT / ".logs" / "restart-proof.log").open("ab")
     proc = subprocess.Popen([sys.executable, "-m", "ops_agents.api"], cwd=ROOT, env=env, stdout=log, stderr=log)
     wait_up(f"http://127.0.0.1:{RESTART_PORT}")

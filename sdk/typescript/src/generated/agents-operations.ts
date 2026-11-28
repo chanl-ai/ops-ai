@@ -217,6 +217,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_diff_spec": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/spec/diff",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_draft_agent_brief": {
     "body": "json",
     "headers": [],
@@ -369,6 +380,15 @@ export const agentsOperations = {
       "sortOrder",
       "ids"
     ],
+    "stream": false
+  },
+  "agents_list_loops": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/loops",
+    "pathParams": [],
+    "query": [],
     "stream": false
   },
   "agents_list_model_alias_uses": {
@@ -532,6 +552,19 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_read_spec": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/spec",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
+    ],
+    "stream": false
+  },
   "agents_recent_runs": {
     "body": null,
     "headers": [],
@@ -660,6 +693,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_save_spec": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/agents/{agent_id}/spec",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_save_widget": {
     "body": "json",
     "headers": [],
@@ -776,6 +820,15 @@ export const agentsOperations = {
     "pathParams": [
       "guardrail_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "agents_validate_spec": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/spec/validate",
+    "pathParams": [],
     "query": [],
     "stream": false
   },
@@ -2025,6 +2078,18 @@ export const agentsOperations = {
     "method": "POST",
     "path": "/v1/threads:route-to-people",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "threads_run_trace": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/threads/{thread_id}/runs/{run_id}/trace",
+    "pathParams": [
+      "thread_id",
+      "run_id"
+    ],
     "query": [],
     "stream": false
   },

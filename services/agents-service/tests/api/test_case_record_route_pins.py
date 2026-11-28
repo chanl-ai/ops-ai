@@ -11,7 +11,6 @@ from typing import Any, cast
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -20,6 +19,7 @@ from ops_agents.api.actors import named_actors
 from ops_agents.api.routers import case_records
 from tests.api import role_app as role_app_module
 from tests.api.test_reply_pins import FIXTURES, answer, compare
+from tests.conftest import scripted_model
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER, person
 
 from .role_app import role_app
@@ -39,7 +39,7 @@ async def client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[AsyncClient]:
         return engine
 
     monkeypatch.setattr(role_app_module, "create_async_engine", kept)
-    async with role_app(TestModel()) as c:
+    async with role_app(scripted_model()) as c:
         yield c
 
 

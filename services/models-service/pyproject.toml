@@ -28,4 +28,4 @@ addopts = "-q"
 
 [dependency-groups]
 # The clients agents-service runs on, so tests prove models-service speaks their wire format.
-dev = ["pydantic-ai-slim[openai]>=2.51,<3", "ops-service-kit[testing]"]
+dev = ["openai>=3.19,<4", "ops-service-kit[testing]"]

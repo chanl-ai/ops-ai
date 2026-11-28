@@ -19,7 +19,6 @@ from typing import Any, cast
 import pytest
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.models.test import TestModel
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import Pool, StaticPool
@@ -29,6 +28,7 @@ from ops_agents.store.base import metadata
 from ops_agents.store.skills import SkillVersionRow
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
+from tests.conftest import scripted_model
 
 from ..conftest import SEED, FakeGraphModels
 from ..engine.test_lifecycle_rights import person
@@ -60,7 +60,7 @@ SKILL: dict[str, Any] = {
 
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient]:
-    async with role_app(TestModel()) as c:
+    async with role_app(scripted_model()) as c:
         yield c
 
 
@@ -232,7 +232,7 @@ async def test_a_session_acting_in_no_team_cannot_detach() -> None:
         await c.run_sync(engine_metadata.create_all)
     app = create_app(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
-        model=TestModel(),
+        model=scripted_model(),
         engine=engine,
         checkpointer=InMemorySaver(),
         graph_models=FakeGraphModels(),

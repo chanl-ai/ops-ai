@@ -6,7 +6,7 @@ from __future__ import annotations
 
 USES: dict[str, tuple[str, ...]] = {
     "platform": ("OPS_PLATFORM_SIGNING_KEY", "OPS_SECRETS_KEY"),
-    "agents": ("OPS_REVIEW_KEY",),
+    "agents": ("OPS_SESSION_TOKEN_KEY",),
     "tools": ("OPS_REVIEW_KEY", "OPS_SECRETS_KEY"),
     "files": ("OPS_SECRETS_KEY",),
     "models": ("OPS_SECRETS_KEY",),

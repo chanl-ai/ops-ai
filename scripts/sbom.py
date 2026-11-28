@@ -41,36 +41,13 @@ LICENCE_OVERRIDES = {
 # name: (makes network calls on its own, why we need it). "Only when called" means the code makes no call unless the
 # Runtime asks it to, e.g. an HTTP client.
 NOTES: dict[str, tuple[str, str]] = {
-    "pydantic-ai-slim": (
-        "No. Prints a start-up banner with a Logfire URL to stdout (text only);"
-        " `make run` sets PYDANTIC_AI_NO_BANNER=1",
-        "Agent loop (ADR-0014). Installed with the `openai` and `anthropic` extras; no logfire",
+    "openai": (
+        "Only when called: HTTPS to models-service, or to api.openai.com for a provider model named directly",
+        "The gateway client every model call uses: the Strands loop's model and the kernel's one-off calls",
     ),
-    "pydantic-graph": ("No", "Graph engine Pydantic AI runs its loop on"),
-    "anthropic": (
-        "Only when called: HTTPS to api.anthropic.com, and only when the model alias is a claude-* model",
-        "Optional provider SDK (Anthropic), used when OPS_MODEL_ALIAS names a Claude model",
-    ),
-    "openai": ("Only when called: HTTPS to api.openai.com for each model request", "Chat model provider SDK (gpt-5.5)"),
-    "tiktoken": (
-        "Yes: on first use downloads its BPE encoding file from openaipublic.blob.core.windows.net. Mitigation: vendor"
-        " the encoding file into the image and set TIKTOKEN_CACHE_DIR to it, so no download happens at run time",
-        "Token counting for OpenAI models, required by pydantic-ai-slim[openai]",
-    ),
-    "requests": ("Only when called (by tiktoken's encoding download)", "HTTP client tiktoken uses to fetch encodings"),
-    "regex": ("No", "Field pattern checks with a timeout (ops_extract); tokeniser patterns for tiktoken"),
-    "jiter": ("No", "Fast JSON parser the OpenAI and Anthropic SDKs use"),
-    "genai-prices": (
-        "No by default. `pydantic_ai.prices.update_in_background()` would fetch prices from raw.githubusercontent.com;"
-        " the Runtime never calls it",
-        "Token price table Pydantic AI uses for usage cost",
-    ),
-    "logfire-api": (
-        "No. A no-op shim unless the `logfire` package is installed, and it is not",
-        "Instrumentation hooks Pydantic AI calls; inert here",
-    ),
-    "opentelemetry-api": ("No. API only; no SDK or exporter is installed", "Tracing API Pydantic AI and FastAPI call"),
-    "griffelib": ("No", "Reads tool docstrings for Pydantic AI tool descriptions"),
+    "regex": ("No", "Field pattern checks with a timeout (ops_extract)"),
+    "jiter": ("No", "Fast JSON parser the OpenAI SDK uses"),
+    "opentelemetry-api": ("No. API only; no SDK or exporter is installed", "Tracing API Strands, MCP and FastAPI call"),
     "fastapi": ("No", "HTTP API framework (spec 17 section 3)"),
     "starlette": ("No", "ASGI toolkit under FastAPI"),
     "structlog": ("No", "Structured JSON log lines for every service (ops_service_kit.logging)"),
@@ -95,9 +72,13 @@ NOTES: dict[str, tuple[str, str]] = {
     ),
     "httpx": (
         "Only when called",
-        "HTTP client; used by tests and scripts/prove-chat.py, and by the Anthropic SDK path",
+        "HTTP client; used by tests and scripts/prove-chat.py",
     ),
-    "httpx2": ("Only when called", "HTTP client the Anthropic SDK and genai-prices use"),
+    "httpx2": ("Only when called", "HTTP client the OpenAI SDK uses"),
+    "strands-agents": (
+        "No. Its model calls go through the OpenAI client the kernel passes it",
+        "Agent loop (agents-v2 runtime contract)",
+    ),
     "httpcore": ("Only when called", "Transport under httpx"),
     "httpcore2": ("Only when called", "Transport under httpx2"),
     "truststore": ("No. Reads the operating system's certificate store", "TLS trust from the OS store for httpx2"),
@@ -277,11 +258,8 @@ def render(rows: list[Row]) -> str:
         f" {sum('dev' in r.kind for r in rows)} dev only"
         " (not in the deployed image).",
         "",
-        "Chat runs on OpenAI (gpt-5.5) as decided on 2026-10-10, so Pydantic AI is installed as"
-        " `pydantic-ai-slim[openai,anthropic]` with no `logfire`. Restriction note: the `openai` extra brings"
-        " `tiktoken`, which downloads encoding files from a public blob store"
-        " the first time it is used. For a deployment with no outbound internet, vendor the encoding file into"
-        " the image and set TIKTOKEN_CACHE_DIR to it. The LangGraph checkpointer is the workspace's own"
+        "The agent loop is Strands (`strands-agents[openai]`), and every model call goes through the OpenAI SDK"
+        " to models-service. The LangGraph checkpointer is the workspace's own"
         " ops-checkpointer on asyncpg, so no LGPL PostgreSQL driver is installed.",
         "",
         "## Flagged",

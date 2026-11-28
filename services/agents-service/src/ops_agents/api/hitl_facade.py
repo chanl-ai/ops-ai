@@ -1357,6 +1357,20 @@ async def decide(
     row = found.model_dump()
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
+    if waiting and (helper := _nested_thread(waiting[0])) is not None:
+        # The turn waits on a helper agent's call: the decision is the helper's, under the helper's checks, and this
+        # turn goes on once the helper has answered (_carry_up).
+        return await decide(
+            rt,
+            approver,
+            helper,
+            decision=decision,
+            reason=reason,
+            step_up_token=step_up_token,
+            amount=amount,
+            inputs=inputs,
+            for_chat=for_chat,
+        )
     recorded = (await _decisions(rt, [thread_id])).get(thread_id)
     if not waiting or (recorded and recorded.decision_id == waiting[0]["id"]):
         if recorded is None:
@@ -1537,3 +1551,38 @@ async def _resume(rt: Runtime, thread_id: str, recorded: DecisionOut) -> None:
             status = cast(Json, e["data"])["status"]
     if status in ("done", "interrupted"):
         await reviews.update_decision(thread_id, recorded.decision_id, resumed_at=now_iso())
+    if status == "done":
+        await _carry_up(rt, thread_id, recorded)
+
+
+def _nested_thread(interrupt: Json) -> str | None:
+    """The helper thread a paused turn waits on (the kernel's Interrupt.nested); None for a turn's own call."""
+    nested = cast(Json, interrupt.get("payload") or {}).get("nested")
+    return str(cast(Json, nested).get("threadId") or "") or None if isinstance(nested, dict) else None
+
+
+async def _carry_up(rt: Runtime, thread_id: str, recorded: DecisionOut) -> None:
+    """A helper agent's turn answered after a decision: the turn that asked it, paused on that decision, goes on, so
+    its call reads the helper's answer. Recorded on the asking thread first, so a retry resumes it once."""
+    store = graph_store(rt)
+    helper = await store.thread_row(thread_id)
+    parent_id = helper.meta_object().get("parentThreadId") if helper is not None else None
+    if helper is None or not helper.meta_object().get("calledBy") or not parent_id:
+        return
+    parent_id = str(parent_id)
+    _, graph = await resolve(rt, parent_id)
+    waiting = pending(await graph.aget_state(config(parent_id)))
+    if not waiting or _nested_thread(waiting[0]) != thread_id:
+        return
+    if pending(await (await resolve(rt, thread_id))[1].aget_state(config(thread_id))):
+        return  # the helper paused again: the asking turn waits on that pause now
+    reviews = ReviewStore(store.engine)
+    await reviews.record_decision(
+        parent_id,
+        cast(str, waiting[0]["id"]),
+        decision="approved",
+        reason=None,
+        by=recorded.decided_by,
+        review={"resume": {"decision": "approved"}, "helperThreadId": thread_id},
+    )
+    await _resume(rt, parent_id, (await _decisions(rt, [parent_id]))[parent_id])

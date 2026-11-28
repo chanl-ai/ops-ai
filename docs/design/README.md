@@ -9,6 +9,7 @@ pages are.
 <!-- site: cards -->
 | Area | Pages |
 |---|---|
+| Agents version 2 | [Build specs, coding guide and experiments](agents-v2/README.md) |
 | Workflows and agents | [Workflows and agents](workflows/workflows-and-agents.md), [workflow nodes](workflows/workflow-nodes.md), [workflow canvas](workflows/canvas.md) |
 | Tools | [Tool system](tools/tool-system.md), [Tools MCP server](tools/mcp-server.md) |
 | Cases and human tasks | [Case page](cases/case-page.md), [Human task page](human-tasks/task-page.md) |

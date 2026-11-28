@@ -1,6 +1,6 @@
 """The built-in `plan` tool: the model's checklist for an ask that takes more than one lookup, kept current as it works.
 
-Each call sends the whole list (title, three to seven steps, each todo, doing, done, blocked or skipped). The checks
+Each call sends the whole list (title, one to seven steps, each todo, doing, done, blocked or skipped). The checks
 keep it honest: one step doing or blocked at most, a step never moves back, a done step's title never changes, and the
 plan is replaced (`replan`) at most twice a turn. A refused call returns the rule and leaves the plan on screen as it
 was. The plan is drawn in the existing `steps` shape, one part per turn that each call redraws; once every step is done
@@ -23,7 +23,7 @@ STATUSES = ("todo", "doing", "done", "blocked", "skipped")
 # The order a step moves in; blocked sits beside doing, as a paused step goes on from where it stopped.
 RANK = {"todo": 0, "doing": 1, "blocked": 1, "done": 2, "skipped": 2}
 FINISHED = ("done", "skipped")
-MIN_STEPS, MAX_STEPS = 3, 7
+MIN_STEPS, MAX_STEPS = 1, 7
 MAX_REPLANS = 2
 TITLE_CHARS = 120
 # The steps shape's states (console lib/types/widgets.ts StepState).
@@ -35,7 +35,8 @@ GRANT = ToolGrant(
     SERVER,
     "Keep a short checklist the person sees while you work, for an ask that needs a chain of lookups (a later one "
     "depends on an earlier result), more than one app, or a change. Never for one lookup or reads that answer one "
-    "question together. Send the whole list every time: a title and 3 to 7 steps, each {title, status, note?} with "
+    "question together. A change always needs one: no tool that changes data runs before it. Send the whole list "
+    "every time: a title, why, and 1 to 7 steps, each {title, status, note?} with "
     "status todo, doing, done, blocked or skipped, the first one doing. Send it once, in the same step as the "
     "first step's reads, never alone: it then ticks itself as each step's reads come back and your answer finishes "
     "it, so you never call plan again.",
@@ -59,8 +60,10 @@ GRANT = ToolGrant(
                 },
             },
             "replan": {"type": "boolean"},
+            # Names the turn's plan mode (modes.py); the person sees it in the trace, the model never reads it back.
+            "why": {"type": "string", "maxLength": 200, "description": "In one sentence, why this ask needs a plan"},
         },
-        "required": ["title", "steps"],
+        "required": ["title", "steps", "why"],
     },
 )
 
@@ -73,7 +76,7 @@ def given(arguments: Json) -> tuple[Plan | None, str | None]:
     """The plan the call sends, cleaned and masked, or why its shape is refused."""
     raw = arguments.get("steps")
     if not isinstance(raw, list) or not MIN_STEPS <= len(raw) <= MAX_STEPS:
-        return None, f"A plan has {MIN_STEPS} to {MAX_STEPS} steps; for fewer, make the reads without a plan."
+        return None, f"A plan has {MIN_STEPS} to {MAX_STEPS} steps."
     steps: list[PlanStep] = []
     for s in raw:
         step = json_object(s)

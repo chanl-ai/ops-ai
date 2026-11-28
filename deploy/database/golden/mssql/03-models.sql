@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at 20261122_2017_list_sort_indexes
+-- models-service, stamped at 20261126_1200_budgets_replays
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
@@ -136,6 +136,60 @@ CREATE TABLE model_key_spend (
 	CONSTRAINT model_key_spend_pkey PRIMARY KEY (key_id, period)
 );
 GO
+CREATE TABLE model_budgets (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(8) NOT NULL, 
+	created_by VARCHAR(80) NOT NULL, 
+	expires_at DATETIMEOFFSET NULL, 
+	parent_id VARCHAR(200) NULL, 
+	max_cost NUMERIC(18, 6) NULL, 
+	max_calls INTEGER NULL, 
+	max_tokens BIGINT NULL, 
+	spent_cost NUMERIC(18, 6) NOT NULL DEFAULT '0', 
+	spent_calls INTEGER NOT NULL DEFAULT '0', 
+	spent_tokens BIGINT NOT NULL DEFAULT '0', 
+	reserved_cost NUMERIC(18, 6) NOT NULL DEFAULT '0', 
+	reserved_calls INTEGER NOT NULL DEFAULT '0', 
+	reserved_tokens BIGINT NOT NULL DEFAULT '0', 
+	closing_keys NVARCHAR(max) NOT NULL, 
+	check_calls NVARCHAR(max) NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	updated_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	CONSTRAINT model_budgets_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_model_budgets_parent ON model_budgets (tenant_id, parent_id);
+GO
+CREATE TABLE model_budget_reservations (
+	id VARCHAR(64) NOT NULL, 
+	budget_id VARCHAR(200) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	cost NUMERIC(18, 6) NOT NULL, 
+	calls INTEGER NOT NULL, 
+	tokens BIGINT NOT NULL, 
+	expires_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT model_budget_reservations_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_model_budget_reservations_budget ON model_budget_reservations (tenant_id, budget_id);
+GO
+CREATE INDEX ix_model_budget_reservations_expires ON model_budget_reservations (expires_at);
+GO
+CREATE TABLE model_replays (
+	tenant_id VARCHAR(64) NOT NULL, 
+	replay_key VARCHAR(240) NOT NULL, 
+	request_hash VARCHAR(64) NOT NULL, 
+	response NVARCHAR(max) NOT NULL, 
+	call_id VARCHAR(64) NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	expires_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT model_replays_pkey PRIMARY KEY (tenant_id, replay_key, request_hash)
+);
+GO
+CREATE INDEX ix_model_replays_expires ON model_replays (expires_at);
+GO
 CREATE TABLE model_aliases (
 	name VARCHAR(120) NOT NULL, 
 	version INTEGER NOT NULL, 
@@ -183,10 +237,28 @@ CREATE SECURITY POLICY ops_security.model_call_log_tenant
     ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_call_log AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.model_budgets_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.model_budgets,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_budgets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_budgets AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.model_budget_reservations_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.model_budget_reservations,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_budget_reservations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_budget_reservations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.model_replays_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.model_replays,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_replays AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_replays AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_models (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('20261122_2017_list_sort_indexes');
+INSERT INTO alembic_version_models (version_num) VALUES ('20261126_1200_budgets_replays');
 GO

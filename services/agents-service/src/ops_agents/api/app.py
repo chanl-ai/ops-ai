@@ -16,9 +16,9 @@ import httpx
 import httpx2
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic_ai.models import Model
 
 from ops_access.platform_events import platform_events_router
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.models import ModelsServiceModels, NoModelKeyError, build_model
 from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import load_catalog
@@ -32,12 +32,11 @@ from ops_agents.graphs.checkpointer import open_checkpointer
 from ops_agents.graphs.common import GraphDeps
 from ops_agents.graphs.definition import CompiledCache, WorkflowDefinition
 from ops_agents.graphs.metering import MeteredModels
-from ops_agents.graphs.models import GraphModels, PydanticAiModels
+from ops_agents.graphs.models import GatewayModels, GraphModels
 from ops_agents.graphs.registry import build_graphs
 from ops_documents_client import DocumentsClient
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient, install_auth
-from ops_metering import PriceTable
 from ops_service_kit.http import operation_id
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -52,13 +51,13 @@ from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow, MailboxStore
 from ..store.tenancy import LOCAL_TENANT, SEED, current_team, current_tenant
-from ..store.usage import UsageLedger
 from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
 from .api_key_copy import key_changed_handler
 from .approval_renewal import ApprovalRenewal
 from .apps_line import AppsLine
+from .budgets import BudgetedSource, budgeted, gateway_budgets
 from .chat_attachments import ChatAttachmentReader
 from .child_runs import ChildRuns
 from .deps import Runtime
@@ -70,7 +69,6 @@ from .memory import MemoryReads
 from .memory_retention import PlatformRetention, expire_forever
 from .metering import CountingModels
 from .model_aliases import HttpModelAliases, StaticModelAliases
-from .model_ledger import LedgerModel, LedgerSource
 from .ops_tools import OpsReads, catch_up_assistants, team_created_handlers
 from .people_names import PlatformPeopleNames
 from .platform_policies import PlatformPolicies
@@ -103,6 +101,7 @@ from .routers import (
     tool_catalog,
     workflows,
 )
+from .routers import agent_spec as agent_spec_routes
 from .routers import ai_steps as ai_step_routes
 from .routers import assurance as assurance_routes
 from .routers import case_types as case_type_routes
@@ -258,7 +257,7 @@ def _no_team() -> str | None:
 async def open_runtime(
     settings: Settings,
     *,
-    model: Model | None = None,
+    model: ModelEndpoint | None = None,
     engine: Database | None = None,
     checkpointer: Any = None,
     graph_models: GraphModels | None = None,
@@ -311,28 +310,34 @@ async def open_runtime(
     inner = GatewayToolExecutor(gateway_client, directory) if gateway_client else LocalToolExecutor(catalog)
     tools = WordedTools(inner)
     replies: ReplySender = GatewayReplySender(gateway_client) if gateway_client else LocalReplySender()
-    # Every model call of a graph run is one record: the budget sums them, a crashed node's re-run replays them
-    # (store/model_calls.py, api/model_ledger.py).
-    usage = UsageLedger(db, PriceTable.parse(settings.prices))
-    kernel_model = (
-        LedgerModel(model, usage, settings.model_alias, call_headers=through_models is not None)
-        if model is not None
-        else None
-    )
-    per_alias = LedgerSource(through_models, usage) if through_models is not None else None
-    kb_http = kb_client or (httpx.AsyncClient(base_url=settings.kb_url, timeout=10) if settings.kb_url else None)
-    if knowledge is None:
-        knowledge = KbService(required_client(settings, kb_http, "kb")) if kb_http is not None else NoKnowledgeService()
-    ports = (
-        KernelPorts(model=kernel_model, tools=tools, knowledge=knowledge, models=per_alias, tool_caches=ChatReads())
-        if kernel_model
-        else None
-    )
-
     # models-service answers which aliases an agent may name; without it only the runtime's own alias is known.
     models_http = models_client or (
         httpx.AsyncClient(base_url=settings.models_url, timeout=10) if settings.models_url else None
     )
+    # Through models-service each call names its budget and replay key, and the gateway admits, replays and records it
+    # (api/budgets.py). Without it no budget holds.
+    budgets = gateway_budgets(settings, models_http, db) if through_models is not None and models_http else None
+    kernel_model = (
+        budgeted(model, budgets, settings.model_alias, headers=through_models is not None)
+        if model is not None
+        else None
+    )
+    per_alias = BudgetedSource(through_models, budgets) if through_models is not None else None
+    kb_http = kb_client or (httpx.AsyncClient(base_url=settings.kb_url, timeout=10) if settings.kb_url else None)
+    if knowledge is None:
+        knowledge = KbService(required_client(settings, kb_http, "kb")) if kb_http is not None else NoKnowledgeService()
+    ports = (
+        KernelPorts(
+            model=kernel_model,
+            tools=tools,
+            knowledge=knowledge,
+            models=per_alias,
+            tool_caches=ChatReads(),
+        )
+        if kernel_model
+        else None
+    )
+
     # The review deadline policy (reviewSlaHours) lives in platform-service; with no platform URL the default holds.
     policies_http = httpx.AsyncClient(base_url=settings.platform_url, timeout=10) if settings.platform_url else None
 
@@ -350,6 +355,7 @@ async def open_runtime(
         else StaticModelAliases({settings.model_alias})
     )
     rt.tools = gateway_client
+    rt.approvals = gateway_client
     rt.tool_reviews = gateway_client or (
         GatewayClient(
             required_client(settings, httpx.AsyncClient(base_url=settings.tools_url, timeout=30), "tools", timeout=30)
@@ -372,7 +378,7 @@ async def open_runtime(
             )
     rt.knowledge_bases = knowledge
     if gateway_client is not None:
-        gateway_client.renewer = ApprovalRenewal(rt)
+        gateway_client.renewer = ApprovalRenewal(rt, gateway_client)
         gateway_client.people = CallPeople.on(acting_for_tokens(settings, gateway_client.http), db)
         if gateway_http is not None:
             # The Tools page's app states, on a client of its own: only this read claims connections:view.
@@ -387,9 +393,9 @@ async def open_runtime(
         if ports is not None and model is not None:
             # LangGraph's checkpoint tables live on the same database as the chat tables.
             saver = checkpointer or await stack.enter_async_context(open_checkpointer(settings.database_url))
-            rt.usage = usage
+            rt.usage = budgets
             models = MeteredModels(
-                CountingModels(graph_models or PydanticAiModels(model)), rt.usage, settings.model_alias
+                CountingModels(graph_models or GatewayModels(kernel_model or model)), rt.usage, settings.model_alias
             )
             channels = ChannelStore(db)
             rt.channels = channels
@@ -441,7 +447,7 @@ async def open_runtime(
 def create_app(
     settings: Settings,
     *,
-    model: Model | None = None,
+    model: ModelEndpoint | None = None,
     engine: Database | None = None,
     checkpointer: Any = None,
     graph_models: GraphModels | None = None,
@@ -564,6 +570,8 @@ def create_app(
     mount(embed_routes.bundle_router, "Widget", include_in_schema=False)
     mount(graphs.router, "Threads")
     mount(graph_list.router, "Graphs")
+    # Before the agents router, so `/v1/agents/spec/validate` is never read as an agent id.
+    mount(agent_spec_routes.router, "Agents")
     mount(agents.router, "Agents")
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")

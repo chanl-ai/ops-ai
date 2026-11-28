@@ -8,7 +8,7 @@ names the page's teams through platform-service (`team_name`) with no connection
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
@@ -19,7 +19,7 @@ from ops_agents.app.evals import parse_cases, stored_run
 from ops_agents.domain.evals import ASSET_AGENT, ASSET_SKILL, CASE_ACTIVE
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound
-from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListParams, ListQuery
 
 from ...store.evals import EvalStore
@@ -118,6 +118,14 @@ class SavedCaseCheck(Out):
     tool: str | None = None
     text: str | None = None
     rubric: str | None = None
+    # The checks for the new behaviour (domain/evals.py): output_matches' fields, mode_in's modes, pauses_for's kind,
+    # hands_to's agent, and within's limits.
+    fields: dict[str, JsonValue] | None = None
+    modes: list[Literal["direct", "plan", "helpers", "sandbox"]] | None = None
+    kind: Literal["approval", "question", "plan_review"] | None = None
+    agent: str | None = None
+    max_cost_usd: float | None = None
+    max_seconds: float | None = None
 
 
 class SavedCase(Out):

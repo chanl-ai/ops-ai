@@ -683,9 +683,71 @@ class CitationsEvent(WireModel):
     citations: list[Citation]
 
 
+ModeName = Literal["direct", "plan", "helpers", "sandbox"]
+
+
+class ModeStep(WireModel):
+    """One way of working a turn used, named at its first use (docs/design/agents-v2/automatic-mode-and-loop-kinds.md).
+    `fixed` when the builder set the loop kind."""
+
+    mode: ModeName
+    reason: str
+    fixed: bool
+    at_step: int = 0
+
+
+class ModeEvent(WireModel):
+    """The turn used a way of working for the first time: answered directly, planned, asked a helper or opened the
+    workspace. `fixed` when the builder set the loop kind."""
+
+    type: Literal["mode"] = "mode"
+    mode: ModeName
+    reason: str
+    fixed: bool
+
+
+class PlanStepOut(WireModel):
+    id: str
+    text: str
+    status: Literal["pending", "doing", "done", "skipped"]
+    note: str | None = None
+
+
+class PlanEvent(WireModel):
+    """The turn's plan, sent whole each time it changes; `revision` counts the replans."""
+
+    type: Literal["plan"] = "plan"
+    title: str
+    steps: list[PlanStepOut]
+    revision: int
+
+
+class AgentAskedEvent(WireModel):
+    """A helper agent was asked a question on this turn (`started`), then answered it (`finished`)."""
+
+    type: Literal["agent_asked"] = "agent_asked"
+    agent_id: str
+    agent_name: str
+    question: str
+    status: Literal["started", "finished"]
+    summary: str | None = None
+    call_id: str
+
+
+class HandoffEvent(WireModel):
+    """The conversation was handed to another agent, with the message it starts from."""
+
+    type: Literal["handoff"] = "handoff"
+    to: str
+    to_name: str
+    message: str
+
+
 class DoneEvent(WireModel):
     type: Literal["done"] = "done"
     message: ChatMessage
+    # The ways of working the turn used, in order; absent on a reply that ran no turn.
+    modes: list[ModeStep] | None = None
 
 
 class ErrorEvent(WireModel):
@@ -710,6 +772,10 @@ ChatStreamEvent = (
     | TextEvent
     | ReplaceEvent
     | CitationsEvent
+    | ModeEvent
+    | PlanEvent
+    | AgentAskedEvent
+    | HandoffEvent
     | DoneEvent
     | ErrorEvent
 )

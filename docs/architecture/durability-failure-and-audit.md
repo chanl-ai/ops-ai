@@ -37,7 +37,7 @@ deduplication lives where the call lands (tools-service), never in the process t
 
 | Call in a re-run node | What happens |
 |---|---|
-| Agent-kernel model call already completed in a chat turn, on PostgreSQL or SQL Server | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread, the LangGraph task and a hash of the request without timestamps, run ids and conversation ids; a re-run resume node makes no second call |
+| Agent-kernel model call already completed in a chat turn, on PostgreSQL or SQL Server | Replayed by models-service from `model_replays` under the call's `X-Replay-Key` (`api/budgets.py` sends it), keyed by tenant, thread, the LangGraph task and a hash of the request without timestamps, run ids and conversation ids; a re-run resume node makes no second call |
 | Workflow AI and agent step model calls (classify, summarise, extract from text, draft, agent) already completed | Replayed from the same records, keyed by run, the step's own id (run:node:iteration) and the request hash, so a re-run after a crash, a lost checkpoint or a step whose done mark never committed pays nothing twice; a changed input is a new request and calls the model. Test: `services/agents-service/tests/engine/test_model_replay.py` |
 | Chat-graph models outside the kernel (classify, extract, grade nodes, `MeteredModels`) | Repeat; they are metered, not recorded |
 | Model call in flight at the crash | Repeats; a response is recorded only after its stream is read to the end |
@@ -118,8 +118,9 @@ routed at once under its lease. Code graphs answer 409 `not_routable`. Routing n
 ## Approval expiry
 
 A decision resumes at once, but a resume retried after a busy lease, or a run the sweeper recovers, can reach the
-gateway after the token's TTL. The agents service renews the token from the recorded approvals of that exact call
-(thread, step, tool, input hash, the same approvers) while they are younger than `approval_renewal_max_age_seconds`
+gateway after the token's TTL. The agents service asks the gateway for a new token (`POST /v1/approvals`), naming the
+recorded approvals of that exact call (thread, step, tool, input hash), rebuilt from the call and the review rows and
+never from the expired token, while they are younger than `approval_renewal_max_age_seconds`
 (24 h); past that, the call fails asking for a fresh review (`api/approval_renewal.py`, uc-027).
 
 | Option | For | Against |

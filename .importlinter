@@ -86,8 +86,6 @@ source_modules = ops_agents.store
 forbidden_modules = ops_agents.*
 ignore_imports =
     ops_agents.store.** -> ops_agents.store.**
-    # A store reaching above itself; only removed, never added.
-    ops_agents.store.usage -> ops_agents.graphs.metering
 
 [importlinter:contract:documents-store-is-bottom]
 name = ops_documents.store imports nothing else in ops_documents
@@ -306,3 +304,15 @@ unmatched_ignore_imports_alerting = error
 ignore_imports =
     # The start entry: it holds the run's input to its trigger's schema, then writes the run.
     ops_engine.starts -> ops_engine.store.new_runs
+
+[importlinter:contract:strands-only-in-its-adapter]
+name = Strands Agents is imported only by the kernel's Strands loop (ops_agent_kernel.strands_loop)
+type = forbidden
+source_modules =
+    ops_agent_kernel
+    ops_agents
+    ops_engine
+forbidden_modules = strands
+allow_indirect_imports = true
+ignore_imports =
+    ops_agent_kernel.strands_loop.** -> strands

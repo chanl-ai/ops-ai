@@ -30,6 +30,7 @@ from ops_ingest.parsers import parse
 from ops_policy import input_hash
 from ops_policy.approval import binding_of
 from ops_service_kit.settings import Settings
+from tests.approval_minter import KEY, GatewayMint
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events, step_up
 
 NOTICE: dict[str, Any] = json.loads((SEED.parent / "mailbox" / "levy_notice.json").read_text())
@@ -90,8 +91,10 @@ class Stack:
         this tool and the digest of the input it receives. A token for another call is refused, not run. Returns the
         list of refusals, so a test can show what was turned away."""
         self.rt.gateway = True
+        # The gateway mints the token a decision carries; the stand-in signs as it does, and the port checks with it.
+        self.rt.approvals = GatewayMint()
         executor, real, refused = self.executor(), self.executor().execute, cast(list[dict[str, Any]], [])
-        key = self.rt.settings.review_key.get_secret_value()
+        key = KEY
 
         async def checked(
             tool: str, arguments: dict[str, Any], *, key_: str, approval_token: str | None
@@ -234,7 +237,7 @@ async def test_hold_places_the_hold_with_the_decisions_call_and_amount(stack: St
     values = (await stack.state(case))["values"]
     # The token was minted over the reviewer's 1500, not the notice's 3250: a token for any other call is refused.
     assert turned_away == [], turned_away
-    bound = binding_of(values["decision"]["approval_token"], stack.rt.settings.review_key.get_secret_value())
+    bound = binding_of(values["decision"]["approval_token"], KEY)
     assert bound.inputHash == input_hash(values["decision"]["call"]["input"]) and bound.tool == "place_hold"
     assert values["status"] == "held" and values["hold"]["status"] == "completed"
     # Recorded as approved, with the option beside it: Reviews keeps its statuses.
@@ -270,7 +273,7 @@ async def test_flag_writes_the_note_only_with_the_decisions_token(stack: Stack) 
     values = (await stack.state(case))["values"]
     assert values["status"] == "flagged" and values["note"]["status"] == "completed"
     assert len(turned_away) == 1, "the minted token was accepted for the note call"
-    bound = binding_of(values["decision"]["approval_token"], stack.rt.settings.review_key.get_secret_value())
+    bound = binding_of(values["decision"]["approval_token"], KEY)
     assert (bound.thread, bound.tool, bound.approvers) == (case, "add_customer_note", [MAYA])
     assert values["decision"]["call"]["input"]["customerId"] == "CUS-4471"
     assert stack.rt.graph_store is not None

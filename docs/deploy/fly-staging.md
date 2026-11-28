@@ -40,7 +40,7 @@ The machine holds every value the per-service apps held, staged by
 | `OPS_DATABASE_URL` (the attach's superuser) | The release command only; `withhold` in `processes.toml` keeps it from every process |
 | `OPS_DATABASE_URL_<SERVICE>` (`ops_<service>_runtime`) | That service as its `OPS_DATABASE_URL`; the worker uses agents' |
 | `OPS_SVC_KEY_<SERVICE>` | That service as its signing key |
-| `OPS_PLATFORM_SIGNING_KEY`, `OPS_REVIEW_KEY`, `OPS_SECRETS_KEY` | The services `deploy/images/service_keys.py` names |
+| `OPS_PLATFORM_SIGNING_KEY`, `OPS_REVIEW_KEY`, `OPS_SESSION_TOKEN_KEY`, `OPS_SECRETS_KEY` | The services `deploy/images/service_keys.py` names |
 | `OPS_MODELS_KEY_AGENTS`, `OPS_MODELS_KEY_DOCUMENTS` | agents and the worker, documents |
 | `OPS_SERVICE_PUBLIC_KEYS`, `OPS_BOOTSTRAP_*` (password withheld) | Every process; the release command makes the first admin |
 

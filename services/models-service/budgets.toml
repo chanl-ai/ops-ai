@@ -46,6 +46,11 @@ queries = 1
 queries = 2
 caller = "service"
 
+# One budget by its id, as the service that owns the conversation reads it.
+["GET /v1/models/budgets/{budget_id}"]
+queries = 1
+caller = "service"
+
 # The shared list contract: the page's count, its rows and the per-key totals, each one statement at any size.
 ["GET /v1/models/calls"]
 queries = 3

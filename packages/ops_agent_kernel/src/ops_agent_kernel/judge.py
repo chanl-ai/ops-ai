@@ -13,13 +13,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from pydantic_ai import Agent
-from pydantic_ai.models import Model
-from pydantic_ai.output import StructuredDict
 
 from ops_service_kit.http import Json
 
+from . import structured
 from .aliases import preferred
+from .contract import ModelEndpoint
 from .ports import BudgetReachedError, ModelSource
 from .types import TokenUsage
 
@@ -49,7 +48,7 @@ class Verdict:
     confidence: float | None = None
 
 
-def model_for(source: ModelSource | None, turn_model: Model) -> Model:
+def model_for(source: ModelSource | None, turn_model: ModelEndpoint) -> ModelEndpoint:
     """`judge` through models-service, or the turn's model while that alias does not exist."""
     return preferred(source, JUDGE_ALIAS, turn_model)
 
@@ -58,23 +57,18 @@ def prompt(check: str, evidence: str) -> str:
     return f"{PROMPT_HEAD}\n{check}\n\nEvidence:\n{evidence}"
 
 
-async def verdict(model: Model, check: str, evidence: str) -> Verdict:
-    agent = Agent[None, Any](
-        model,
-        deps_type=type(None),
-        output_type=StructuredDict(SCHEMA, name="final_result"),
-        instructions=INSTRUCTIONS,
-        retries=0,
-    )
+async def verdict(model: ModelEndpoint, check: str, evidence: str) -> Verdict:
     try:
-        result = await agent.run(prompt(check, evidence))
+        result = await structured.ask(
+            model, system=INSTRUCTIONS, prompt=prompt(check, evidence), purpose="judge", schema=SCHEMA
+        )
     except BudgetReachedError:
         raise  # the run's budget is spent, which is not a judge that failed
     except Exception as e:  # any failure of the call is a judge that did not answer
         return Verdict(None, f"The judge did not answer: {type(e).__name__}: {e}", TokenUsage())
-    u = result.usage
-    spent = TokenUsage(u.input_tokens, u.output_tokens, u.requests)
-    found: list[Any] = list(Draft202012Validator(SCHEMA).iter_errors(result.output))  # pyright: ignore[reportUnknownMemberType]
+    spent = result.usage
+    answer: Any = result.value
+    found: list[Any] = list(Draft202012Validator(SCHEMA).iter_errors(answer))  # pyright: ignore[reportUnknownMemberType]
     if found:
         return Verdict(None, f"The judge did not answer within its schema: {found[0].message}", spent)
-    return Verdict(bool(result.output["passed"]), str(result.output["reason"]), spent)
+    return Verdict(bool(answer["passed"]), str(answer["reason"]), spent)

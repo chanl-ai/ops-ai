@@ -29,6 +29,7 @@ from ops_access import Access
 from ops_identity import (
     Auth,
     CurrentPrincipal,
+    CurrentService,
     CurrentTenantCaller,
     Principal,
     ServiceClient,
@@ -78,12 +79,25 @@ from .catalog import Catalog, CatalogModel
 from .connection_settings import azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
-from .providers import ADAPTERS, AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
+from .providers import (
+    ADAPTERS,
+    AzureOpenAIProvider,
+    Completion,
+    ProviderError,
+    StreamUsage,
+    completion_chunks,
+    provider_for,
+    region_mismatch,
+)
 from .registry import BUILTIN, ProviderEntry, load_registry
+from .replay import CallHeaders, StreamedAnswer, call_headers, prompt_tokens, recorded, replayed, request_hash
 from .schemas import (
     Admission,
     AliasOut,
     AliasRef,
+    BudgetIn,
+    BudgetOut,
+    BudgetQuery,
     CallOut,
     CallPage,
     CatalogModelOut,
@@ -109,8 +123,9 @@ from .schemas import (
     ToolCall,
     ToolFunction,
 )
-from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
+from .store import SENSITIVITY, Aliases, Budgets, CallLog, ModelKeys, ProviderKeyStore, Providers, Replays, cleared
 from .store.aliases import AliasFields, AliasRow, ServingAlias
+from .store.budgets import Ask, BudgetFields, BudgetRefusal, BudgetRow, Hold
 from .store.calls import CallLogRow
 from .store.keys import KeyRow, NewKey
 from .store.provider_keys import ProviderKeyRow
@@ -289,10 +304,82 @@ def refusal(status: int, code: str, message: str) -> ApiError:
     return error
 
 
-def refused(status: int, code: str, message: str) -> JSONResponse:
+def refused(status: int, code: str, message: str, details: Json | None = None) -> JSONResponse:
     """A refusal returned rather than raised, by a model call whose call-log row must commit with it: the kit's error
-    body, as the handler would render it."""
-    return JSONResponse(error_body(status, code, message), status_code=status)
+    body, as the handler would render it, with `details` when the refusal has some."""
+    body: dict[str, Any] = dict(error_body(status, code, message))
+    if details is not None:
+        body["error"] = {**body["error"], "details": details}
+    return JSONResponse(body, status_code=status)
+
+
+def budget_refused(why: BudgetRefusal) -> tuple[int, str, str, Json]:
+    """A budget's refusal as the call is answered: the status, code, message and the details a caller acts on."""
+    if why.code == "budget_not_found":
+        return why.status, why.code, f"No budget {why.budget_id} in this tenant.", {"budgetId": why.budget_id}
+    details: Json = {"budgetId": why.budget_id, "limit": why.limit, "spent": str(why.spent), "cap": str(why.cap)}
+    if why.code == "check_cap_reached":
+        message = f"This replay key used every check call budget {why.budget_id} allows past its {why.limit} cap."
+    else:
+        message = f"Budget {why.budget_id} cannot cover this call: its {why.limit} cap is {why.cap}."
+    return why.status, why.code, message, details
+
+
+def _budget_view(r: BudgetRow) -> BudgetOut:
+    return BudgetOut(
+        id=r.id,
+        kind=cast(Any, r.kind),
+        parent_id=r.parent_id,
+        team_id=r.team_id,
+        created_by=r.created_by,
+        max_cost_usd=r.max_cost,
+        max_calls=r.max_calls,
+        max_tokens=r.max_tokens,
+        spent_cost_usd=r.spent_cost,
+        spent_calls=r.spent_calls,
+        spent_tokens=r.spent_tokens,
+        reserved_cost_usd=r.reserved_cost,
+        reserved_tokens=r.reserved_tokens,
+        exhausted=r.exhausted,
+        updated_at=r.updated_at,
+    )
+
+
+async def budget_caller(p: CurrentService) -> Principal:
+    """The service that owns a conversation or run, holding the models:budgets scope."""
+    if "models:budgets" not in p.scopes:
+        raise Forbidden(
+            "Budgets take a service token with the models:budgets scope.",
+            code="scope_required",
+            details={"scope": "models:budgets"},
+        )
+    return p
+
+
+BudgetService = Annotated[Principal, Depends(budget_caller)]
+
+
+def _chat_completion(call_id: str, created: int, alias: str, done: Completion) -> ChatCompletion:
+    """The reply for a finished completion, live or replayed."""
+    # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
+    message = ChatMessage(role="assistant", content=done.text)
+    # Added only when present, so each counts as set and the route keeps it; absent, the key is dropped.
+    if done.tool_calls:
+        message = message.model_copy(update={"tool_calls": [_tool_call(c) for c in done.tool_calls]})
+    if done.refusal:
+        message = message.model_copy(update={"refusal": done.refusal})
+    return ChatCompletion(
+        id=call_id,
+        object="chat.completion",
+        created=created,
+        model=alias,
+        choices=[ChatChoice(index=0, message=message, finish_reason=done.finish_reason)],
+        usage=ChatUsage(
+            prompt_tokens=done.input_tokens,
+            completion_tokens=done.output_tokens,
+            total_tokens=done.input_tokens + done.output_tokens,
+        ),
+    )
 
 
 def provider_refused(e: ProviderError) -> JSONResponse:
@@ -303,9 +390,10 @@ def provider_refused(e: ProviderError) -> JSONResponse:
 
 def typed(reply: Out | Sequence[Out], status: int = 200) -> JSONResponse:
     """A reply model in the success envelope, under its wire names."""
+    # JSON mode: a Decimal or a datetime field is written as its string, as the schema says.
     if isinstance(reply, Out):
-        return ok(reply.model_dump(by_alias=True), status)
-    return ok([r.model_dump(by_alias=True) for r in reply], status)
+        return ok(reply.model_dump(mode="json", by_alias=True), status)
+    return ok([r.model_dump(mode="json", by_alias=True) for r in reply], status)
 
 
 class ServedVersion(TypedDict, total=False):
@@ -479,6 +567,12 @@ async def _record(calls: CallLog, call: Charge, *, once: bool) -> bool:
     return await calls.record(call.row, at=call.at, once=once)
 
 
+# What a call that sends no budget headers reads as.
+NO_BUDGET = CallHeaders([], None, "turn")
+# The key kinds that run unattended loops: with OPS_MODELS_REQUIRE_BUDGET on they must name a budget.
+BOUNDED_KINDS = frozenset({"agent", "workflow", "purpose"})
+
+
 def _key_refusal(key: KeyRow, now: datetime) -> tuple[int, str, str] | None:
     """Why a key may not spend right now: revoked, expired or at its budget. None when it may."""
     if key.status != "active":
@@ -515,6 +609,7 @@ def create_models_app(
 
     stop = asyncio.Event()
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
+    budgets, replays = Budgets(db), Replays(db)
     loops = background if background is not None else [lambda: call_log.spend.keep_sweeping(stop)]
 
     async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
@@ -1164,6 +1259,66 @@ def create_models_app(
                     )
         return typed(Admission(admitted=True, remaining=str(remaining)))
 
+    # A conversation's or run's budget is created and read by the service that owns it, with the models:budgets scope
+    # (docs/design/agents-v2/model-gateway.md, "Routes"): the service's token names the tenant the budget is held to.
+    budget_errors = error_responses({403: "The service token lacks models:budgets", 404: "No such budget"})
+
+    @app.put(
+        "/v1/models/budgets/{budget_id}",
+        tags=["budgets"],
+        response_model=Envelope[BudgetOut],
+        responses=budget_errors,
+    )
+    async def put_budget(  # pyright: ignore[reportUnusedFunction]
+        budget_id: Annotated[str, Path(min_length=1, max_length=200)],
+        body: BudgetIn,
+        p: BudgetService,
+        _: Tx,
+    ) -> JSONResponse:
+        """Creates the budget, or moves its caps and expiry: a repeat with the same caps changes nothing, and spend
+        never changes here."""
+        fields = BudgetFields(
+            kind=body.kind,
+            parent_id=body.parent_id,
+            team_id=body.team_id,
+            created_by=body.created_by,
+            max_cost=body.max_cost_usd,
+            max_calls=body.max_calls,
+            max_tokens=body.max_tokens,
+            expires_at=body.expires_at,
+        )
+        return typed(_budget_view(await budgets.put(p.tenant_id, budget_id, fields)))
+
+    @app.get(
+        "/v1/models/budgets/{budget_id}",
+        tags=["budgets"],
+        response_model=Envelope[BudgetOut],
+        responses=budget_errors,
+    )
+    async def get_budget(budget_id: str, p: BudgetService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        found = await budgets.get(p.tenant_id, budget_id)
+        if found is None:
+            raise refusal(404, "budget_not_found", f"No budget {budget_id} in this tenant.")
+        return typed(_budget_view(found))
+
+    @app.post(
+        "/v1/models/budgets/query",
+        tags=["budgets"],
+        response_model=Envelope[list[BudgetOut]],
+        responses=budget_errors,
+    )
+    async def query_budgets(body: BudgetQuery, p: BudgetService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The budgets of up to 200 ids in one read, by id; an id the tenant has no budget for is left out."""
+        return typed([_budget_view(r) for r in await budgets.query(p.tenant_id, body.ids)])
+
+    @app.delete("/v1/models/replays", tags=["budgets"], status_code=204, responses=budget_errors)
+    async def delete_replays(  # pyright: ignore[reportUnusedFunction]
+        prefix: Annotated[str, Query(min_length=1, max_length=240)], p: BudgetService, _: Tx
+    ) -> Response:
+        """Deletes the recorded answers of a finished run or turn, every replay key that starts with `prefix`."""
+        await replays.delete_prefix(p.tenant_id, prefix)
+        return Response(status_code=204)
+
     class Gate:
         """One authenticated call on its way to a provider: the key, the alias version it is served by, its price, and
         the one call-log row it writes, whether it is refused here, fails at the provider or settles."""
@@ -1175,6 +1330,11 @@ def create_models_app(
             self.alias_row: ServingAlias | None = None
             self.price = Price(Decimal(0))
             self.provider: Any = None
+            # The call's reservations on the budgets it names, and the replay key and request hash its answer is
+            # recorded under; the answer itself is set once the provider has given all of it.
+            self.holds: list[Hold] = []
+            self.replay: tuple[str, str] | None = None
+            self.answer: Completion | None = None
 
         def row_of(self, outcome: str, reason: str | None = None, **values: Any) -> CallLogRow:
             """The call's one row as it is written: a fresh id unless `values` names the settle's."""
@@ -1202,9 +1362,36 @@ def create_models_app(
             else:
                 await call_log.record(row)
 
-        async def refuse(self, status: int, code: str, message: str, *, versioned: bool = True) -> JSONResponse:
+        async def refuse(
+            self, status: int, code: str, message: str, details: Json | None = None, *, versioned: bool = True
+        ) -> JSONResponse:
             await self.log("error" if status >= 500 else "denied", code, **(self.version if versioned else {}))
-            return refused(status, code, message)
+            return refused(status, code, message, details)
+
+        async def release(self) -> None:
+            """Gives back the call's reservations, in the open transaction; a second release adds nothing back."""
+            if self.holds and self.tenant:
+                with isolation.scope(self.tenant, None):
+                    await budgets.release(self.tenant, self.holds)
+
+        async def spent(self, row: CallLogRow) -> None:
+            """Moves each reservation to what the call cost, in the settle's transaction, before the key's row: every
+            settle takes the budgets first."""
+            if self.holds and self.tenant:
+                tokens = int(row["input_tokens"]) + int(row["output_tokens"])
+                with isolation.scope(self.tenant, None):
+                    await budgets.settle(self.tenant, self.holds, cost=row["cost"], tokens=tokens)
+
+        async def record(self, call_id: str) -> None:
+            """The answer under the call's replay key, in the settle's transaction, so a re-run is answered from it."""
+            if self.replay is None or self.answer is None or not self.tenant:
+                return
+            replay_key, hashed = self.replay
+            until = datetime.now(UTC) + timedelta(hours=settings.models_replay_hours)
+            with isolation.scope(self.tenant, None):
+                await replays.record(
+                    self.tenant, replay_key, hashed, response=recorded(self.answer), call_id=call_id, expires_at=until
+                )
 
         # After the provider answers, everything the call writes (the region it answered from, the spend, its row) is
         # one transaction of its own: none is open while the provider works, and the gate's committed before it.
@@ -1234,8 +1421,10 @@ def create_models_app(
             done = failed.model_copy(update={"row": answered})
             try:
                 async with isolation.request_transaction():
+                    await self.spent(done.row)
                     await self.observed()
                     await charge(key_store, call_log, done)
+                    await self.record(done.row["id"])
             except Exception:
                 row = failed.row
                 log.exception(
@@ -1253,6 +1442,7 @@ def create_models_app(
                 # transaction of its own.
                 try:
                     async with isolation.request_transaction():
+                        await self.spent(failed.row)
                         await charge(key_store, call_log, failed)
                 except Exception:
                     log.exception("model_call_row_lost", **failed.logged())
@@ -1261,6 +1451,7 @@ def create_models_app(
         async def broke(self, reason: str) -> None:
             """A stream that ended without settling: the provider failed part-way or the client went."""
             async with isolation.request_transaction():
+                await self.release()
                 await self.observed()
                 await self.log("error", reason, **self.version)
 
@@ -1275,6 +1466,8 @@ def create_models_app(
         async def failed(self, e: Exception) -> JSONResponse:
             """The provider's failure as the caller gets it, its code also the call-log row's reason."""
             failure = e if isinstance(e, ProviderError) else ProviderError(why="the provider answered an empty stream")
+            # The caller gets only the code; the reason (never a 401 or 403 body) is for whoever reads the log.
+            log.warning("models.provider_refused", code=failure.code, why=str(failure)[:400])
             await self.broke(failure.code)
             return provider_refused(failure)
 
@@ -1294,19 +1487,41 @@ def create_models_app(
         tenant: str | None,
         images: int = 0,
         run_cap: str | None = None,
+        call: CallHeaders | tuple[int, str, str] = NO_BUDGET,
+        hashed: str | None = None,
+        ceiling: tuple[int, int] = (0, 0),
+        tools: bool = False,
         **row: str | None,
-    ) -> Gate | JSONResponse:
+    ) -> Gate | JSONResponse | Completion:
         """Every check a model call passes before it reaches a provider, in one order for chat and embeddings: the
-        key, its budget and the tenant's share, the rate limit, the alias and its kind, the data's sensitivity, images,
-        and the account's provider key."""
+        key, the replay record, its budget and the tenant's share, the rate limit, the alias and its kind, the data's
+        sensitivity, images, the account's provider key, and last the reservation on each budget the call names
+        (`ceiling` is the prompt's and the output's tokens it holds). A recorded answer under the call's replay key
+        and `hashed` is returned as it is, with its call-log row written."""
         now = datetime.now(UTC)
         key = await key_store.by_secret(secret_hash(presented), now)
         if key is None:
             return refused(401, "invalid_key", INVALID_KEY)
         row_values = {"key_id": key.id, "alias": alias_name, "sensitivity": sensitivity, "tenant_id": tenant}
         gate = Gate(key, {**row_values, **row, "images": images}, tenant)
+        if not isinstance(call, CallHeaders):
+            return await gate.refuse(*call)
+        if (call.bounded or call.replay_key) and not tenant:
+            # Budgets and replay rows are a tenant's, held to it by the database.
+            return await gate.refuse(
+                400, "tenant_required", "A call that sends X-Budget-Id or X-Replay-Key sends X-Tenant-Id too."
+            )
         if (why := _key_refusal(key, now)) is not None:
             return await gate.refuse(*why)
+        if call.replay_key and hashed and tenant:
+            gate.replay = (call.replay_key, hashed)
+            with isolation.scope(tenant, None):
+                found = await replays.find(tenant, call.replay_key, hashed, now)
+            if found is not None:
+                # Answered as it was the first time, at no cost and past the budget and rate checks: the call was
+                # admitted and paid for when it was made. A revoked or expired key was refused above.
+                await gate.log("replayed")
+                return replayed(found)
         if key.tenant_budget is not None:
             # A key one service spends for many tenants: the tenant names its own budget row.
             if not tenant:
@@ -1385,6 +1600,29 @@ def create_models_app(
         except ProviderError as e:
             await gate.log("error", e.code)
             return provider_refused(e)
+        if settings.models_require_budget and not call.bounded and key.kind in BOUNDED_KINDS:
+            return await gate.refuse(
+                422, "budget_required", f"Model key {key.id} is a {key.kind} key; send X-Budget-Id and X-Replay-Key."
+            )
+        if not call.bounded or not tenant:
+            return gate
+        if call.purpose == "closing" and tools:
+            # The closing call ends the reply with what it has; with tools it could keep working past the budget.
+            return await gate.refuse(429, "budget_reached", "A closing call carries no tools.")
+        prompt, output = ceiling
+        ask = Ask(
+            cost=cost(Usage(input_tokens=prompt, output_tokens=output), gate.price),
+            tokens=prompt + output,
+            purpose=call.purpose,
+            replay_key=call.replay_key,
+            check_calls=settings.models_check_calls_per_key,
+        )
+        until = now + timedelta(seconds=settings.models_reservation_seconds)
+        with isolation.scope(tenant, None):
+            taken = await budgets.reserve(tenant, call.budget_ids, ask, expires_at=until)
+        if taken.refusal is not None:
+            return await gate.refuse(*budget_refused(taken.refusal))
+        gate.holds = taken.holds
         return gate
 
     async def completions(
@@ -1398,9 +1636,20 @@ def create_models_app(
         x_request_hash: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
         x_run_spend_cap: Annotated[str | None, Header()] = None,
+        x_budget_id: Annotated[str | None, Header()] = None,
+        x_replay_key: Annotated[str | None, Header()] = None,
+        x_call_purpose: Annotated[str | None, Header()] = None,
     ) -> ChatCompletion | Response:
         body = request.model_dump(exclude_unset=True)
         alias_name = request.model
+        call = call_headers(x_budget_id, x_replay_key, x_call_purpose)
+        # Hashed as the caller sent it, before the alias's defaults and the catalog change it.
+        hashed = request_hash(body, settings.models_replay_strip_fields) if x_replay_key else None
+        if isinstance(call, CallHeaders) and call.bounded and call.purpose == "closing":
+            body["max_tokens"] = settings.models_closing_max_tokens
+            body.pop("max_completion_tokens", None)
+        asked = body.get("max_completion_tokens") or body.get("max_tokens")
+        output = int(asked) if isinstance(asked, int) and asked > 0 else settings.models_reserve_output_tokens
         # The gate is one transaction, committed (a refusal's row with it) before the provider is called.
         async with isolation.request_transaction():
             gate = await open_gate(
@@ -1411,6 +1660,10 @@ def create_models_app(
                 tenant=x_tenant_id,
                 images=images_in(request.messages),
                 run_cap=x_run_spend_cap,
+                call=call,
+                hashed=hashed,
+                ceiling=(prompt_tokens(request.messages), output),
+                tools=bool(request.tools),
                 run_id=x_run_id,
                 step_id=x_step_id,
                 thread_id=x_thread_id,
@@ -1418,14 +1671,16 @@ def create_models_app(
             )
         if isinstance(gate, JSONResponse):
             return gate
+        call_id = new_id("chatcmpl")
+        created = int(time.time())
+        if isinstance(gate, Completion):
+            return replay_reply(gate, call_id, created, alias_name, stream=bool(request.stream))
         alias_row, provider = gate.serving, gate.provider
         settle, broke, failed = gate.settle, gate.broke, gate.failed
         if alias_row.reasoning_effort and "reasoning_effort" not in body:
             body["reasoning_effort"] = alias_row.reasoning_effort
         served_type = registry.get(alias_row.type)
         body = catalog.fit(body, served_type.catalog if served_type else None, alias_row.model_id)
-        call_id = new_id("chatcmpl")
-        created = int(time.time())
 
         if request.stream:
             usage = StreamUsage()
@@ -1440,12 +1695,15 @@ def create_models_app(
             async def events() -> AsyncIterator[str]:
                 settled = False
                 reason = "provider_error"
+                answer = StreamedAnswer()
                 try:
                     pending: Json | None = first
                     while pending is not None:
+                        answer.add(pending)
                         out = {**pending, "id": call_id, "created": created, "model": alias_name}
                         yield f"data: {json.dumps(out)}\n\n"
                         pending = await anext(chunks, None)
+                    gate.answer = answer.completion(usage.input_tokens, usage.output_tokens)
                     # Spend and the log row are written before the client sees the end: once it has [DONE] it
                     # disconnects, and Starlette cancels whatever this generator is still awaiting. The settle is
                     # shielded, so it runs to its end even then, and writes the call's row whether it succeeds or
@@ -1465,26 +1723,24 @@ def create_models_app(
             done = await provider.complete(alias_row.model_id, body)
         except ProviderError as e:
             return await failed(e)
+        gate.answer = done
         await settle(done.input_tokens, done.output_tokens)
-        # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
-        message = ChatMessage(role="assistant", content=done.text)
-        # Added only when present, so each counts as set and the route keeps it; absent, the key is dropped.
-        if done.tool_calls:
-            message = message.model_copy(update={"tool_calls": [_tool_call(c) for c in done.tool_calls]})
-        if done.refusal:
-            message = message.model_copy(update={"refusal": done.refusal})
-        return ChatCompletion(
-            id=call_id,
-            object="chat.completion",
-            created=created,
-            model=alias_name,
-            choices=[ChatChoice(index=0, message=message, finish_reason=done.finish_reason)],
-            usage=ChatUsage(
-                prompt_tokens=done.input_tokens,
-                completion_tokens=done.output_tokens,
-                total_tokens=done.input_tokens + done.output_tokens,
-            ),
-        )
+        return _chat_completion(call_id, created, alias_name, done)
+
+    def replay_reply(done: Completion, call_id: str, created: int, alias: str, *, stream: bool) -> Response:
+        """A recorded answer, marked `X-Replayed: true`: as a reply, or as the chunks an OpenAI client reads back into
+        the same message."""
+        marked = {"X-Replayed": "true"}
+        if not stream:
+            reply = _chat_completion(call_id, created, alias, done)
+            return JSONResponse(reply.model_dump(exclude_unset=True), headers=marked)
+
+        async def events() -> AsyncIterator[str]:
+            for chunk in completion_chunks(done):
+                yield f"data: {json.dumps({**chunk, 'id': call_id, 'created': created, 'model': alias})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(events(), media_type="text/event-stream", headers=marked)
 
     # OpenAI's path shape: clients built on the OpenAI SDK append `/chat/completions` to their base URL.
     provider_errors = {
@@ -1512,10 +1768,13 @@ def create_models_app(
         x_step_id: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
         x_run_spend_cap: Annotated[str | None, Header()] = None,
+        x_budget_id: Annotated[str | None, Header()] = None,
     ) -> Embeddings | Response:
         """Vectors for one text or a batch, from an alias of kind embedding, through the same key, budget and clearance
-        checks as a completion, and one call-log row per request."""
+        checks as a completion, and one call-log row per request. An embedding is never replayed, so a budget needs no
+        replay key here."""
         inputs = [request.input] if isinstance(request.input, str) else list(request.input)
+        call = call_headers(x_budget_id, None, None, replayable=False)
         # The gate is one transaction, committed (a refusal's row with it) before the provider is called.
         async with isolation.request_transaction():
             gate = await open_gate(
@@ -1525,15 +1784,21 @@ def create_models_app(
                 sensitivity=x_data_sensitivity,
                 tenant=x_tenant_id,
                 run_cap=x_run_spend_cap,
+                call=call,
+                ceiling=(sum(len(text) for text in inputs) // 4 + 1, 0),
                 run_id=x_run_id,
                 step_id=x_step_id,
             )
             if isinstance(gate, Gate) and (not inputs or len(inputs) > MAX_EMBED_INPUTS):
+                # In the reservation's transaction: the call reserves nothing it is refused.
+                await gate.release()
                 gate = await gate.refuse(
                     400, "invalid_input", f"Send 1 to {MAX_EMBED_INPUTS} texts to embed, not {len(inputs)}."
                 )
         if isinstance(gate, JSONResponse):
             return gate
+        if isinstance(gate, Completion):
+            raise RuntimeError("an embedding call sends no replay key, so it has no recorded answer")
         try:
             done = await gate.provider.embed(gate.serving.model_id, inputs, request.dimensions)
         except ProviderError as e:

@@ -1,6 +1,6 @@
 # ruff: noqa: E501
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportMissingTypeStubs=false
-# Printed lines are the experiment's record and stay whole; asyncpg and parts of Pydantic AI are untyped.
+# Printed lines are the experiment's record and stay whole; asyncpg is untyped.
 """Experiment E8: chat turn latency, and how much of it is ours rather than the model's.
 
   uv run python experiments/e8_latency.py                                          # stored + fake parts, no tokens
@@ -30,17 +30,17 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 import asyncpg
 import httpx
-from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
-from pydantic_ai.models.wrapper import WrapperModel
-from pydantic_ai.settings import ModelSettings
+import httpx2
+
+from ops_agent_kernel.contract import ModelEndpoint
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -174,27 +174,53 @@ CALL_CAP = 10  # per-experiment cap on real model calls
 CALLS = [0]
 
 
-class TimedModel(WrapperModel):
-    """Times every streamed model request (connection, generation and transfer) and adds up its token usage."""
+class TimedStream(httpx2.AsyncByteStream):
+    """A model response's body as it streams: the usage it reports, and its time once the client closes it (the
+    OpenAI client stops reading at `[DONE]` and closes the body without draining it)."""
 
-    @asynccontextmanager
-    async def request_stream(
-        self,
-        messages: list[Any],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-        run_context: Any = None,
-    ) -> AsyncGenerator[StreamedResponse]:
+    def __init__(self, inner: httpx2.AsyncByteStream, started: float) -> None:
+        self.inner, self.started, self.rest, self.closed = inner, started, "", False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        async for chunk in self.inner:
+            *lines, self.rest = (self.rest + chunk.decode(errors="replace")).split("\n")
+            for line in lines:
+                data = line.removeprefix("data: ").strip()
+                if data.startswith("{"):
+                    usage = json.loads(data).get("usage") or {}
+                    TIMED.tokens_in += usage.get("prompt_tokens") or 0
+                    TIMED.tokens_out += usage.get("completion_tokens") or 0
+            yield chunk
+
+    async def aclose(self) -> None:
+        if not self.closed:
+            self.closed = True
+            TIMED.seconds += time.perf_counter() - self.started
+        await self.inner.aclose()
+
+
+class TimedTransport(httpx2.AsyncBaseTransport):
+    """Times every model request (connection, generation and transfer) at the HTTP edge and adds up its token usage,
+    under the cap on real calls."""
+
+    def __init__(self) -> None:
+        self.inner = httpx2.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         CALLS[0] += 1
         if CALLS[0] > CALL_CAP:
             raise RuntimeError(f"real model call cap of {CALL_CAP} reached; stopping")
         started = time.perf_counter()
-        async with self.wrapped.request_stream(messages, model_settings, model_request_parameters, run_context) as rs:
-            yield rs
-        TIMED.seconds += time.perf_counter() - started
-        usage = rs.usage
-        TIMED.tokens_in += usage.input_tokens or 0
-        TIMED.tokens_out += usage.output_tokens or 0
+        response = await self.inner.handle_async_request(request)
+        stream = TimedStream(response.stream, started)  # type: ignore[arg-type]
+        return httpx2.Response(
+            response.status_code, headers=response.headers, stream=stream, extensions=response.extensions
+        )
+
+
+def timer_on(endpoint: ModelEndpoint) -> ModelEndpoint:
+    http = httpx2.AsyncClient(transport=TimedTransport(), timeout=300)
+    return replace(endpoint, client=endpoint.client.with_options(http_client=http))
 
 
 async def scratch_db() -> None:
@@ -212,7 +238,7 @@ async def scratch_db() -> None:
 
 
 @asynccontextmanager
-async def in_process(model: Model) -> AsyncGenerator[httpx.AsyncClient]:
+async def in_process(model: ModelEndpoint) -> AsyncGenerator[httpx.AsyncClient]:
     """The real app, in this process, on the scratch database, with the given model."""
     from langgraph.checkpoint.memory import InMemorySaver  # noqa: PLC0415
 
@@ -344,7 +370,7 @@ async def main() -> None:
         from ops_service_kit.settings import Settings  # noqa: PLC0415
 
         out(f"\n## Timed: 8 turns in-process, real model wrapped in a timer (cap {CALL_CAP} model calls)")
-        async with in_process(TimedModel(build_model(Settings()))) as c:
+        async with in_process(timer_on(build_model(Settings()))) as c:
             timed = {
                 "plain (first is cold)": await run_group(c, "plain", plain(5), 1, before=lambda: None),
                 "read tool (2 model calls)": await run_group(c, "read", [READ], 1, before=lambda: None),

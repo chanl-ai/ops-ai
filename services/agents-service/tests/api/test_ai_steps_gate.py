@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 
 from ops_agents.api import ai_steps_gate
 from ops_agents.api.platform_policies import PolicyUnread
 from ops_agents.store.tenancy import tenant_scope
+from tests.conftest import scripted_model
 from tests.engine.test_lifecycle_rights import BUILDER
 
 from .role_app import ok, role_app
@@ -23,7 +23,7 @@ AI_STEPS = {"ops.ai.classify", "ops.ai.summarise", "ops.ai.extractText", "ops.ai
 
 @pytest.fixture
 async def c() -> AsyncIterator[AsyncClient]:
-    async with role_app(TestModel()) as client:
+    async with role_app(scripted_model()) as client:
         yield client
 
 

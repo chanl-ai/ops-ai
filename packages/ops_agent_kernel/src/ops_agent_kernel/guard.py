@@ -12,13 +12,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from pydantic_ai import Agent
-from pydantic_ai.models import Model
-from pydantic_ai.output import StructuredDict
 
 from ops_service_kit.http import Json
 
+from . import structured
 from .aliases import preferred
+from .contract import ModelEndpoint
 from .ports import BudgetReachedError, ModelSource
 from .types import Guardrail
 
@@ -42,7 +41,7 @@ class Hit:
     topic: str
 
 
-def model_for(source: ModelSource | None, turn_model: Model) -> Model:
+def model_for(source: ModelSource | None, turn_model: ModelEndpoint) -> ModelEndpoint:
     """The model the check runs on: `guardrail-check` through models-service, or the turn's model while that alias does
     not exist. Only models-service's "no such alias" falls back; any other failure fails the turn closed."""
     return preferred(source, GUARD_ALIAS, turn_model)
@@ -71,30 +70,31 @@ def _labels(rules: list[Guardrail]) -> list[tuple[str, Guardrail, str, str | Non
     return list(out.values())
 
 
-async def check(model: Model, rules: list[Guardrail], text: str) -> Hit | None:
-    """The pinned rule `text` falls under, or None when it touches no blocked topic."""
+async def check(model: ModelEndpoint, rules: list[Guardrail], text: str, *, purpose: str = "check") -> Hit | None:
+    """The pinned rule `text` falls under, or None when it touches no blocked topic. `purpose` is "turn" for the
+    check of the person's question, which a spent budget refuses, and "check" for an answer already written."""
     labels = _labels(rules)
     schema = _schema([label for label, _, _, _ in labels])
-    agent = Agent[None, Any](
-        model,
-        deps_type=type(None),
-        output_type=StructuredDict(schema, name="final_result"),
-        instructions=INSTRUCTIONS,
-        retries=0,
-    )
     # A bare label is read broadly ("investment advice" swallowed comparing the bank's own savings products), so a
     # topic's scope is listed beside it, for its own rule only.
     listed = "\n".join(f"- {label}: {scope}" if scope else f"- {label}" for label, _, _, scope in labels)
     try:
-        result = await agent.run(f"Blocked topics:\n{listed}\n\nMessage:\n{text}")
+        result = await structured.ask(
+            model,
+            system=INSTRUCTIONS,
+            prompt=f"Blocked topics:\n{listed}\n\nMessage:\n{text}",
+            purpose=purpose,
+            schema=schema,
+        )
     except BudgetReachedError:
         raise  # the turn's budget is spent: the turn ends for that reason, which is not an outage of the check
     except Exception as e:  # any failure of the call is a check that did not run
         raise GuardrailUnavailable(f"{type(e).__name__}: {e}") from e
-    found: list[Any] = list(Draft202012Validator(schema).iter_errors(result.output))  # pyright: ignore[reportUnknownMemberType]
+    answer: Any = result.value
+    found: list[Any] = list(Draft202012Validator(schema).iter_errors(answer))  # pyright: ignore[reportUnknownMemberType]
     if found:
-        raise GuardrailUnavailable(f"The check returned {result.output!r}: {found[0].message}")
-    label = str(result.output["topic"])
+        raise GuardrailUnavailable(f"The check returned {answer!r}: {found[0].message}")
+    label = str(answer["topic"])
     if label == NONE:
         return None
     return next(Hit(r, topic) for found, r, topic, _ in labels if found == label)

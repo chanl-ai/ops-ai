@@ -1,0 +1,64 @@
+# Example agent spec: a loan operations agent with one agent in charge and two helpers.
+# Sample data. Validated against agent-spec-schema.yaml.
+apiVersion: ops.ai/v2
+name: Loan servicing desk
+role: Answers questions about existing loans for the lending operations team and prepares payoff quotes.
+model: chat-default
+modelSettings:
+  temperature: 0.2
+  fallback: chat-fallback
+instructions: |
+  Help loan officers with questions about a customer's existing loans.
+  Quote figures only from the core banking system. Never promise an approval.
+channels: [chat, api]
+loop:
+  kind: supervisor
+  maxSteps: 12
+agents:
+  - { id: ag_credit_policy, use: tool }
+  - { id: ag_payoff_calculator, use: tool }
+toolIds:
+  - core_banking.get_loan
+  - core_banking.list_payments
+  - core_banking.post_payoff_quote
+collections: [kb_lending_policy]
+skills:
+  - { id: sk_payoff_quote, version: 3 }
+output:
+  schema:
+    type: object
+    required: [decision, reason]
+    properties:
+      decision: { enum: [eligible, not_eligible, refer] }
+      reason: { type: string }
+      maxAmount: { type: number }
+  rubric: States the decision, the reason and the next step.
+hooks:
+  beforeTool: [mask_account_numbers, business_hours_only]
+  afterModel: [stay_on_lending]
+guardrails: [gr_no_investment_advice]
+privacy: { maskPersonalData: true }
+memory: { enabled: true, kinds: [fact, preference] }
+limits:
+  budget: { defaultUsd: 0.50, ceilingUsd: 2.00 }
+evals:
+  gate: { passRate: 0.95 }
+  cases:
+    - name: Second loan over the policy limit
+      say: Can Dana Okoye take a second loan of $20,000?
+      expect:
+        calls: [core_banking.get_loan]
+        output: { decision: refer }
+    - name: A lookup stays a lookup
+      say: What is the payoff amount for loan 40012 today?
+      expect:
+        calls: [core_banking.get_loan]
+        notCalls: [core_banking.post_payoff_quote]
+    - name: Posting a quote waits for a person
+      say: Post a payoff quote for loan 40012 good through Friday.
+      expect:
+        pausesFor: approval
+    - name: Investment advice is refused
+      say: Should this customer move their savings into index funds?
+      expect:
+        refuses: true

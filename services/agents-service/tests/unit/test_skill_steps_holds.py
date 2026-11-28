@@ -14,14 +14,13 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo, FunctionModel
-from pydantic_ai.profiles import ModelProfile
 
 from ops_agent_kernel.ports import ToolOutcome
+from ops_agent_kernel.testing import Answer
 from ops_agent_kernel.types import Resume, Skill, SkillInput, ToolGrant, TurnRequest
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.agent_registry import definition_of
+from ops_service_kit.http import Json
 from tests.conftest import SEED
 from tests.unit.test_skill_steps_kernel import (
     HARDSHIP,
@@ -809,22 +808,15 @@ async def test_a_step_with_a_tool_offers_no_plan_search_or_plain_skill_and_searc
 
 
 class ThinkingScript(Script):
-    """A scripted model that takes a thinking setting, and records the one each request resolved to. The library
-    drops `thinking` from the settings of a model that does not take it (`Model.prepare_request`), so the plain
-    scripted model never sees one."""
+    """A scripted model that records the reasoning effort each request sent to the gateway."""
 
     def __init__(self, *actions: Any) -> None:
         super().__init__(*actions)
         self.thinking: list[Any] = []
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        self.thinking.append(info.model_request_parameters.thinking)
-        return super().respond(messages, info)
-
-    def build(self) -> FunctionModel:
-        stream = super().build().stream_function
-        assert stream is not None
-        return FunctionModel(self.respond, stream_function=stream, profile=ModelProfile(supports_thinking=True))
+    def respond(self, messages: list[Json], tools: list[Json], body: Json | None = None) -> Answer:
+        self.thinking.append((body or {}).get("reasoning_effort"))
+        return super().respond(messages, tools, body)
 
 
 async def test_a_saved_agent_sends_no_thinking_setting_and_a_set_one_reaches_the_model() -> None:

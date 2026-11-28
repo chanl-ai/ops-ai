@@ -34,7 +34,14 @@ ROOT = Path(__file__).parents[1]
 # agents-service's Ed25519 token for models-service's internal routes (dev key, dev only), naming its tenant.
 SERVICE = {
     "Authorization": "Bearer "
-    + mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="local", ttl_s=3600)
+    + mint_service_token(
+        dev_service_signer(),
+        service="agents",
+        audience="models",
+        tenant_id="local",
+        scopes=["models:budgets"],
+        ttl_s=3600,
+    )
 }
 
 
@@ -43,8 +50,19 @@ LOCAL = {"X-Tenant-Id": "local"}
 
 
 def _service(tenant: str) -> dict[str, str]:
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant, ttl_s=3600)
+    token = mint_service_token(
+        dev_service_signer(),
+        service="agents",
+        audience="models",
+        tenant_id=tenant,
+        scopes=["models:budgets"],
+        ttl_s=3600,
+    )
     return {"Authorization": f"Bearer {token}"}
+
+
+# A service token naming `tenant`, for a test that calls as another tenant's service.
+service_token = _service
 
 
 def pytest_configure(config: pytest.Config) -> None:

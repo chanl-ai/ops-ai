@@ -53,7 +53,7 @@ async def resume_caller(
     since either could resume any step its team can see."""
     token = (authorization or "").removeprefix("Bearer ").strip()
     try:
-        claim = read_token(rt.settings.review_key.get_secret_value(), token)
+        claim = read_token(rt.settings.session_token_key.get_secret_value(), token)
     except BadResumeToken as e:
         raise Unauthorized(f"Not a resume token for this step: {e}.", code="bad_resume_token") from e
     if claim.run_id != run_id or claim.node != step:

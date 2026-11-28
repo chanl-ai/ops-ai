@@ -24,7 +24,23 @@ export const CODES: Record<string, { kind: string; retryable: boolean }> = {
     "kind": "refused",
     "retryable": false
   },
+  "budget_header_invalid": {
+    "kind": "input",
+    "retryable": false
+  },
+  "budget_not_found": {
+    "kind": "input",
+    "retryable": false
+  },
   "budget_reached": {
+    "kind": "refused",
+    "retryable": false
+  },
+  "budget_required": {
+    "kind": "input",
+    "retryable": false
+  },
+  "check_cap_reached": {
     "kind": "refused",
     "retryable": false
   },
@@ -151,6 +167,10 @@ export const CODES: Record<string, { kind: string; retryable: boolean }> = {
   "rate_limited": {
     "kind": "upstream",
     "retryable": true
+  },
+  "replay_key_required": {
+    "kind": "input",
+    "retryable": false
   },
   "reply_cut_off": {
     "kind": "upstream",

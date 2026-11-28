@@ -3,33 +3,28 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 
 import httpx2
 import pytest
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
-from pydantic_ai.models import Model, ModelRequestParameters
-from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from ops_agent_kernel import structured
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.ports import KernelPorts
 from ops_agent_kernel.types import AgentSettings, PromptFragment, TurnRequest
+from tests.conftest import model_on
 
 from .test_kernel import FixedKnowledge, RecordingTools
 
 
-def _says(text: str) -> FunctionModel:
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
-        yield text
-
-    return FunctionModel(stream_function=stream)
+def _says(text: str) -> ModelEndpoint:
+    return model_on(lambda messages, tools: text)
 
 
 class Aliases:
-    def model_for(self, alias: str) -> Model:
+    def model_for(self, alias: str) -> ModelEndpoint:
         return _says(f"ran on {alias}")
 
 
@@ -54,11 +49,9 @@ async def test_the_models_service_source_sends_one_request_per_refusal() -> None
         "http://models", "mk_test", http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(refuse))
     )
     model = source.model_for("bank-standard")
-    assert source.model_for("bank-standard") is model
-    request = ModelRequest(parts=[UserPromptPart("hi")])
-    with pytest.raises(ModelHTTPError) as refused:
-        await model.request([request], None, ModelRequestParameters())
-    assert refused.value.status_code == 429
+    with pytest.raises(structured.CallRefused) as refused:
+        await structured.ask(model, system="You help.", prompt="hi", purpose="turn")
+    assert refused.value.status == 429
     assert len(seen) == 1
     assert seen[0].url.path == "/v1/models/chat/completions"
     assert seen[0].headers["authorization"] == "Bearer mk_test"

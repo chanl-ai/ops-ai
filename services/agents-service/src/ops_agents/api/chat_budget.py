@@ -1,8 +1,9 @@
 """A chat conversation's budget: the caps it starts with, and Continue or Raise when they are spent.
 
-Every chat thread gets a thread budget (store/usage.py) from its agent's per-conversation caps when it starts, or on
-its next message when it began before caps existed. The thread meter (graphs/metering.py `guard`) pauses the turn on
-the interrupt every human step uses when a cap is reached; the chat draws that pause as a budget card
+Every chat thread gets a thread budget on the model gateway (api/budgets.py) from its agent's per-conversation caps
+when it starts, or on its next message when it began before caps existed. A call the gateway refuses at the cap ends
+the reply with one closing answer; the next turn's meter (graphs/metering.py `guard`) pauses it on the interrupt every
+human step uses; the chat draws that pause as a budget card
 (chat_threads.AssistantBuilder) from the meter's own numbers. Continue, by the thread's owner, adds one more allotment
 of what the thread started with; Raise, by an admin of the thread's team, sets new caps for this thread only. Both are
 checked here from the caller's token and then resume the paused turn under a resume run, as a review decision does.
@@ -102,8 +103,11 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
     thread's lease is taken before the pause is read, so of two answers at once one applies and the other gets 409, and
     nothing is recorded for an answer that does not run."""
     row = await chat_row(rt, thread_id, None)
-    if row is None or rt.usage is None:
+    if row is None:
         raise NotFound("Conversation")
+    if rt.usage is None:
+        # Without models-service no budget holds, so no conversation is ever paused on one.
+        raise Conflict("This conversation is not paused on its budget.", code="not_paused")
     meta: Json = dict(row.meta_object())
     team = str(row.team_id)
     if body.action == "continue" and not _owner_or_manager(me, meta, team):

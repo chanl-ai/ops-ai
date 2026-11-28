@@ -21,9 +21,11 @@ from typing import Any, cast
 
 from ops_agents.activities.gateway import (
     RUN_CONTEXT,
+    ApprovalAsk,
     GatewayClient,
     GatewayRefused,
     RunContext,
+    TokenMinter,
     current_run_context,
     gateway_error,
 )
@@ -41,7 +43,6 @@ from ops_engine.ports import (
 from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
 from ops_policy import input_hash
-from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.http import Json, JsonList
 from ops_service_kit.logging import get_logger
 
@@ -69,12 +70,12 @@ def thread_of(key: str) -> str:
 
 @dataclass(frozen=True)
 class ApprovalMinter:
-    """Mints a review-approved write's token in the worker, at the call, from the approvals recorded for that exact
-    input (as ApprovalRenewal does for v1), so no token is ever stored."""
+    """Asks the gateway for a review-approved write's token in the worker, at the call, from the approvals recorded
+    for that exact input (as ApprovalRenewal does for v1), so no token is ever stored. The gateway holds the only key
+    that signs approvals and decides the call again before it mints."""
 
     db: AsyncEngine
-    review_key: str
-    ttl_s: int
+    gateway: TokenMinter
 
     async def mint(self, run_id: str, call: Json, approval: Json) -> str | None:
         digest = input_hash(call["input"])
@@ -86,8 +87,18 @@ class ApprovalMinter:
         if not set(approvers) <= {a for a, _ in rows}:
             return None  # an approval was withdrawn or replaced by one of a different input
         workflow, system = await run_workflow(self.db, run_id)
-        binding = Binding(run_id, step, str(call["tool"]), digest, approvers, workflow=workflow, system=system)
-        return mint_approval(binding, self.review_key, ttl_s=self.ttl_s)
+        ask = ApprovalAsk(
+            run_id,
+            step,
+            str(call["tool"]),
+            cast(Json, call["input"]),
+            digest,
+            tuple(approvers),
+            run=True,
+            workflow=workflow,
+            system=system,
+        )
+        return await self.gateway.approval(ask)
 
 
 async def run_workflow(db: AsyncEngine, run_id: str) -> tuple[str, bool]:

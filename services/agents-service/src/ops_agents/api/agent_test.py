@@ -13,7 +13,7 @@ from ops_agents.activities.tool_directory import grants_for
 from ops_agents.activities.tools import fill
 from ops_agents.graphs.common import needs_step_up
 from ops_service_kit.errors import ApiError, ServiceUnavailable
-from ops_service_kit.http import Json, JsonList
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
 
 from ..store.agent_registry import AgentRow
@@ -117,6 +117,9 @@ async def one_test_turn(
         "skills": cast(JsonList, result.skills),
         "guardrails": [{"name": g.get("name"), "version": g.get("version")} for g in result.guardrails_checked],
         "searched": bool(req.kb_ids),
+        # What an eval's mode_in and output_matches checks read (domain/evals.turn_from_test).
+        "modes": [m.mode for m in result.modes],
+        "output": cast(JsonValue, result.output),
     }
     fired = result.guardrail if result.stop_reason == "guardrail" else None
     if fired is not None and fired.get("when") in ("before", "after"):

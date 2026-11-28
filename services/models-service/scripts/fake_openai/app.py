@@ -203,7 +203,7 @@ async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion
     tools: list[dict[str, Any]] = list(body.get("tools") or [])
     functions: list[dict[str, Any]] = [t.get("function") or {} for t in tools]
     offered = {str(f.get("name")) for f in functions}
-    # Native structured output (response_format json_schema, as pydantic-ai's NativeOutput sends): the answer is the
+    # Native structured output (response_format json_schema, as a turn with an output schema sends): the answer is the
     # message's content, so a rule naming the schema's tool (final_result) answers with its arguments as that content.
     fmt: dict[str, Any] = dict(body.get("response_format") or {})
     schema: dict[str, Any] = dict(fmt.get("json_schema") or {})

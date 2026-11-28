@@ -10,12 +10,15 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, cast
 
 import httpx
+import pytest
 
-from tests.conftest import sse_events
+from tests.conftest import FakeGraphModels, empty_engine, sse_events
+from tests.model_gateway import through_gateway
 
 from ..saves import save_agent
 from .test_guardrails import RULE
@@ -146,12 +149,20 @@ async def test_the_registry_replies_keep_every_key_value_and_error_object(client
     compare(seen, FIXTURES / "reply-pins-registry.json")
 
 
+@pytest.fixture
+async def gateway_client(graph_models: FakeGraphModels, database_url: str) -> AsyncIterator[httpx.AsyncClient]:
+    """The app with its model calls through the gateway in process: a reply's usage and a thread's budget are the
+    gateway's."""
+    async with empty_engine(database_url) as engine, through_gateway(engine, graph_models, checked=True) as g:
+        yield g.client
+
+
 async def test_the_chat_run_and_review_replies_keep_every_key_value_and_error_object(
-    client: httpx.AsyncClient,
+    gateway_client: httpx.AsyncClient,
 ) -> None:
     """Chat threads and their messages, graph threads, runs, the overview and Reviews, with one chat turn's stream
     pinned frame by frame (the scripted model answers the same every time)."""
-    c = client
+    c = gateway_client
     seen: dict[str, Any] = {}
     seen["chat.agents"] = answer(await c.get("/chat/agents"))
     thread = await c.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": ["kb_people"]})

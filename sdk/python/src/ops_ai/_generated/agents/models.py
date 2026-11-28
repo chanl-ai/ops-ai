@@ -797,13 +797,6 @@ class EvalCaseContextInput(TypedDict, closed=True):
     collections: NotRequired[list[str]]
 
 
-class EvalCheckInput(TypedDict, closed=True):
-    rubric: NotRequired[str | None]
-    text: NotRequired[str | None]
-    tool: NotRequired[str | None]
-    type: str
-
-
 class EvalCheckResult(TypedDict, closed=True):
     confidence: NotRequired[float | None]
     label: str
@@ -1158,6 +1151,17 @@ class LoadedSkill(TypedDict, closed=True):
     version: int
 
 
+class LoopKindOut(TypedDict, closed=True):
+    available: bool
+    description: str
+    kind: str
+    name: str
+    requires: list[Literal["agents", "sandbox", "workflow", "rubric"]]
+    settingsSchema: dict[str, JsonValue]
+    unavailableReason: NotRequired[str | None]
+    whenToUse: str
+
+
 class MailboxIn(TypedDict, closed=True):
     address: str
     folder: NotRequired[str]
@@ -1256,6 +1260,13 @@ class Migrated(TypedDict, closed=True):
     threadId: str
     toVersion: int
     waitingAt: list[str]
+
+
+class ModeStep(TypedDict, closed=True):
+    atStep: NotRequired[int]
+    fixed: bool
+    mode: Literal["direct", "plan", "helpers", "sandbox"]
+    reason: str
 
 
 class ModelAlias(TypedDict, closed=True):
@@ -1881,6 +1892,12 @@ class SaveBase(TypedDict, closed=True):
 
 
 class SavedCaseCheck(TypedDict, closed=True):
+    agent: NotRequired[str | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
+    kind: NotRequired[Literal["approval", "question", "plan_review"] | None]
+    maxCostUsd: NotRequired[float | None]
+    maxSeconds: NotRequired[float | None]
+    modes: NotRequired[list[Literal["direct", "plan", "helpers", "sandbox"]] | None]
     rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
@@ -2167,6 +2184,57 @@ class Source(TypedDict, closed=True):
     id: str
     name: str
     type: Literal["workflow", "agent", "channel", "case", "process", "form"]
+
+
+class SpecChange(TypedDict, closed=True):
+    after: NotRequired[JsonValue]
+    before: NotRequired[JsonValue]
+    op: Literal["add", "remove", "replace"]
+    path: str
+
+
+class SpecDiff(TypedDict, closed=True):
+    against: Literal["draft", "live"]
+    changes: list[SpecChange]
+    version: int
+
+
+class SpecDiffIn(TypedDict, closed=True):
+    against: NotRequired[Literal["draft", "live"]]
+    spec: dict[str, JsonValue]
+
+
+class SpecIn(TypedDict, closed=True):
+    spec: dict[str, JsonValue]
+
+
+class SpecProblem(TypedDict, closed=True):
+    code: str
+    message: str
+    path: str
+
+
+class SpecSave(TypedDict, closed=True):
+    baseDigest: NotRequired[str | None]
+    baseVersion: NotRequired[int | None]
+    note: NotRequired[str | None]
+    spec: dict[str, JsonValue]
+
+
+class SpecSummary(TypedDict, closed=True):
+    evalCases: int
+    helpers: int
+    loopKind: str
+    tools: int
+
+
+class SpecView(TypedDict, closed=True):
+    agentId: str
+    canEdit: bool
+    digest: str
+    spec: dict[str, JsonValue]
+    status: Literal["draft", "published"]
+    version: int
 
 
 class SsoStepUpInput(TypedDict, closed=True):
@@ -2549,6 +2617,28 @@ class ToolsNotAdded(TypedDict, closed=True):
     appId: str
     count: int
     name: str
+
+
+class TraceStep(TypedDict, closed=True):
+    callId: NotRequired[str | None]
+    detail: NotRequired[dict[str, Any] | None]
+    durationMs: NotRequired[int | None]
+    index: int
+    kind: Literal[
+        "model",
+        "tool",
+        "mode",
+        "plan",
+        "agent_asked",
+        "handoff",
+        "interrupt",
+        "guardrail",
+    ]
+    model: NotRequired[str | None]
+    startedAt: str
+    status: NotRequired[str | None]
+    title: str
+    tool: NotRequired[str | None]
 
 
 class TryStep(TypedDict, closed=True):
@@ -2959,6 +3049,8 @@ class AgentTestTurn(TypedDict, closed=True):
     guardrails: NotRequired[list[OpsAgentsApiSchemasNamedRef]]
     knowledgeBases: NotRequired[list[KnowledgeBaseRef]]
     model: str
+    modes: NotRequired[list[str]]
+    output: NotRequired[JsonValue | None]
     reply: str
     searched: NotRequired[bool]
     skills: NotRequired[list[LoadedSkill]]
@@ -3510,6 +3602,16 @@ class EnvelopeSkillRendered(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSpecDiff(TypedDict, closed=True):
+    data: SpecDiff
+    success: Literal[True]
+
+
+class EnvelopeSpecView(TypedDict, closed=True):
+    data: SpecView
+    success: Literal[True]
+
+
 class EnvelopeStepUpToken(TypedDict, closed=True):
     data: StepUpToken
     success: Literal[True]
@@ -3580,6 +3682,11 @@ class EnvelopeListKnowledgeUsage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListLoopKindOut(TypedDict, closed=True):
+    data: list[LoopKindOut]
+    success: Literal[True]
+
+
 class EnvelopeListMailboxView(TypedDict, closed=True):
     data: list[MailboxView]
     success: Literal[True]
@@ -3615,13 +3722,6 @@ class EnvelopeListWorkflowRef(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EvalCaseInput(TypedDict, closed=True):
-    checks: NotRequired[list[EvalCheckInput]]
-    context: NotRequired[EvalCaseContextInput | None]
-    input: str
-    name: str
-
-
 class EvalCaseOutcome(TypedDict, closed=True):
     checks: list[EvalCheckResult]
     latencyMs: int
@@ -3638,8 +3738,17 @@ class EvalCaseResult(TypedDict, closed=True):
     unpriced: NotRequired[bool]
 
 
-class EvalCasesInput(TypedDict, closed=True):
-    cases: NotRequired[list[EvalCaseInput]]
+class EvalCheckInput(TypedDict, closed=True):
+    agent: NotRequired[str | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
+    kind: NotRequired[Literal["approval", "question", "plan_review"] | None]
+    maxCostUsd: NotRequired[float | None]
+    maxSeconds: NotRequired[float | None]
+    modes: NotRequired[list[Literal["direct", "plan", "helpers", "sandbox"]] | None]
+    rubric: NotRequired[str | None]
+    text: NotRequired[str | None]
+    tool: NotRequired[str | None]
+    type: str
 
 
 class EvalGate(TypedDict, closed=True):
@@ -3649,11 +3758,6 @@ class EvalGate(TypedDict, closed=True):
 
 class EvalGateDetails(TypedDict, closed=True):
     steps: list[GateStep]
-
-
-class EvalRunInput(TypedDict, closed=True):
-    cases: NotRequired[list[EvalCaseInput] | None]
-    trigger: NotRequired[str | None]
 
 
 class EvalRunRecord(TypedDict, closed=True):
@@ -4029,6 +4133,16 @@ class RunRow(TypedDict, closed=True):
     workflowName: NotRequired[str | None]
 
 
+class RunTrace(TypedDict, closed=True):
+    agentId: NotRequired[str | None]
+    loop: NotRequired[str | None]
+    modes: list[ModeStep]
+    runId: str
+    steps: list[TraceStep]
+    stopReason: NotRequired[str | None]
+    threadId: str
+
+
 class SavedCase(TypedDict, closed=True):
     checks: list[SavedCaseCheck]
     context: SavedCaseContext | None
@@ -4158,6 +4272,12 @@ class SkillTextReading(TypedDict, closed=True):
     stepLines: list[int]
     steps: int
     uses: SkillTextUses
+
+
+class SpecCheck(TypedDict, closed=True):
+    ok: bool
+    problems: list[SpecProblem]
+    summary: NotRequired[SpecSummary | None]
 
 
 class StepChangeView(TypedDict, closed=True):
@@ -4725,6 +4845,11 @@ class EnvelopeRunRow(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeRunTrace(TypedDict, closed=True):
+    data: RunTrace
+    success: Literal[True]
+
+
 class EnvelopeSavedCases(TypedDict, closed=True):
     data: SavedCases
     success: Literal[True]
@@ -4742,6 +4867,11 @@ class EnvelopeSkillOptions(TypedDict, closed=True):
 
 class EnvelopeSkillTextReading(TypedDict, closed=True):
     data: SkillTextReading
+    success: Literal[True]
+
+
+class EnvelopeSpecCheck(TypedDict, closed=True):
+    data: SpecCheck
     success: Literal[True]
 
 
@@ -4823,6 +4953,22 @@ class EnvelopeListGraphInfo(TypedDict, closed=True):
 class EnvelopeListNodeTypeView(TypedDict, closed=True):
     data: list[NodeTypeView]
     success: Literal[True]
+
+
+class EvalCaseInput(TypedDict, closed=True):
+    checks: NotRequired[list[EvalCheckInput]]
+    context: NotRequired[EvalCaseContextInput | None]
+    input: str
+    name: str
+
+
+class EvalCasesInput(TypedDict, closed=True):
+    cases: NotRequired[list[EvalCaseInput]]
+
+
+class EvalRunInput(TypedDict, closed=True):
+    cases: NotRequired[list[EvalCaseInput] | None]
+    trigger: NotRequired[str | None]
 
 
 class LabelledListResultRunRow(TypedDict, closed=True):

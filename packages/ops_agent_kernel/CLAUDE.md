@@ -2,7 +2,8 @@
 
 Status: current.
 
-One agent turn on Pydantic AI (spec 15, ADR-0014). The library drives model steps; the kernel owns everything that
+One agent turn on the Strands loop (docs/design/agents-v2/runtime-contract-and-strands-loop.md). The loop drives model
+steps; the kernel owns everything that
 crosses a boundary: context assembly, tool calls through the executor port with idempotency keys, a gated write ending
 the turn as an `Interrupt` and resuming from one, guardrails, skills, tool search, chat widgets and personal-data
 masking. It has no database and no Temporal. Package rules and test commands: [../CLAUDE.md](../CLAUDE.md); repo-wide

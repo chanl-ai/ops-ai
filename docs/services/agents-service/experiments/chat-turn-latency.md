@@ -19,7 +19,7 @@ The model is 95 to 96% of a chat turn, and agents-service adds 52 to 89 ms at p5
 | Workflow latency on a real server | not run (measured in process on fake ports) |
 
 The real model costs more overhead than the fake one (52 against 26 ms, plain p50) because it streams many small
-deltas, each an SSE event through Pydantic AI's stream handling.
+deltas, each an SSE event through the loop's stream handling (Pydantic AI's at the time of the run).
 
 ## Numbers
 

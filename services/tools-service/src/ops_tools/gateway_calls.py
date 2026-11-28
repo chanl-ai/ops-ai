@@ -102,6 +102,20 @@ class CallLogRow(TypedDict):
 
 
 @dataclass(frozen=True)
+class Decided:
+    """What a call that passed every check up to its claim is bound to: the input hash an approval names, and how
+    many distinct people the token must name."""
+
+    input_hash: str
+    approvers_needed: int
+    # It waits for a person: OPA asks a token of it, or the check before sending held it. `reason` says why.
+    needs_review: bool = False
+    reason: str = ""
+    # The team asks the person the call acts for to confirm it, so their own yes is the approval.
+    asker_confirms: bool = False
+
+
+@dataclass(frozen=True)
 class Allowed:
     call_id: str
     ok: bool
@@ -112,6 +126,8 @@ class Allowed:
     signed_in: SignedAs | None = None
     # A write asked for as a plan only (`call(plan_only=True)`): what it would send, and nothing was sent or logged.
     planned: Json | None = None
+    # A call asked for as a decision only (`call(decide_only=True)`): it would run as asked; nothing was sent or logged.
+    decided: Decided | None = None
 
 
 @dataclass(frozen=True)
@@ -163,6 +179,8 @@ def _approvers(token: str | None) -> list[str]:
 
 
 WRITES = {"write"}
+# OPA's reason for a write that carries no token (policy/gateway.rego): a decision answers it as needs_review.
+TOKEN_ASKED = {"write needs an approval token"}
 # Decides whether an approval the asker gave themselves still counts (asker_refusal).
 ACCESS = Access()
 
@@ -385,17 +403,19 @@ class GatewayCalls:
         have changed after it was minted."""
         if req.acting_for is None:
             return None
-        # With no live reader (dev sign-in) the asker's own token decides, as `can` reads it everywhere else.
-        asker = principal_of(req.acting_for, tenant_id)
-        may_decide = (
-            await self.requester_may_decide(tenant_id, req.acting_for.team_id)
-            if self.requester_may_decide is not None
-            else requester_may_decide(
-                policy(asker, "requesterMayDecide"), req.acting_for.team_id, "reviews", policy(asker, "approvalsFloor")
-            )
-        )
+        may_decide = await self.asker_may_decide(tenant_id, req.acting_for)
         approvers = _approvers(req.approval_token)
         return asker_refusal(ACCESS, req.acting_for, tenant_id, approvers, may_decide=may_decide)
+
+    async def asker_may_decide(self, tenant_id: str, asker: ActingForPerson) -> bool:
+        """The tenant's requesterMayDecide for the asker's team, read now. With no live reader (dev sign-in) the
+        asker's own token decides, as `can` reads it everywhere else."""
+        if self.requester_may_decide is not None:
+            return await self.requester_may_decide(tenant_id, asker.team_id)
+        held = principal_of(asker, tenant_id)
+        return requester_may_decide(
+            policy(held, "requesterMayDecide"), asker.team_id, "reviews", policy(held, "approvalsFloor")
+        )
 
     async def call(
         self,
@@ -412,6 +432,7 @@ class GatewayCalls:
         operation: tuple[Resolved, Run] | None = None,
         link_id: str | None = None,
         plan_only: bool = False,
+        decide_only: bool = False,
     ) -> Outcome:
         """One call for `caller`, the verified principal of whichever route took it. `generation` is a run's lease
         generation (writes are fenced on it); `channel` and `client_name` say where the call came from, for the log.
@@ -421,13 +442,19 @@ class GatewayCalls:
         route owns and no registry module holds, with how it runs: it meets the same log, approval and rate checks.
         `plan_only` is the one dry-run seam: a write that passes the team, input and limit checks comes back as
         `Allowed.planned`, what it would send, before any approval, claim, rate spend, sign-in or executor runs, and
-        no row is logged; a read is not affected and runs."""
+        no row is logged; a read is not affected and runs. `decide_only` runs every check up to the claim and answers
+        `Allowed.decided` when the call would run: nothing is logged, claimed, spent or sent (POST /v1/calls/decide)."""
         call_id = new_id("gwc")
         shown = {"trial": trial, "secret_values": secret_values} if trial is not None else {}
         started = time.monotonic()
 
         def elapsed() -> int:
             return round((time.monotonic() - started) * 1000)
+
+        async def record(**kw: Any) -> None:
+            # A decision is asked before the call is made, so a refusal it finds is the caller's to act on, not a row.
+            if not decide_only:
+                await self.log.record(**kw)
 
         # The run the call is made in, live (production) or test; the registry picks the account it signs in with
         # from it (connections.records.account_for).
@@ -507,7 +534,7 @@ class GatewayCalls:
         ):
             reason = f"{req.tool} belongs to a module outside this team"
             row.update(decision="deny", reasons=[reason])
-            await self.log.record(
+            await record(
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": "team_forbidden", "message": reason}
             )
             return Refused(call_id, 403, "team_forbidden", [reason])
@@ -520,7 +547,7 @@ class GatewayCalls:
             except ApiError as e:
                 row.update(decision="deny", reasons=[e.message])
                 error = {"code": e.code, "message": e.message}
-                await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
+                await record(**row, outcome="refused", latency_ms=elapsed(), error=error)
                 return Refused(call_id, e.status, e.code, [e.message])
         early = _before_policy(resolved, args)
         if early is not None:
@@ -531,9 +558,7 @@ class GatewayCalls:
                     self.executor.http.auth, caller.tenant_id, module, req.acting_for, access
                 )
             row.update(decision="deny", reasons=[reason])
-            await self.log.record(
-                **row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason}
-            )
+            await record(**row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason})
             return Refused(call_id, status, code, [reason], details)
         if plan_only and access in WRITES:
             plan = await self.executor.plan(resolved or Resolved(access, "local"), req.tool, args)
@@ -553,7 +578,7 @@ class GatewayCalls:
                 # Whether this write needs an approval cannot be known, so it never runs; reads are unaffected.
                 reason = "The team's approval rules could not be read, so this write was not run. Try again shortly."
                 row.update(decision="deny", reasons=[reason])
-                await self.log.record(
+                await record(
                     **row, outcome="refused", latency_ms=elapsed(), error={"code": RULES_UNAVAILABLE, "message": reason}
                 )
                 return Refused(call_id, 503, RULES_UNAVAILABLE, [reason])
@@ -615,13 +640,20 @@ class GatewayCalls:
         if self_approved:
             row["approvers"] = [caller.email]
         approval_required = access not in WRITES or (needs and not self_approved)
+
+        def decided(*, needs_review: bool = False, reason: str = "") -> Decided:
+            needed = (policy["approvers"] if policy else 0) or 1
+            return Decided(digest, needed, needs_review, reason, asker_confirms=needs and confirmed_by_asker)
+
         if access in WRITES and req.approval_token is None and self.send_check is not None:
             # Check before sending: a write the team's sending policy forbids, or one the check could not
             # judge, waits for a person; a write that carries an approval was decided by one and is not judged again.
             why = await self.send_check.needs_person(caller.tenant_id, caller.team_id, req.tool, req.input, digest)
+            if why is not None and decide_only:
+                return Allowed(call_id, True, None, decided=decided(needs_review=True, reason=why))
             if why is not None:
                 row.update(decision="deny", reasons=[why])
-                await self.log.record(
+                await record(
                     **row, outcome="refused", latency_ms=elapsed(), error={"code": NEEDS_REVIEW, "message": why}
                 )
                 return Refused(call_id, 409, NEEDS_REVIEW, [why])
@@ -641,16 +673,19 @@ class GatewayCalls:
             }
         )
         row.update(decision="allow" if decision.allow else "deny", reasons=decision.reasons)
+        if decide_only and not decision.allow and req.approval_token is None and set(decision.reasons) <= TOKEN_ASKED:
+            # The one refusal an approval answers: the write waits for a person rather than being refused.
+            return Allowed(call_id, True, None, decided=decided(needs_review=True, reason="; ".join(decision.reasons)))
         if not decision.allow:
             error = {"code": "gateway_refused", "message": "; ".join(decision.reasons)}
-            await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
+            await record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 403, "gateway_refused", decision.reasons)
         asked_again = needs and not confirmed_by_asker and req.approval_token
         if asked_again and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
             # The token was valid when minted, but the person the call acts for approved it themselves and today's
             # policy no longer lets an asker decide (it changed mid-turn, or the write now needs a reviewer).
             row.update(decision="deny", reasons=[own.message])
-            await self.log.record(
+            await record(
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": own.code, "message": own.message}
             )
             return Refused(call_id, own.status, own.code, [own.message])
@@ -658,13 +693,15 @@ class GatewayCalls:
             # The token is verified by now; it must have been minted for the one system workflow this tool serves.
             reason = f"{req.tool} is applied only by the {SYSTEM_TOOLS[req.tool]} system workflow"
             row.update(decision="deny", reasons=[reason])
-            await self.log.record(
+            await record(
                 **row,
                 outcome="refused",
                 latency_ms=elapsed(),
                 error={"code": "system_workflow_only", "message": reason},
             )
             return Refused(call_id, 403, "system_workflow_only", [reason])
+        if decide_only:
+            return Allowed(call_id, True, None, decided=decided())
         if access not in WRITES:
             if (limited := await over_rate()) is not None:
                 return limited

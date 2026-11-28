@@ -47,8 +47,9 @@ registry_guardrails = sa.Table(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    # A guardrail's name is unique within its team only, so many teams can hold a copy of the same template.
-    sa.UniqueConstraint("team_id", "slug", name="uq_registry_guardrails_team_slug"),
+    # A guardrail's name is unique within its tenant's team only, so many teams, in any tenant, can hold a copy of the
+    # same template (team ids are chosen per tenant).
+    sa.UniqueConstraint("tenant_id", "team_id", "slug", name="uq_registry_guardrails_team_slug"),
     sa.Index("ix_registry_guardrails_tenant_team", "tenant_id", "team_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )

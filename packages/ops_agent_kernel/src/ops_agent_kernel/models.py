@@ -1,21 +1,18 @@
-"""The model a turn runs on: built directly from a provider key in this process (ADR-0014 loop; OpenAI by default),
-or through models-service by alias, where the provider keys, budgets and rate limits live (ADR-0008).
+"""Where a turn's model calls go: through models-service by alias, where the provider keys, budgets and rate limits
+live (ADR-0008), or straight to OpenAI with a key in this process.
 
-Direct: an alias starting `claude-` selects Anthropic, and needs ANTHROPIC_API_KEY. There is no fallback chain: a
-provider error fails the turn, and the message says so.
+Direct calls speak only OpenAI's API. Every other provider, Anthropic included, is served through models-service. There
+is no fallback chain: a provider error fails the turn, and the message says so.
 """
 
 from __future__ import annotations
 
 import httpx2
 from openai import AsyncOpenAI
-from pydantic_ai.models import Model
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.openai import OpenAIProvider
 
 from ops_service_kit.settings import Settings
+
+from .contract import ModelEndpoint
 
 
 class NoModelKeyError(RuntimeError):
@@ -26,7 +23,7 @@ class NoModelKeyError(RuntimeError):
 DEFAULT_ALIAS = "default"
 
 
-def build_model(settings: Settings) -> Model:
+def build_model(settings: Settings) -> ModelEndpoint:
     alias = settings.model_alias
     if alias == DEFAULT_ALIAS:
         raise NoModelKeyError(
@@ -39,16 +36,14 @@ def build_model(settings: Settings) -> Model:
             "OPENAI_API_TYPE=azure is served through models-service: set OPS_MODELS_URL and OPS_MODELS_KEY."
         )
     if alias.startswith("claude-"):
-        if settings.anthropic_api_key is None:
-            raise NoModelKeyError(f"Model {alias} needs ANTHROPIC_API_KEY in the environment.")
-        return AnthropicModel(alias, provider=AnthropicProvider(api_key=settings.anthropic_api_key.get_secret_value()))
+        raise NoModelKeyError(f"Model {alias} is served through models-service: set OPS_MODELS_URL and OPS_MODELS_KEY.")
     if settings.openai_api_key is None:
         raise NoModelKeyError(f"Model {alias} needs OPENAI_API_KEY in the environment.")
-    return OpenAIChatModel(alias, provider=OpenAIProvider(api_key=settings.openai_api_key.get_secret_value()))
+    return ModelEndpoint(AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value(), max_retries=0), alias)
 
 
 class ModelsServiceModels:
-    """One OpenAI-compatible model per alias, pointed at models-service with this service's model key."""
+    """One endpoint per alias, pointed at models-service with this service's model key."""
 
     def __init__(self, base_url: str, key: str, *, http_client: httpx2.AsyncClient | None = None) -> None:
         # No retries: models-service answers 429 for a key over its limit, and a retry would spend the limit again
@@ -56,9 +51,6 @@ class ModelsServiceModels:
         self.client = AsyncOpenAI(
             base_url=f"{base_url.rstrip('/')}/v1/models", api_key=key, max_retries=0, http_client=http_client
         )
-        self.models: dict[str, Model] = {}
 
-    def model_for(self, alias: str) -> Model:
-        if alias not in self.models:
-            self.models[alias] = OpenAIChatModel(alias, provider=OpenAIProvider(openai_client=self.client))
-        return self.models[alias]
+    def model_for(self, alias: str) -> ModelEndpoint:
+        return ModelEndpoint(self.client, alias)

@@ -78,8 +78,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_memories TO ops_agents_runtime
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.memory_audit TO ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.message_memory_use FROM ops_agents_runtime;
 GRANT SELECT, INSERT ON dbo.message_memory_use TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records TO ops_agents_runtime;
-REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records_unattributed FROM ops_agents_runtime;
 REVOKE SELECT, UPDATE, DELETE ON dbo.agents_outbox FROM ops_agents_runtime;
 GRANT INSERT ON dbo.agents_outbox TO ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.review_assignments FROM ops_agents_runtime;
@@ -98,8 +96,6 @@ GRANT SELECT, INSERT, UPDATE ON dbo.template_copies TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_catalog TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_catalog_operations TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_team_state TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_budgets TO ops_agents_runtime;
-REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.thread_budgets_unattributed FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_widgets TO ops_agents_runtime;
 REVOKE DELETE ON dbo.timers FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.timers TO ops_agents_runtime;
@@ -197,6 +193,9 @@ REVOKE UPDATE, DELETE ON dbo.model_call_log FROM ops_models_runtime;
 GRANT SELECT, INSERT ON dbo.model_call_log TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_calls_untenanted TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_spend TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_budgets TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_budget_reservations TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_replays TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_aliases TO ops_models_runtime;
 GRANT SELECT ON dbo.alembic_version_models TO ops_models_runtime;
 GO

@@ -21,10 +21,9 @@ import sqlalchemy as sa
 from fastapi import FastAPI
 from httpx import AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.models.function import AgentInfo
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_agent_kernel.testing import Answer
 from ops_agent_kernel.types import TurnRequest
 from ops_agents.api import chat_turns
 from ops_agents.api.deps import Runtime
@@ -39,6 +38,7 @@ from ops_engine.store import Work, WorkQueue
 from ops_engine.store.tables import engine_work
 from ops_engine.worker import TURN, Worker, WorkerHost
 from ops_service_kit.errors import TooManyRequests
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
 from tests import conftest
@@ -65,14 +65,13 @@ class Proc:
 def paid(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """The scripted model's calls, counted: what a reply paid for, whichever process made it."""
     calls: list[int] = []
-    inner = conftest.scripted_stream
+    inner = conftest.scripted
 
-    async def counted(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[Any]:
+    def counted(messages: list[Json], tools: list[Json]) -> Answer:
         calls.append(1)
-        async for part in inner(messages, info):
-            yield part
+        return inner(messages, tools)
 
-    monkeypatch.setattr(conftest, "scripted_stream", counted)
+    monkeypatch.setattr(conftest, "scripted", counted)
     return calls
 
 
@@ -131,7 +130,7 @@ async def die_mid_reply(a: Proc, monkeypatch: pytest.MonkeyPatch, thread_id: str
         if event == "model_call":
             raise Killed
 
-    monkeypatch.setattr("ops_agents.api.model_ledger.emit", killed)
+    monkeypatch.setattr("ops_agents.api.budgets.emit", killed)
     with contextlib.suppress(Killed, BaseExceptionGroup):
         await a.client.post(
             f"/chat/threads/{thread_id}/messages",

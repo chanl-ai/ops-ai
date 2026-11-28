@@ -15,7 +15,7 @@ restart_window_seconds = 300
 backoff_max_seconds = 30
 withhold = [
   "DATABASE_URL", "OPS_DATABASE_URL", "OPS_DATABASE_URL_*", "OPS_SVC_KEY_*", "OPS_MODELS_KEY_*",
-  "OPS_PLATFORM_SIGNING_KEY", "OPS_REVIEW_KEY", "OPS_SECRETS_KEY", "OPS_BOOTSTRAP_ADMIN_PASSWORD",
+  "OPS_PLATFORM_SIGNING_KEY", "OPS_REVIEW_KEY", "OPS_SESSION_TOKEN_KEY", "OPS_SECRETS_KEY", "OPS_BOOTSTRAP_ADMIN_PASSWORD",
 ]
 
 [process.opa]
@@ -71,12 +71,12 @@ ready = "http://127.0.0.1:8760/health"
 [process.agents]
 command = ["/app/.venv/bin/python", "-m", "ops_agents.api"]
 check = "http://127.0.0.1:8700/health"
-env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_SESSION_TOKEN_KEY = "${OPS_SESSION_TOKEN_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
 
 # The workflow runner's worker serves no port; it signs as agents-service, whose work it does, on its login.
 [process.worker]
 command = ["/app/.venv/bin/python", "-m", "ops_agents.api.worker"]
-env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_SESSION_TOKEN_KEY = "${OPS_SESSION_TOKEN_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
 
 [process.console]
 # The route cache belongs to the build that wrote it. A suspended machine keeps its filesystem across a deploy, so a

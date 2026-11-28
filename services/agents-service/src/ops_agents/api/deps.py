@@ -10,7 +10,7 @@ from fastapi import Request
 
 from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import Catalog
-from ops_agents.activities.gateway import GatewayClient
+from ops_agents.activities.gateway import GatewayClient, TokenMinter
 from ops_agents.activities.knowledge import KnowledgeBases, NoKnowledgeService
 from ops_agents.activities.tool_directory import AppStates, CatalogTools, ToolDirectory
 from ops_agents.graphs.common import GraphDeps
@@ -23,7 +23,7 @@ from ops_store.database import Database
 from ..store.channels import ChannelStore
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
-from ..store.usage import UsageLedger
+from .budgets import GatewayBudgets
 from .model_aliases import ModelAliases
 from .timer_port import PollingScheduler, TimerScheduler
 from .usage import AdmitAll, KeyAdmission
@@ -52,6 +52,9 @@ class Runtime:
     gateway: bool = False
     # The tools-service client when a gateway is configured; the review service asks it for tool access classes.
     tools: GatewayClient | None = None
+    # Mints a decided call's approval token: the gateway, which holds the only signing key. None without a gateway, when
+    # an approval records who approved and no token is minted.
+    approvals: TokenMinter | None = None
     # tools-service for applying tool module review decisions: the gateway's client, or one for `tools_url`
     # when this service runs without a gateway.
     tool_reviews: GatewayClient | None = None
@@ -64,8 +67,9 @@ class Runtime:
     knowledge_bases: KnowledgeBases | None = None
     # Told when a timer is armed or cancelled; the poller, the default, reads the timers table instead.
     timer_scheduler: TimerScheduler = field(default_factory=PollingScheduler)
-    # Usage rows and thread budgets (E12); set with the graphs.
-    usage: UsageLedger | None = None
+    # The thread budgets kept by the model gateway (api/budgets.py); None without models-service, when no budget
+    # holds. Set with the graphs.
+    usage: GatewayBudgets | None = None
     # Whether a key may open a new thread; the models service's ledger answers once it exists.
     keys: KeyAdmission = field(default_factory=AdmitAll)
     # Compiles the one-node graph of a published agent; set with the graphs. The registry calls it on publish.

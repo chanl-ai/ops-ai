@@ -5,8 +5,6 @@ STACK_SVC := agents
 include ../../make/service-common.mk
 .PHONY: install run worker test lint typecheck verify checks migrate registry-tenant-preflight clean db-up db-down standards sbom openapi openapi-check
 
-export PYDANTIC_AI_NO_BANNER := 1
-
 PY_DIRS := src tests scripts migrations experiments
 # Migrations are linted but not type-checked, as before the move.
 TYPED_DIRS := src tests scripts experiments

@@ -3,56 +3,39 @@ the turn's slower model; while models-service has no such alias it runs on the r
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ops_agent_kernel import aliases
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.ports import KernelPorts
+from ops_agent_kernel.testing import Reply, Structured
 from ops_agents.api.memory import MEMORY_ALIAS, extractor_for
 from ops_service_kit.http import Json
-from tests.conftest import structured
+from tests.conftest import model_on
 from tests.unit.test_guardrails_kernel import NoKnowledge, NoTools
 
 SCHEMA: Json = {"type": "object", "properties": {"memories": {"type": "array"}}, "required": ["memories"]}
 
 
-def answering(value: str) -> FunctionModel:
-    args = {"memories": [{"value": value}]}
-
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return structured(info, args)
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
-        yield json.dumps(args)
-
-    return FunctionModel(respond, stream_function=stream)
+def answering(value: str) -> ModelEndpoint:
+    return model_on(lambda messages, tools: Structured({"memories": [{"value": value}]}))
 
 
-def failing(error: Exception) -> FunctionModel:
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        raise error
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
-        raise error
-        yield ""
-
-    return FunctionModel(respond, stream_function=stream)
+def failing(refused: Reply) -> ModelEndpoint:
+    return model_on(lambda messages, tools: refused)
 
 
 class Source:
-    """models-service by alias: `memory-extract` answers "fast" (or raises `memory`), every other alias "turn"."""
+    """models-service by alias: `memory-extract` answers "fast" (or is refused with `memory`), every other alias
+    "turn"."""
 
-    def __init__(self, memory: Exception | None = None) -> None:
+    def __init__(self, memory: Reply | None = None) -> None:
         self.memory = memory
 
-    def model_for(self, alias: str) -> FunctionModel:
+    def model_for(self, alias: str) -> ModelEndpoint:
         if alias != MEMORY_ALIAS:
             return answering("turn")
         return answering("fast") if self.memory is None else failing(self.memory)
@@ -75,5 +58,5 @@ async def test_extraction_runs_on_the_memory_alias_when_models_service_binds_it(
 
 
 async def test_an_unbound_memory_alias_uses_the_runtime_alias() -> None:
-    unbound = ModelHTTPError(404, MEMORY_ALIAS, {"error": {"code": "alias_not_found"}})
+    unbound = Reply(status=404, error={"error": {"code": "alias_not_found"}})
     assert await read(Source(unbound)) == {"memories": [{"value": "turn"}]}
