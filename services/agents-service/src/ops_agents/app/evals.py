@@ -23,6 +23,7 @@ from ops_agents.domain.evals import (
     EvalCheck,
     Judged,
     judge_evidence,
+    needs_judge,
     rubric_missing,
     score_case,
     turn_from_test,
@@ -106,8 +107,12 @@ async def _scored(case: EvalCase, data: Json, judge: JudgeFn | None, spend: _Spe
     spend.add(alias, field(usage, "inputTokens", int, 0), field(usage, "outputTokens", int, 0), 1)
     view = turn_from_test(data)
     judged: dict[int, Judged] = {}
+    judging_on = needs_judge(case, view)
     for i, check in enumerate(case.checks):
         if check.type != CHECK_JUDGE:
+            continue
+        if not judging_on:
+            judged[i] = Judged(None, "Not judged: another check failed.")
             continue
         if judge is None:
             judged[i] = Judged(None, "No judge is configured.")
@@ -206,12 +211,25 @@ def _case(item: Any) -> EvalCase:
 
 def _check(item: Any) -> EvalCheck:
     data = json_object(item)
-    tool = data.get("tool")
-    text = data.get("text")
-    rubric = data.get("rubric")
+
+    def text_of(*keys: str) -> str | None:
+        v = next((data[k] for k in keys if data.get(k) is not None), None)
+        return str(v) if v is not None else None
+
+    def number(*keys: str) -> float | None:
+        v = next((data[k] for k in keys if data.get(k) is not None), None)
+        return float(cast(int | float | str, v)) if v is not None else None
+
+    raw_modes = data.get("modes")
     return EvalCheck(
         type=str(data.get("type") or ""),
-        tool=str(tool) if tool is not None else None,
-        text=str(text) if text is not None else None,
-        rubric=str(rubric) if rubric is not None else None,
+        tool=text_of("tool"),
+        text=text_of("text"),
+        rubric=text_of("rubric"),
+        fields=json_object(data["fields"]) if isinstance(data.get("fields"), dict) else None,
+        modes=tuple(str(m) for m in cast(list[Any], raw_modes)) if isinstance(raw_modes, list) else (),
+        kind=text_of("kind"),
+        agent=text_of("agent"),
+        max_cost_usd=number("maxCostUsd", "max_cost_usd"),
+        max_seconds=number("maxSeconds", "max_seconds"),
     )

@@ -14,7 +14,32 @@ CHECK_REPLY_CONTAINS: Final = "reply_contains"
 CHECK_REFUSES: Final = "refuses"
 # Scored by a model judge on its rubric (ops_agent_kernel.judge), the verdict awaited in app/evals.py.
 CHECK_JUDGE: Final = "judge"
-CHECK_TYPES: Final[frozenset[str]] = frozenset({CHECK_CALLS_TOOL, CHECK_REPLY_CONTAINS, CHECK_REFUSES, CHECK_JUDGE})
+CHECK_NOT_CALLS_TOOL: Final = "not_calls_tool"
+# The typed answer has each listed field equal to its value; {"$exists": true} checks presence.
+CHECK_OUTPUT_MATCHES: Final = "output_matches"
+# Every mode the turn used is in the list; [direct] passes only on a turn that used no other mode.
+CHECK_MODE_IN: Final = "mode_in"
+CHECK_HANDS_TO: Final = "hands_to"
+CHECK_PAUSES_FOR: Final = "pauses_for"
+# The turn paused for approval of a call to the tool, so nothing was sent.
+CHECK_PAUSES_ON: Final = "pauses_on"
+CHECK_WITHIN: Final = "within"
+CHECK_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        CHECK_CALLS_TOOL,
+        CHECK_REPLY_CONTAINS,
+        CHECK_REFUSES,
+        CHECK_JUDGE,
+        CHECK_NOT_CALLS_TOOL,
+        CHECK_OUTPUT_MATCHES,
+        CHECK_MODE_IN,
+        CHECK_HANDS_TO,
+        CHECK_PAUSES_FOR,
+        CHECK_PAUSES_ON,
+        CHECK_WITHIN,
+    }
+)
+MODE_DIRECT: Final = "direct"
 
 CHECK_STATUS_PASS: Final = "pass"
 CHECK_STATUS_FAIL: Final = "fail"
@@ -64,6 +89,12 @@ class EvalCheck:
     tool: str | None = None
     text: str | None = None
     rubric: str | None = None
+    fields: Mapping[str, Any] | None = None
+    modes: tuple[str, ...] = ()
+    kind: str | None = None
+    agent: str | None = None
+    max_cost_usd: float | None = None
+    max_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +111,14 @@ class TurnView:
     tool_names: tuple[str, ...]
     blocked_topic: str | None
     latency_ms: int
+    # Read from the turn's result: its typed answer, the modes it used, the agent it handed to, the call it paused
+    # on and the pause's kind (approval, question, plan_review), and what it cost.
+    output: Any = None
+    modes: tuple[str, ...] = ()
+    handoff: str | None = None
+    interrupt_tool: str | None = None
+    interrupt_kind: str | None = None
+    cost_usd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +156,20 @@ def check_label(check: EvalCheck) -> str:
         return f"Refuses: {check.text}" if check.text else CHECK_REFUSES
     if check.type == CHECK_JUDGE:
         return f"Judge: {check.rubric}" if check.rubric else CHECK_JUDGE
+    if check.type == CHECK_NOT_CALLS_TOOL:
+        return f"Does not call {check.tool}" if check.tool else CHECK_NOT_CALLS_TOOL
+    if check.type == CHECK_OUTPUT_MATCHES:
+        return "Answer has " + ", ".join(sorted(check.fields or {}))
+    if check.type == CHECK_MODE_IN:
+        return "Modes within " + ", ".join(check.modes)
+    if check.type == CHECK_HANDS_TO:
+        return f"Hands over to {check.agent}"
+    if check.type == CHECK_PAUSES_FOR:
+        return f"Pauses for {check.kind}"
+    if check.type == CHECK_PAUSES_ON:
+        return f"Pauses on {check.tool}"
+    if check.type == CHECK_WITHIN:
+        return "Within its cost and time"
     return check.type
 
 
@@ -138,9 +191,32 @@ def score_check(check: EvalCheck, turn: TurnView, judged: Judged | None = None) 
         ok = _holds(turn.reply, check.text)
     elif check.type == CHECK_REFUSES:
         ok = _refused(turn, check.text)
+    elif check.type == CHECK_NOT_CALLS_TOOL:
+        ok = bool(check.tool) and check.tool not in turn.tool_names
+    elif check.type == CHECK_OUTPUT_MATCHES:
+        ok = _output_holds(turn.output, check.fields or {})
+    elif check.type == CHECK_MODE_IN:
+        used = set(turn.modes) or {MODE_DIRECT}
+        ok = bool(check.modes) and used <= set(check.modes)
+    elif check.type == CHECK_HANDS_TO:
+        ok = bool(check.agent) and turn.handoff == check.agent
+    elif check.type == CHECK_PAUSES_FOR:
+        ok = bool(check.kind) and turn.interrupt_kind == check.kind
+    elif check.type == CHECK_PAUSES_ON:
+        ok = bool(check.tool) and turn.interrupt_tool == check.tool
+    elif check.type == CHECK_WITHIN:
+        ok = _within(turn, check)
     else:
         ok = False
     return CheckResult(label=check_label(check), status=CHECK_STATUS_PASS if ok else CHECK_STATUS_FAIL)
+
+
+def needs_judge(case: EvalCase, turn: TurnView) -> bool:
+    """Whether the case's judge checks are worth a call: it has one, and every check that needs no model passed. A
+    case that failed already is not judged, which saves the call."""
+    if not any(k.type == CHECK_JUDGE for k in case.checks):
+        return False
+    return all(score_check(k, turn).status == CHECK_STATUS_PASS for k in case.checks if k.type != CHECK_JUDGE)
 
 
 def score_case(case: EvalCase, turn: TurnView, judged: Mapping[int, Judged] | None = None) -> CaseOutcome:
@@ -200,12 +276,43 @@ def turn_from_test(data: Json) -> TurnView:
     blocked = _map_field(data, "blockedBy", "blocked_by")
     topic = str(blocked.get("topic") or "")
     raw_latency = data.get("tookMs") if data.get("tookMs") is not None else data.get("took_ms")
+    paused = _map_field(data, "wouldPause")
+    handoff = data.get("handoff")
+    raw_cost = data.get("costUsd")
     return TurnView(
         reply=str(data.get("reply") or ""),
         tool_names=tuple(names),
         blocked_topic=topic or None,
         latency_ms=int(cast(int | float | str, raw_latency or 0)),
+        output=data.get("output"),
+        modes=tuple(str(m) for m in _list_field(data, "modes")),
+        handoff=str(handoff) if handoff else None,
+        # The single-turn harness pauses only for approval of a write (agent_test.one_test_turn's wouldPause).
+        interrupt_tool=str(paused["tool"]) if paused.get("tool") else None,
+        interrupt_kind=str(paused.get("kind") or "approval") if paused else None,
+        cost_usd=float(cast(int | float | str, raw_cost)) if raw_cost is not None else None,
     )
+
+
+def _output_holds(output: Any, fields: Mapping[str, Any]) -> bool:
+    if not fields or not isinstance(output, dict):
+        return False
+    have = cast(Json, output)
+    for key, want in fields.items():
+        if isinstance(want, dict) and cast(Json, want).get("$exists") is True:
+            if key not in have:
+                return False
+        elif have.get(key) != want:
+            return False
+    return True
+
+
+def _within(turn: TurnView, check: EvalCheck) -> bool:
+    if check.max_cost_usd is None and check.max_seconds is None:
+        return False
+    if check.max_cost_usd is not None and (turn.cost_usd is None or turn.cost_usd > check.max_cost_usd):
+        return False
+    return check.max_seconds is None or turn.latency_ms / 1000 <= check.max_seconds
 
 
 def _holds(haystack: str, needle: str | None) -> bool:

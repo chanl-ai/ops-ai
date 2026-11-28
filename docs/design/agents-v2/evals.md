@@ -1,7 +1,14 @@
 # Evals for agents and teams
 
-Status: proposed design, written 2026-11-26. Nothing on this page is built. Agent evals ship in release 1.4.0, sandbox
-checks in 1.5.0 and team tests in 1.6.0.
+Status: proposed design, written 2026-11-26, partly built. Agent evals ship in release 1.4.0, sandbox checks in 1.5.0
+and team tests in 1.6.0.
+
+| Part | State |
+|---|---|
+| New checks (`not_calls_tool`, `output_matches`, `mode_in`, `hands_to`, `pauses_for`, `pauses_on`, `within`) | Built in `domain/evals.py`; rows 3 to 5 in `tests/unit/test_eval_checks_v2.py`. The single-turn harness reports no hand-over, so `hands_to` fails there until runs go through the graph |
+| A judge only when the other checks passed | Built (`domain/evals.needs_judge`) |
+| The gate by digest (rows 1, 2) | Built before this page as the gate's `stale` rule: a run counts only for the digest it ran on (`store/assurance_list.version_gate`, `tests/api/test_assurance.py`). It refuses with 422 and `eval_not_run` or `eval_failed`, not 409 `eval_gate` |
+| Background runs, events, restart (row 8) | Not built: a run still runs inside the request |
 
 An eval is a saved example of what an agent should do with a message: which tools it should call, what it should say or
 refuse, and what its typed answer should contain. A builder keeps a set of them with each agent, runs them before
