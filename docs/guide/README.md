@@ -7,12 +7,17 @@ docs/deploy/client-install-guide.html, and the install and operate sections into
 docs/deploy/package-install.md, written by hand because the package holds no install.sh.
 Edit here, then run node scripts/docs/build_guide.mjs. -->
 
-This guide is for the architects, DBAs, security reviewers and operators of a team that runs Ops AI on its own
-infrastructure. It says what each part does, how work moves through them, where data is kept and how it is kept apart,
-how the platform is secured, how to deploy and run it, and which parts are built today and which are still to come.
+Running Ops AI on your own infrastructure raises questions from several people. The architect asks what runs where. The
+DBA asks what touches the database. The security reviewer asks how access is kept apart, and the operator asks how to
+install, upgrade and back it up. This guide answers each of them in one place. It is written for the architects, DBAs,
+security reviewers and operators of a team that runs Ops AI itself. It says what each part does, how work moves through
+them, where data is kept and how it is kept apart, how the platform is secured, how to deploy and run it, and which
+parts are built today and which are still to come.
 
-Each status in this guide is read from the code of the release it ships with. **Built** means it runs and is tested;
-**Partial** means some of it runs and the rest is named; **Planned** means designed and not yet in the code.
+Every status in this guide is read from the code of the release it ships with. **Built** means the feature runs and is
+tested. **Partial** means some of it runs and the rest is named. **Planned** means it is designed and not yet in the code.
+Start with the [Overview](overview.md) if you are new, or go straight to [Choose a deployment](deployment-options.md) if
+you are ready to plan an install.
 
 ## At a glance
 

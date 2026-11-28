@@ -1,10 +1,11 @@
-# Operate
+# Run Ops AI day to day
 
 Status: current.
 
-Keep an install healthy once it runs: check it and read its logs, move it to a new release, back it up, and rotate its
-keys. The install script's commands come first on each page; the Compose and Kubernetes commands follow for installs
-made by hand.
+Once Ops AI is installed, people depend on it. Someone on your team needs to know whether it is healthy, how to move it
+to a new release without losing work, how to recover it after a mistake, and how to change a key without locking
+everyone out. This page is the checklist for that person. Health checks, upgrades and backups each have their own page, with the
+install script's commands first and the Compose and Kubernetes commands for installs made by hand after them.
 
 <!-- guide: include from "## Check the install" until "## Limits" -->
 Check health, read logs, know what to watch and how to scale: [Monitor](../deploy/monitoring.md).
@@ -17,24 +18,28 @@ Back up the database, the stored files and the keys, and restore them: [Back up 
 
 ## Rotate keys
 
+Ops AI uses several keys, and each is changed in its own way. Two of them have consequences you should plan for before
+you start: changing the sign-in token key signs people out, and changing the secrets key makes every stored credential
+unreadable.
+
 | Key | Steps |
 |---|---|
-| Approval key (`OPS_REVIEW_KEY`) | Set the new value for tools and restart it. Approvals in flight must be given again |
-| Session-token key (`OPS_SESSION_TOKEN_KEY`) | Set the new value for agents and restart it and the worker. Open widget chats, step-ups and resume links are made again |
-| A service's signing key | Give the service a new key and key id, add its public key to every other service's trusted list beside the old one, restart the others, then the service; then remove the old key id and restart the others again |
-| Sign-in token key (`OPS_PLATFORM_SIGNING_KEY`) | Set a new key and key id and restart every service; people may need to sign in again |
-| Secrets key (`OPS_SECRETS_KEY`) | Changing it makes every stored credential unreadable, so each must be entered again. A rotation that re-encrypts them is planned |
-| A provider's model key | A Security admin replaces it in the credential store; no restart |
-| Database passwords | Change each login's password, update its setting, restart that service |
+| Approval key (`OPS_REVIEW_KEY`) | Set the new value for the tools service and restart it. Approvals that are waiting must be given again |
+| Session-token key (`OPS_SESSION_TOKEN_KEY`) | Set the new value for the agents service and restart it and its worker. Open widget chats, step-ups and resume links are made again |
+| A service's signing key | Give the service a new key and key id. Add its public key to every other service's trusted list beside the old one, restart the other services, then restart the service itself. Finally remove the old key id and restart the others again |
+| Sign-in token key (`OPS_PLATFORM_SIGNING_KEY`) | Set a new key and key id and restart every service. People may need to sign in again |
+| Secrets key (`OPS_SECRETS_KEY`) | Avoid changing it for now. Changing it makes every stored credential unreadable, so each one must be entered again, and a rotation that re-encrypts them is planned |
+| A provider's model key | A Security admin replaces it in the credential store. No restart is needed |
+| Database passwords | Change each login's password, update that service's setting and restart the service |
 
-## Remove
+## Remove an install
 
-`./install.sh uninstall` asks, then removes the containers, and asks again before deleting the data. It keeps
-`ops-ai.env`. By hand: `docker compose ... down` keeps the volumes and `down -v` deletes them; on Kubernetes,
-`kubectl delete -k <overlay>` removes the volume claims with it.
+Take a backup first if you may want the data. `./install.sh uninstall` asks for confirmation and removes the containers. It then asks a second time before it deletes
+the data, and it keeps `ops-ai.env` in either case. If you installed by hand, `docker compose ... down` keeps the
+volumes and `down -v` deletes them. On Kubernetes, `kubectl delete -k <overlay>` removes the volume claims with it.
 
 ## Limits
 
-- An upgrade across two releases that change the schema has not run yet: 1.0.0 is the first release.
-- Metrics are planned; health checks and logs are built.
-- Ops AI schedules no backups; run the backup from your scheduler or use your database's own.
+- An upgrade across two releases that change the schema has not run yet, because 1.0.0 is the first release.
+- Metrics are planned. Health checks and logs are built.
+- Ops AI schedules no backups. Run the backup from your scheduler, or use your database's own backups.

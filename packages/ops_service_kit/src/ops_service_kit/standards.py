@@ -124,9 +124,11 @@ MODEL_ROUTES = (CHAT_ROUTE, EMBED_ROUTE)
 ROUTE_ENDS = (*MODEL_ROUTES, *(r.removeprefix("/v1/models") for r in MODEL_ROUTES), "/v1/models")
 # Modules that reach the model routes without the one client, each with its reason.
 MODEL_CALL_EXCEPTIONS = {
-    # The agent kernel's turns run on pydantic-ai, whose OpenAI client streams tool calls and takes a base URL, not a
-    # route; it is pointed at models-service with the service's model key, so the key, gate and call log still apply.
-    ("ops_agent_kernel", "models.py"): "pydantic-ai's OpenAI client streams the agent's turns",
+    # The agent kernel's turns stream through an OpenAI client, which takes a base URL, not a route; it is pointed at
+    # models-service with the service's model key, so the key, gate and call log still apply.
+    ("ops_agent_kernel", "models.py"): "the kernel's OpenAI client streams the agent's turns",
+    # The scripted model tests point the kernel at: it answers the chat route and calls no model.
+    ("ops_agent_kernel", "testing.py"): "the scripted model a test serves on the chat route",
 }
 
 

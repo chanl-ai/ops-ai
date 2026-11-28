@@ -246,7 +246,7 @@ export function KbSettingsTab({ kb }: { kb: KnowledgeBaseDetail }) {
             <p className="text-sm text-muted-foreground">No embedding model is set up, so this base is searched by keyword only.</p>
           )}
           <p className="mt-4 text-xs text-muted-foreground">
-            Changed by a workspace admin under <Link className="text-primary underline" href="/settings/workspace/model-providers">Settings › Models</Link>; a change embeds every piece again and reads no file again.
+            Changed by a workspace admin under <Link className="text-primary underline" href="/settings/workspace/model-aliases">Settings › Model aliases</Link>, as a new version of the embedding alias; a new model embeds every piece again in the background and reads no file again. Until then search uses keywords.
           </p>
         </SettingsSection>
 

@@ -4,14 +4,18 @@ that approves AI steps, and a settings change nobody is told needs a rebuild."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_kb import source_settings
 from ops_kb.files import KnowledgeFiles
+from ops_kb.source_settings import EFFECTS, SourceSettings, defaults, index_key, merged, rebuild_for, wire
 
 from .conftest import kb_client
 from .pdfs import HARDSHIP, RATES, policy_pdf
@@ -129,3 +133,68 @@ async def test_a_settings_save_never_approves_an_ai_step(client: httpx.AsyncClie
     }
     saved = data(await client.patch(f"/v1/sources/{src['id']}", json=patch))
     assert saved["ingest"]["approval"]["status"] == "pending" and saved["ingest"]["approval"]["approvedSteps"] == []
+
+
+# One saved change per setting, as the console's Settings tab sends it; None: it cannot be changed by a save.
+CHANGES: dict[str, dict[str, Any] | None] = {
+    "parsing.ocr": {"parsing": {"ocr": "always"}},
+    "parsing.tables": {"parsing": {"tables": False}},
+    "parsing.vision": None,
+    "cleaning.furniture": {"cleaning": {"furniture": True}},
+    "cleaning.main_content": {"cleaning": {"mainContent": True}},
+    "cleaning.site_repeats": {"cleaning": {"siteRepeats": True}},
+    "cleaning.duplicates": {"cleaning": {"duplicates": "skip"}},
+    "ingest.preset": {"ingest": {"preset": "custom"}},
+    "ingest.strategies": {"ingest": {"strategies": ["fixed"]}},
+    "ingest.size": {"ingest": {"size": 600}},
+    "ingest.overlap": {"ingest": {"overlap": 20}},
+    "ingest.child_size": {"ingest": {"childSize": 100}},
+    "ingest.questions_per_section": {"ingest": {"questionsPerSection": 5}},
+    "ingest.columns": {"ingest": {"columns": [{"name": "Rate", "role": "searchable"}]}},
+    "ingest.model": {"ingest": {"model": "bank-other"}},
+    # Decided on its own route (test_a_settings_save_never_approves_an_ai_step); a save never changes it.
+    "ingest.approval": None,
+    "rules": {"rules": [{"id": "r1", "kind": "exclude", "field": "path", "value": "drafts/"}]},
+    "metadata_mapping": {"metadataMapping": [{"key": "product", "from": "static:mortgage"}]},
+    "schedule": {"schedule": {"kind": "daily", "time": "03:00", "tz": "UTC"}},
+    "ai_ceiling": {"aiCeiling": 9.0},
+}
+
+
+def _leaves(model: type[BaseModel], prefix: str = "") -> list[str]:
+    out: list[str] = []
+    for name, field in model.model_fields.items():
+        kind = field.annotation
+        if isinstance(kind, type) and issubclass(kind, BaseModel) and name != "approval":
+            out += _leaves(kind, f"{prefix}{name}.")
+        else:
+            out.append(f"{prefix}{name}")
+    return out
+
+
+def _readers(path: str) -> int:
+    """Reads of a source's setting at `path` in kb-service's code outside this module's own validation."""
+    pattern = re.compile(rf"(?:settings|settings_of\([^()]*\))\.{re.escape(path)}\b")
+    src = Path(source_settings.__file__).parent
+    return sum(len(pattern.findall(f.read_text())) for f in src.rglob("*.py") if f.name != "source_settings.py")
+
+
+def test_every_source_setting_does_what_its_effect_says() -> None:
+    """A setting the console saves that nothing reads is the failure. Each effect is checked against the code: a
+    `split` change reaches what the pieces are built from, a `read` or `sync` setting has a reader, a `kept` one has
+    none and a `label` save changes nothing; a save rebuilds exactly what its effect says."""
+    assert sorted(_leaves(SourceSettings)) == sorted(EFFECTS) == sorted(CHANGES)
+    base = defaults("files")
+    for path, effect in EFFECTS.items():
+        readers = _readers(path)
+        if effect in ("read", "sync"):
+            assert readers > 0, f"{path}: nothing reads it"
+        elif effect == "kept":
+            assert readers == 0, f"{path} is read; say where it applies"
+        if (patch := CHANGES[path]) is None:
+            continue
+        after = merged(base, patch)
+        stored, pieces = wire(after) != wire(base), index_key(after) != index_key(base)
+        assert stored == (effect != "label"), f"{path}: a save stored={stored}"
+        assert pieces == (effect == "split"), f"{path}: the pieces depend on it={pieces}"
+        assert rebuild_for(base, after) == {"read": "read", "split": "split"}.get(effect, "none"), path

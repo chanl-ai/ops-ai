@@ -9,6 +9,7 @@ own cards) is masked by mistake."""
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -60,6 +61,14 @@ REPLY = "Ann Lee, SSN ending 6789, email ann.lee@example.com, phone (902) 555-01
 )
 def test_each_kind_of_personal_data_is_masked(text: str, shown: str) -> None:
     assert mask(text) == shown
+
+
+@pytest.mark.parametrize("text", ["%" * 50_000, "a" * 10_000], ids=["name-characters-no-at", "word-no-separator"])
+def test_long_text_with_nothing_to_mask_is_read_in_linear_time(text: str) -> None:
+    """User text reaches `mask`: a long run the email pattern or a field name could start from must not stall it."""
+    started = time.perf_counter()
+    assert mask(text) == text
+    assert time.perf_counter() - started < 0.1
 
 
 @pytest.mark.parametrize(

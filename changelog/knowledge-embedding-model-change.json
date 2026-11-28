@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-27",
+  "title": "Knowledge search follows a new embedding model",
+  "description": "After an admin changes the embedding model alias, knowledge search uses keywords while every piece is embedded again in the background. No file is re-read.",
+  "tag": "fix"
+}
