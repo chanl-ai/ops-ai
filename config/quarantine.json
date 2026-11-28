@@ -56,6 +56,13 @@
       "expires": "2026-12-12",
       "reason": "api script needs a standing stack with GreenMail; hosted has neither",
       "added": "2026-11-27"
+    },
+    {
+      "id": "uc-486:ui",
+      "owner": "ops-release",
+      "expires": "2026-12-12",
+      "reason": "fifty-step reroute takes 382 ms on a hosted runner against a 300 ms budget; the budget stays",
+      "added": "2026-11-27"
     }
   ]
 }

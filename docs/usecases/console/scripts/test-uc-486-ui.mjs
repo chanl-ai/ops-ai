@@ -16,10 +16,8 @@ const EDITOR_SHOTS = evidenceDir('486', 'editor');
 const SHOTS = evidenceDir('486', 'timings');
 // Routes are computed in a Web Worker after the canvas fits; this is how long a check waits for them to settle.
 const SETTLE_MS = 2_000;
-// What the reroute budget protects: a dropped step's lines look attached to it while the person is still looking at it.
-// The reading polls every frame and walks every step, which a hosted runner's software rendering stretches, so a CI run
-// allows 1000 ms; the measured value is printed either way.
-const REROUTE_MS = process.env.CI ? 1_000 : 300;
+// A dropped step's lines look attached to it while the person is still looking at it: they reroute within 300 ms.
+const REROUTE_MS = 300;
 
 const signIn = async (browser, consoleUrl, width = 1440, height = 1000, who = JAMES) => {
   const page = await (await browser.newContext({ viewport: { width, height } })).newPage();
