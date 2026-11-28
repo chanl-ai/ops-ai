@@ -46,7 +46,8 @@ const COLUMNS: ColumnDef<SearchPassage>[] = [
 ];
 const RERANKED: ColumnDef<SearchPassage> = { id: 'reranked', header: 'Reranked', cell: ({ row }) => <span className="font-medium tabular-nums">{row.original.reranked === undefined ? '—' : `${row.original.reranked} of 10`}</span> };
 
-// The table shows its first five data columns; a rerank's score is the sixth and the one the order follows.
+// A rerank's score is the one the order follows, so it sits beside the piece: at phone width the columns after the
+// first two are past the table's edge.
 const RERANK_SHOWN = { reranked: true };
 
 /** Why a model step around the search did not run, in words. */
@@ -67,7 +68,7 @@ export function SearchTrace({ result, settings }: { result: PlaygroundAnswer; se
   const passages = result.passages ?? [];
   const onlyLane = lanes.skipped.length > 0 && lanes.ran.length === 1 ? lanes.ran[0] : null;
   const { rewrite, rerank } = result;
-  const columns = rerank?.ran ? [...COLUMNS, RERANKED] : COLUMNS;
+  const columns = rerank?.ran ? [COLUMNS[0], RERANKED, ...COLUMNS.slice(1)] : COLUMNS;
   return (
     <div className="flex flex-col gap-3" data-testid="search-trace">
       <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3">

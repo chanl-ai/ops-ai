@@ -22,7 +22,6 @@ export const defaultRetrieval: RetrievalSettings = {
   threshold: 0.5,
   asOf: "",
   rewrite: "off",
-  expandCount: 3,
   rewriteInstructions: "",
   scopeSourceIds: [],
   answerShape: "answer_with_citations",

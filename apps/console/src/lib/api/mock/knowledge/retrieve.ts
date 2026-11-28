@@ -212,14 +212,7 @@ export function createRetrieval(deps: Deps) {
     const out: RetrievalTrace['queries'] = [{ text: q, kind: 'original' }];
     if (s.rewrite === 'off') return out;
     const r = rewrite(q);
-    if (s.rewrite === 'rewrite') return r.toLowerCase() === q.toLowerCase() ? out : [{ text: r, kind: 'rewritten' }];
-    const content = kwTokens(r).filter((t) => !/^\d/.test(t));
-    const variants = [r, `${content.join(' ')} policy`, `${content.slice(0, 4).join(' ')} procedure and limits`, `rules for ${content.slice(0, 3).join(' ')}`];
-    for (const v of variants) {
-      if (out.length >= Math.max(2, s.expandCount)) break;
-      if (!out.some((o) => o.text.toLowerCase() === v.toLowerCase())) out.push({ text: v, kind: 'expanded' });
-    }
-    return out;
+    return r.toLowerCase() === q.toLowerCase() ? out : [{ text: r, kind: 'rewritten' }];
   }
 
   // ---- filters -------------------------------------------------------------

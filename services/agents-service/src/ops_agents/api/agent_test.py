@@ -9,6 +9,8 @@ from ops_agent_kernel import judge
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.types import ToolGrant, TurnRequest, TurnResult
+from ops_agents.activities.catalog import AgentDefinition
+from ops_agents.activities.overrides import limits_for
 from ops_agents.activities.tool_directory import grants_for
 from ops_agents.activities.tools import fill
 from ops_agents.graphs.common import needs_step_up
@@ -45,6 +47,17 @@ def _held(rt: Runtime, grant: ToolGrant) -> Json:
     return out
 
 
+def _given(asked: tuple[str, ...], defn: AgentDefinition, alias: str) -> list[str]:
+    """The bases an eval case names, cut to the ones its agent may search. A case names its bases as data, so one
+    outside the agent's is dropped here rather than refused as a chat override is (overrides.py), and a case left with
+    none searches none, never the agent's defaults. An agent set to search every base of its team may be tested on any
+    of them (kb-service keeps it to the team)."""
+    if defn.all_team_knowledge:
+        return list(dict.fromkeys(asked))
+    allowed = limits_for(defn, alias).allowed_knowledge_base_ids
+    return [k for k in dict.fromkeys(asked) if k in allowed]
+
+
 async def one_test_turn(
     rt: Runtime,
     agent_id: str,
@@ -53,7 +66,9 @@ async def one_test_turn(
     row: AgentRow,
     collections: tuple[str, ...] | None = None,
 ) -> Json:
-    """The same one-turn harness POST /v1/agents/{id}/test uses. Eval-runs call this per case."""
+    """The same one-turn harness POST /v1/agents/{id}/test uses. Eval-runs call this per case; a case's `collections`
+    are cut to the bases the agent's limits allow, as a thread's choice is, so a case never searches a base the agent
+    was not given (one naming only such bases searches none)."""
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
     reg = registry(rt)
@@ -65,7 +80,7 @@ async def one_test_turn(
         tools=await grants_for(rt.directory(), list(defn.tools)),
         transcript=[],
         user_turn=message,
-        kb_ids=list(collections) if collections else defn.default_kb_ids,
+        kb_ids=_given(collections, defn, rt.settings.model_alias) if collections else defn.default_kb_ids,
         all_team_knowledge=defn.all_team_knowledge,
     )
     started = time.perf_counter()

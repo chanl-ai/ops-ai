@@ -259,7 +259,6 @@ export interface RetrievalSettings {
   asOf: string;
   rewrite: RewriteMode;
   /** Phrasings searched when `rewrite` is `expand`, including the original. */
-  expandCount: number;
   rewriteInstructions: string;
   /** The models-service chat alias rerank and rewrite call; empty uses the installation's default. */
   queryModel?: string;

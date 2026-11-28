@@ -16,7 +16,7 @@ export const ANSWER_SHAPES: { value: AnswerShape; label: string; description: st
 ];
 export const SHAPE_LABEL = Object.fromEntries(ANSWER_SHAPES.map((m) => [m.value, m.label])) as Record<AnswerShape, string>;
 
-export const REWRITE_LABEL: Record<RewriteMode, string> = { off: 'Off', rewrite: 'Rewrite the question', expand: 'Expand to several phrasings' };
+export const REWRITE_LABEL: Record<RewriteMode, string> = { off: 'Off', rewrite: 'Rewrite the question' };
 
 export const FILTER_OPS: { value: FilterOp; label: string }[] = [
   { value: 'is', label: 'is' },

@@ -126,12 +126,15 @@ try {
         const source = created ? (await created.json()).data : undefined;
         const picked = created?.request().postDataJSON()?.config?.values;
         const H = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops' };
-        let rows = [];
-        for (let i = 0; i < 120 && source; i++) {
-          rows = (await (await fetch(`${kb}/v1/sources/${source.id}/items?pageSize=100`, { headers: H })).json()).data?.data ?? [];
-          if (rows.length && rows.every((r) => r.status !== 'processing' && r.status !== 'queued')) break;
+        // The first sync lists items as it reads them, so a list with one item settled can still be short of the
+        // next: wait for the run to end, then read the items once.
+        const get = async (path) => (await (await fetch(`${kb}/v1/sources/${source.id}${path}`, { headers: H })).json()).data?.data ?? [];
+        for (let i = 0; i < 240 && source; i++) {
+          const runs = await get('/runs');
+          if (runs.length && runs.every((r) => r.status !== 'running')) break;
           await new Promise((r) => setTimeout(r, 500));
         }
+        const rows = source ? await get('/items?pageSize=100') : [];
         const indexed = rows.filter((r) => r.status === 'indexed').map((r) => r.title).sort();
         check(
           '12 Create and sync makes the source on the site and both libraries, and its first sync indexes their text files',

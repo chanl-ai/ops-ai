@@ -248,8 +248,9 @@ class KnowledgeFiles:
         return rec.stored
 
     async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
-        # No scan and no references in this store: a file of the team is always readable.
-        return (await self.read(tenant, team, file_id))[0]
+        # No scan and no references in this store: a file of the team is always readable. Named from its record, as
+        # files-service does, so holding a file never counts as reading its bytes.
+        return (await self.describe(tenant, team, file_id)).name
 
     async def release(self, tenant: str, team: str, file_id: str, *, source_id: str) -> None:
         return None

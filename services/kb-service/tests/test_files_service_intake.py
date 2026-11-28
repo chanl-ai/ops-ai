@@ -117,6 +117,76 @@ async def test_an_item_written_before_its_scan_is_refused_as_not_ready_then_read
         assert data(await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page), 201)["title"] == "Vault"
 
 
+async def test_an_item_written_before_its_scan_is_kept_and_held_in_files_once_a_sync_finds_it_clean(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """Files refuses a reference on a file it has not scanned, so taking one before recording the file left the source
+    without it. The source records the file at once (409, read on the next sync), the first sync after the scan holds
+    it in Files, and a new version lets go of the file it replaced."""
+    fake = FakeFilesService()
+    scanner = fake.client(service="scanner", scopes=["files:decide"])
+
+    async def scanned() -> None:
+        for fid, f in fake.files.items():
+            if f["scan"]["status"] == "pending":
+                await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
+
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        item = {"name": "chargeback-window", "title": "Chargeback window", "text": "Raised within 120 days."}
+
+        async def write(text: str) -> list[str]:
+            early = await client.post(f"/v1/sources/{src['id']}/items", json={**item, "text": text})
+            assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
+            held = data(await client.get(f"/v1/sources/{src['id']}"))["config"]["fileIds"]
+            await scanned()
+            data(await client.post(f"/v1/sources/{src['id']}/sync"))
+            return held
+
+        first = await write("Raised within 120 days.")
+        assert len(first) == 1, "the source keeps the file it was sent before the scan"
+        assert fake.files[first[0]]["referenceCount"] == 1, "the sync after the scan holds it in Files"
+        second = await write("Raised within 90 days.")
+        listed = [i["path"] for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]]
+    assert listed == ["chargeback-window.md"], "one item per name, answering through the new version's scan"
+    assert len(second) == 1 and second != first, second
+    assert (fake.files[first[0]]["referenceCount"], fake.files[second[0]]["referenceCount"]) == (0, 1)
+
+
+async def test_a_new_version_of_one_name_keeps_the_file_another_name_holds(engine: AsyncEngine, tenant: str) -> None:
+    """Two names with the same content share one file in Files, and the name that indexed it keeps it; a new version
+    of the other name must not let go of the file the first still reads."""
+    fake = FakeFilesService()
+    scanner = fake.client(service="scanner", scopes=["files:decide"])
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        for name, text in (
+            ("window", "Raised within 120 days."),
+            ("deadline", "Raised within 120 days."),
+            ("deadline", "Raised within 90 days."),
+        ):
+            await client.post(
+                f"/v1/sources/{src['id']}/items", json={"name": name, "title": "Chargeback window", "text": text}
+            )
+            for fid, f in fake.files.items():
+                if f["scan"]["status"] == "pending":
+                    await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
+            data(await client.post(f"/v1/sources/{src['id']}/sync"))
+        held = data(await client.get(f"/v1/sources/{src['id']}"))["config"]["fileIds"]
+        paths = [i["path"] for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]]
+    shared = next(fid for fid in fake.files if fake.blobs[fid] and b"120" in fake.blobs[fid])
+    assert shared in held and fake.files[shared]["referenceCount"] == 1, (held, fake.files)
+    assert "window.md" in paths, paths
+
+
 async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:
     """files-service accepting connections and never answering: each probe gives up after the probe timeout, so the
     start-up wait ends near `ready_wait_s` rather than after tries of the files endpoint's 30 s."""

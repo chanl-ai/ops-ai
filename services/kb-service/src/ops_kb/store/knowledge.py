@@ -1554,21 +1554,27 @@ class KnowledgeStore(Store):
         q = sa.select(kb_sources.c.file_ids, kb_sources.c.file_names).where(*key, team_visible(kb_sources))
         return (await c.execute(q)).one()
 
-    async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
+    async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> set[str]:
+        """Adds the file under `name` and returns the files it took the place of, read in the same transaction, so a
+        caller lets go of exactly what this write removed and two writes of one name never both keep the same file."""
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = await self._files_of(c, key)
             # A file uploaded under a name the source already holds is that document's next version: it takes the
-            # earlier file's place, so a sync reads one file per document.
+            # earlier file's place, so a sync reads one file per document. The same content under a second name is
+            # the same file, and it keeps the name that holds it, so a new version of the second name never takes
+            # the first name's file away.
             known: dict[str, str] = dict(row.file_names or {})
             replaced = {f for f, n in known.items() if n == name and f != file_id}
             ids = [f for f in row.file_ids if f not in replaced]
-            names = {f: n for f, n in known.items() if f not in replaced} | {file_id: name}
+            names = {f: n for f, n in known.items() if f not in replaced}
+            names.setdefault(file_id, name)
             await c.execute(
                 sa.update(kb_sources)
                 .where(*key)
                 .values(file_ids=ids if file_id in ids else [*ids, file_id], file_names=names)
             )
+            return replaced
 
     async def swap_files(self, tenant: str, source_id: str, moved: dict[str, str]) -> None:
         """Points a source at files copied to another store, keeping each file's place and uploaded name."""

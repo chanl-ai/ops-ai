@@ -35,7 +35,28 @@ TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 KNOWLEDGE_ROLES = ("list_items", "get_item", "list_deleted", "list_changes", "list_scopes", "preview")
 # The formats a value written into a query can have, each checked and escaped by tools-service (formats.py).
-FORMATS = ("soql_string", "sosl_term", "salesforce_id", "date-time", "date")
+FORMATS = (
+    "soql_string",
+    "sosl_term",
+    "jql_string",
+    "cql_string",
+    "kql_phrase",
+    "odata_string",
+    "salesforce_id",
+    "date-time",
+    "date",
+)
+QueryFormat = Literal[
+    "soql_string",
+    "sosl_term",
+    "jql_string",
+    "cql_string",
+    "kql_phrase",
+    "odata_string",
+    "salesforce_id",
+    "date-time",
+    "date",
+]
 MAX_ITEMS = 50
 # Headers that carry or route the sign-in: a plugin header never names one (validate.py), in any case, so the
 # connection's credential is the only one a call carries.
@@ -229,7 +250,7 @@ class InputField(Strict):
     default: Any = None
     # A value is checked against each of these that is set, wherever it is used.
     enum: list[str | int | float | bool] | None = None
-    format: Literal["soql_string", "sosl_term", "salesforce_id", "date-time", "date"] | None = None
+    format: QueryFormat | None = None
     # For a path segment only: a pattern cannot keep a value from changing a query (validate.py).
     pattern: str | None = None
     properties: dict[str, InputField] | None = None

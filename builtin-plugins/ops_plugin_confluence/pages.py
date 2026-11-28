@@ -24,6 +24,7 @@ from typing import Any, cast
 from urllib.parse import quote, urljoin
 
 from ops_plugin_sdk import BadInput, Context, NotFound, PluginError, Response, TooLarge, tool
+from ops_plugin_sdk.formats import cql_string
 
 LIMIT = 50
 # tools-service refuses an answer larger than this.
@@ -32,7 +33,7 @@ MAX_REDIRECTS = 3
 REDIRECTS = (301, 302, 303, 307, 308)
 # More than any two time zones can differ (UTC-12 to UTC+14 is 26 hours).
 OVERLAP = timedelta(hours=27)
-# Keys go inside CQL quotes, so no quote, backslash or space can be part of one.
+# A key goes into CQL through cql_string; the pattern is what Confluence allows in a space key.
 SPACE_KEY = re.compile(r"^[A-Za-z0-9~_.\-]{1,255}$")
 PAGE_ID = re.compile(r"^[0-9]{1,20}$")
 ATTACHMENT_ID = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
@@ -138,8 +139,8 @@ def _changes_page(ctx: Context, spaces: list[str], st: dict[str, Any]) -> dict[s
     if st.get("next"):
         return _get(ctx, _next_link(st["next"]), "The changed pages")
     since = _parse(st["since"]).strftime("%Y/%m/%d %H:%M")
-    quoted = ",".join(f'"{k}"' for k in spaces)
-    cql = f'type = page AND space in ({quoted}) AND lastmodified > "{since}" ORDER BY lastmodified'
+    quoted = ",".join(f'"{cql_string(k)}"' for k in spaces)
+    cql = f'type = page AND space in ({quoted}) AND lastmodified > "{cql_string(since)}" ORDER BY lastmodified'
     params = {"cql": cql, "expand": "version,ancestors,space", "limit": LIMIT}
     return _get(ctx, "/rest/api/content/search", "The changed pages", params)
 

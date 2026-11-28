@@ -16,6 +16,7 @@ from typing import Any
 
 import yaml
 
+from .formats import QUOTED, TEXT_FORMATS
 from .manifest import (
     MAX_ITEMS,
     OPERATION_NAME,
@@ -31,7 +32,7 @@ from .manifest import (
     Tool,
     read,
 )
-from .paging import QUERY_VAR, steps
+from .paging import QUERY_VAR, in_query, steps
 from .plugin import MARK
 
 PLACEHOLDER = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
@@ -126,11 +127,39 @@ def _query(tool: Tool, request: Request, where: str) -> list[Problem]:
                     else f"{name} is used in a query and needs an enum or a format"
                 )
                 out.append(Problem(where, said))
-            if leaf.format == "soql_string" and not (
-                template[: m.start()].endswith("'") and template[m.end() :].startswith("'")
-            ):
-                out.append(Problem(where, f"{{{{{name}}}}} is a soql_string and goes between single quotes ({param})"))
+            if leaf.format in QUOTED:
+                quote = QUOTED[leaf.format][0]
+                if not _inside_string(template, m.start(), quote):
+                    which = "single" if quote == "'" else "double"
+                    said = f"{{{{{name}}}}} is a {leaf.format} and goes inside one {which}-quoted string ({param})"
+                    out.append(Problem(where, said))
+    # The other inputs travel in the body or the form as they are, so a query format there would escape nothing.
+    for name in sorted(set(tool.input) - in_query(tool)):
+        field = tool.input[name]
+        if (field.items or InputField() if field.type == "array" else field).format in TEXT_FORMATS:
+            out.append(
+                Problem(where, f"{name} has a query format but no query takes it; formats apply only in a query")
+            )
     return out
+
+
+def _inside_string(template: str, at: int, quote: str) -> bool:
+    """Whether position `at` lies inside a string opened by `quote`, read from the template's start: a doubled single
+    quote, or a backslash before a double quote, stays inside. Checking only the neighbouring characters let
+    `''{{q}}''` and `"a"{{q}}"b"` through with the term outside any string."""
+    inside, i = False, 0
+    while i < at:
+        ch = template[i]
+        if inside and quote == '"' and ch == "\\":
+            i += 2
+            continue
+        if ch == quote:
+            if inside and quote == "'" and template[i + 1 : i + 2] == "'" and i + 1 < at:
+                i += 2
+                continue
+            inside = not inside
+        i += 1
+    return inside
 
 
 def _host_part(template: str) -> str:
