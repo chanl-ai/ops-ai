@@ -324,11 +324,15 @@ await withUiStack(
       await james.screenshot({ path: join(EDITOR_SHOTS, 'levy_case-tidied-1280.png') });
 
       // A run's canvas: laid out, lines clear of steps, no Tidy up and no dragging.
-      await fetch(`${agents}/v1/workflows/definitions/uc486_unplaced/publish-requests`, { method: 'POST', headers: H, body: '{}' });
+      // Publishing opens a review and the run needs the live version, so James approves his own request (the default allows it).
+      const review = (await (await fetch(`${agents}/v1/workflows/definitions/uc486_unplaced/publish-requests`, { method: 'POST', headers: H, body: '{}' })).json()).data;
+      const decided = await fetch(`${agents}/reviews/${review?.id}/decision`, { method: 'POST', headers: H, body: JSON.stringify({ decision: 'approved' }) });
+      check('E1 setup: the unplaced workflow is published and live before its run', decided.status === 200, { review: review?.id, status: decided.status });
       const started = await (
         await fetch(`${agents}/v1/runs`, { method: 'POST', headers: H, body: JSON.stringify({ workflowId: 'uc486_unplaced', input: { record: { name: 'Ana Example' } } }) })
       ).json();
       const runId = started.data?.runId ?? started.data?.id;
+      check('E2 setup: the run of the unplaced workflow starts', !!runId, started);
       await james.goto(`${consoleUrl}/workflows/runs/${encodeURIComponent(runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.locator('[data-testid=run-canvas] [data-testid=definition-node]').first().waitFor({ timeout: 120_000 });
       await james.waitForTimeout(SETTLE_MS);
