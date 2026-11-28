@@ -4763,6 +4763,9 @@ export interface components {
             knowledgeBases?: components["schemas"]["KnowledgeBaseRef"][];
             /** Model */
             model: string;
+            /** Modes */
+            modes?: string[];
+            output?: components["schemas"]["JsonValue"] | null;
             /** Reply */
             reply: string;
             /**

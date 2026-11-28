@@ -3050,6 +3050,8 @@ class AgentTestTurn(TypedDict, closed=True):
     guardrails: NotRequired[list[OpsAgentsApiSchemasNamedRef]]
     knowledgeBases: NotRequired[list[KnowledgeBaseRef]]
     model: str
+    modes: NotRequired[list[str]]
+    output: NotRequired[JsonValue | None]
     reply: str
     searched: NotRequired[bool]
     skills: NotRequired[list[LoadedSkill]]

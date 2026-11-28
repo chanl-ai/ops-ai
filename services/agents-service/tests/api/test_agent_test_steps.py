@@ -9,6 +9,7 @@ from typing import Any
 from httpx import AsyncClient
 
 from ops_agents.api.deps import Runtime
+from ops_agents.domain.evals import EvalCase, EvalCheck, score_case, turn_from_test
 from tests.api.test_agent_page_backed import (  # noqa: F401  # a fixture
     WIRE,  # pyright: ignore[reportUnusedImport]
     stack,  # pyright: ignore[reportUnusedImport]
@@ -36,6 +37,14 @@ async def test_a_gated_call_says_it_stopped_for_a_review(stack: tuple[AsyncClien
     calls = {c["name"]: c["status"] for c in t["toolCalls"]}
     assert calls.get("place_wire_hold") == "gated", t["toolCalls"]
     assert t["wouldPause"]["tool"] == "place_wire_hold"
+    # An eval reads this reply: the write paused and was not sent, and the turn planned before it, so a case that
+    # expects a direct answer fails on it.
+    seen = turn_from_test(t)
+    paused = EvalCheck("pauses_on", tool="place_wire_hold")
+    planned = EvalCase("hold", WIRE, (paused, EvalCheck("mode_in", modes=("direct", "plan"))))
+    direct = EvalCase("hold", WIRE, (paused, EvalCheck("mode_in", modes=("direct",))))
+    assert "plan" in t["modes"], t["modes"]
+    assert (score_case(planned, seen).status, score_case(direct, seen).status) == ("pass", "fail"), seen
 
 
 async def test_the_tools_that_pause_are_named_and_read_only_ones_are_not(stack: tuple[AsyncClient, Runtime]) -> None:  # noqa: F811

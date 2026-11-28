@@ -1733,6 +1733,23 @@
             "title": "Model",
             "type": "string"
           },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reply": {
             "title": "Reply",
             "type": "string"

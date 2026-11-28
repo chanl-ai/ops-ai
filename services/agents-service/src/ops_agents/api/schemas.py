@@ -481,6 +481,9 @@ class AgentTestTurn(Out):
     blocked_by: BlockedBy | None = None
     # Whether the turn searched its knowledge bases; false when a rule refused the question first.
     searched: bool = False
+    # The modes the turn used, in order (direct, plan, helpers, sandbox), and its typed answer when it has one.
+    modes: list[str] = Field(default_factory=list[str])
+    output: JsonValue | None = None
 
 
 class Tool(Out):
