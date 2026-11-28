@@ -1,66 +1,86 @@
 # Recovery and redrive
 
-Status: current. Checked against the release's workflow engine, chat turns and event outbox.
+Status: current.
 
-A risk reviewer needs to know what happens to a customer's request when a process dies halfway through it: whether a
-model is asked twice, whether a payment or a record change is sent twice, and who may start a stopped run again. In
-Ops AI a workflow run and a chat reply are kept in the database step by step, so a replacement process continues from
-the last recorded step. A write to your systems is sent a second time, under a new key, only when its first send's
-recorded answer or the gateway's record proves it did nothing.
+Sooner or later a process dies in the middle of a customer's request. A risk reviewer wants to know whether the model is asked twice, whether a payment or a record change is sent twice, and who may start the run again. Ops AI saves a workflow run and a chat reply in the database step by step. A replacement process picks up from the last saved step, and a write to your systems goes out a second time only when the record proves the first one did nothing.
 
-## Try it
+This page shows you how to restart a failed run safely, and what Ops AI does without being asked.
 
-A builder fixes a failed run's cause and sends it on from where it stopped.
+## Fix a failed run and send it on
+
+A builder fixes the cause of a failure and then sends the run on from where it stopped.
 
 <!-- site: steps -->
-1. Open a failed run. The card names the step that failed, the attempt, the kind of error and whether trying again
-   helps.
-2. Fix the cause, such as setting the address on the app's connection the step uses.
-3. Press Redrive. The run goes Queued, runs the failed step again as its next attempt, and continues.
-4. The steps that finished before the failure show one attempt each: they returned what they recorded and ran nothing.
+1. Open the failed run in **Build › Workflows › Runs**. The page names the step that failed, the attempt, the kind of error and whether trying again could help.
+2. Fix the cause, for example by setting the address on the app connection the step uses.
+3. Press **Redrive**, or run `opsai runs redrive <run-id>`. The run goes back to Queued, runs the failed step again as its next attempt and carries on.
+4. Look at the steps that finished before the failure. Each shows one attempt, because they returned what they had recorded and ran nothing again.
 
-## How it works
+## What success looks like
+
+The run ends as Succeeded. The steps that had already finished show one attempt each, the failed step shows its earlier attempt marked as redriven, and nothing was sent to your systems twice. A run that cannot continue on its own ends as Failed with one error record that names the step, the attempt, the kind of error and whether a retry can help.
+
+## What skipping recovery would cost
+
+Without saved steps, the usual answer to a crash is to start the whole run again. For a run that already approved a credit and sent it, starting over means asking the approver again or, worse, sending the credit twice. Ops AI avoids both by keeping each step's result and by checking the gateway's record before it sends a write again.
+
+## How a run moves
+
+<!-- site: state caption="The states a workflow run passes through, and what moves a failed or stuck run on" -->
+- **Queued**: Waiting for a worker
+  - **Running**: A worker claims the run
+- **Running**: A worker is on a step
+  - **Succeeded**: The last step finishes
+  - **Failed**: A step fails and a retry cannot help
+  - **Stuck**: The run stopped and needs a person, for example after a write whose outcome is unclear
+- **Stuck**: Waiting for a person
+  - **Queued**: Retry continues from the last saved step, or Redrive runs again from the failed step
+- **Failed**: Ended with one error record
+  - **Queued**: Redrive runs the failed step again, on the version the run started on
+- **Succeeded**: Finished
+
+## What happens when something dies
 
 | Situation | What happens | What is never repeated |
 |---|---|---|
-| A worker dies mid-step | Its claim lapses; another worker takes the run over at the last recorded step, fenced so the first can write nothing more | A finished step, a recorded model answer, a write the gateway has a record of |
-| The API process dies mid-reply | The reply is a work row of its own; a worker takes it over and continues the thread from its last checkpoint under the same turn id | A tool call already made in that turn |
-| A write's outcome is unknown (a timeout, a gateway that died) | The gateway's record under the attempt's key decides. Found done: the step takes that answer. Never received: it is sent once more under the next key. Otherwise the run stops for a person | The write itself, unless the gateway proves it never ran |
-| A run fails | It ends Failed with one error record (kind, code, step, attempt, whether a retry helps) | |
-| Retry (a Stuck run) | Continues from its last checkpoint | Every recorded step |
-| Redrive (a Failed or Stuck run) | Runs again from the failed step, on the version the run started on; a later publish is not used | Every step that finished before it |
-| Redrive of a failed write | Sent again under the next key, on the earlier approval with the arguments that were approved, only when its answer proves it did nothing: refused, never sent (no connection, rate limited), refused by the gateway before sending (no address, account, sign-in or secret) or refused by the system with a 4xx. A timeout, a 5xx, a call that broke off, a plugin failure or an answer that could not be read goes to reconcile: the gateway's record under its key decides, and an unclear record stops the run for a person | A write that may have run |
-| An event between services cannot be delivered | The relay tries it again with a backoff of up to a minute; after 15 failures (about ten minutes) it is a dead letter, kept with its last error and never sent again on its own | The change the event reports, which committed with it |
+| A worker dies in the middle of a step | Its claim on the run lapses. Another worker takes the run over at the last saved step, and the first worker can write nothing more | A finished step, a recorded model answer, a write the gateway has a record of |
+| The API process dies in the middle of a chat reply | The reply is saved as work of its own. A worker takes it over and continues the thread from its last checkpoint under the same turn | A tool call already made in that turn |
+| The outcome of a write is unknown, for example after a timeout | The gateway's record decides. If the record shows it was done, the step takes that answer. If it shows the call never arrived, the write is sent once more under a new key. Otherwise the run stops as Stuck for a person | The write itself, unless the gateway proves it never ran |
+| An event between two services cannot be delivered | The sending side retries with a wait of up to a minute. After 15 failures, about ten minutes, the event is a dead letter. It is kept with its last error and never sent again on its own | The change the event reports, which was saved together with the event |
 
-A step the run's failure names is the only one a redrive runs again. Its failed attempt is kept on the run as
-history, marked redriven.
+Each step has its own number of attempts: three for reads and writes, two for model calls and one for a step that waits for a person. A step stops retrying after 15 minutes, and only an error that a second try could pass is tried again.
 
-## Options
+## Retry and redrive
 
-| Option | Default | Who changes it |
+| Command | Applies to | What it does |
 |---|---|---|
-| Who may Retry or Redrive a run | Whoever may cancel it (the cases manage permission): the person who started it, or an admin or reviewer of its team; an API key only for runs started under its own identity | Team admin, through the team's roles |
-| Bulk redrive or cancel by workflow, error kind, code and time | Off until called; at most 500 runs per call, in the acting team only | Anyone who may cancel those runs, through `POST /v1/runs/bulk`, the SDKs or `opsai runs bulk` |
-| Attempts per step | 3 for reads and writes, 2 for model calls, within 900 seconds per step; only an error a second try can pass is tried again | Fixed; a builder sets each step's time limit (`timeoutSeconds`) |
-| How long a delivered event is kept | A week, pruned hourly; a dead letter is kept until it is sent again | Not configurable |
+| Retry | A Stuck run | Continues from its last saved step and repeats no recorded step |
+| Redrive | A Failed or Stuck run | Runs again from the failed step, on the version the run started on. A publish made after the run started is not used. No earlier step is repeated |
+| Redrive of a failed write | A failed write step | Sends the write again, on its earlier approval and with the arguments that were approved, only when the answer proves it did nothing: it was refused, it was never sent, the gateway refused it before sending, or your system refused it with a 4xx error. After a timeout, a 5xx error, a call that broke off or an answer that could not be read, the gateway's record decides, and an unclear record stops the run for a person |
 
-## Limits
+Only the failed step runs again. Its failed attempt stays on the run as history, marked redriven.
 
-- Dead letters have no route or screen yet: nothing lists them, and sending one again needs an operator with access to
-  the service's database. Bulk redrive and cancel have no console screen.
-- No tool declares how its writes may be settled after a dead gateway, so every such write pauses the run as Stuck for
-  a person, and no tool passes the run-and-step key to the system it writes to.
-- Redriving a run whose Run workflow step failed because a child run failed finds that same child and fails again;
-  redrive the child run instead.
-- Redrive is offered on any Failed run, of any age, including one that ended at an End the builder marked as a
-  failure.
-- A chat reply that outlives its deadline is ended by the worker, not by the process streaming it.
-- These guarantees are proved by tests on PostgreSQL and by a kill test on one machine; a kill test on a deployed
-  preview has not been run.
+## Who may do it
+
+| Action | Who may do it |
+|---|---|
+| Retry or redrive one run | Whoever may cancel it: the person who started it, or an admin or reviewer of its team. An API key may act only on runs started under its own identity |
+| Redrive or cancel many runs at once | Anyone who may cancel those runs. Use `opsai runs bulk redrive` with a filter on workflow, error kind, error code or start time. A call acts on at most 500 runs of your own team, and lists the runs it skipped |
+
+Delivered events are kept for a week and pruned hourly. A dead letter is kept until it is sent again.
+
+## What is not built yet
+
+- Dead letters have no route or screen. Nothing lists them, and sending one again needs an operator with access to the service's database.
+- Bulk redrive and cancel have no console screen. The console shows Redrive on a Failed run and Retry on a Stuck run.
+- No tool yet declares how its writes may be settled after the gateway died, so every such write stops the run as Stuck for a person. No tool passes the run and step key on to the system it writes to.
+- Redriving a run whose Run workflow step failed because a child run failed finds the same child and fails again. Redrive the child run instead.
+- Redrive is offered on any Failed run, of any age, including one that ended at an End step the builder marked as a failure.
+- These guarantees are proved by tests on PostgreSQL and by a kill test on one machine. A kill test on a deployed preview has not been run.
 
 ## Next
 
 <!-- site: cards -->
 - **[Access, approvals and audit](access-approvals-and-audit.md)**: Which writes wait for a person, and what is recorded.
 - **[Model calls](model-calls.md)**: The gateway every model call goes through, with its log.
-- **[Workflows](../guide/workflows.md)**: Retry, Redrive and the other run commands.
+- **[Workflows](../guide/workflows.md)**: Retry, redrive and the other run commands.

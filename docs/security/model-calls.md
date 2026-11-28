@@ -1,67 +1,67 @@
 # Model calls
 
-Status: current. Checked against the release's AI gateway and the shipped deployment layouts.
+Status: current.
 
-A risk team needs to know which model endpoint sees customer data, under whose key, and what stops a runaway agent
-from spending without limit. In Ops AI every model call, from a chat turn, a workflow AI step or a document read,
-passes through one AI gateway inside the install. This is true in every shipped layout: Docker Compose, Kubernetes and
-hosted.
+A risk team asks three things about any AI system. Which model endpoint sees customer data, under whose key, and what stops a runaway agent from spending without limit? In Ops AI every model call passes through one AI gateway inside your installation. That covers a chat turn, a workflow AI step and a document read, in every shipped layout: Docker Compose, Kubernetes and hosted. No agent, workflow or team ever holds the provider's key.
 
-## Try it
+This page shows you how to connect the one endpoint your bank has approved, and what the gateway checks before any call leaves.
 
-An account admin connects the model endpoint the bank has approved.
+## Connect the approved endpoint
+
+A Security admin connects the endpoint, and the workspace owner decides which model each alias points at.
 
 <!-- site: steps -->
-1. Open Settings › Workspace › Models › Connections and connect a provider: pick it from the list, then give its endpoint and key. The key is
-   never shown again, and no team sees it.
-2. Open an agent and press Test. The answer comes from that endpoint.
-3. The call is recorded with the key, the model, tokens, cost, time taken and outcome. The record holds no prompt or
-   answer text.
+1. Open **Settings › Models › Connections** and connect a provider. Pick it from the list, then give its endpoint and key. After you save, the key is never shown again and no team can read it.
+2. Open **Settings › Models › Aliases**. As the workspace owner, point an alias such as `default` at one of the provider's models, and record the highest data level that model may receive: public, internal, confidential or restricted.
+3. Open an agent and press **Test**. The answer comes from your endpoint.
+4. Open **Settings › Usage and cost** to see the tokens and cost. The models service keeps a call log with one row per call: the key, the model, tokens, cost, time taken and outcome. It holds no prompt or answer text.
 
-## How it works
+Any endpoint that speaks the OpenAI chat completions API can serve: OpenAI, Anthropic and Google Gemini through their OpenAI-compatible APIs, Azure OpenAI, Amazon Bedrock, a private deployment, or your bank's own gateway.
 
-```mermaid
-flowchart LR
-  C["Chat turns, workflow AI steps,<br/>document reads, send checks"] --> G["AI gateway in the install"]
-  G --> K["Key: known, not expired,<br/>not revoked"]
-  K --> B["Budget and rate:<br/>the key's cap, calls per minute"]
-  B --> A["Alias: which model<br/>this name points at"]
-  A --> S["Clearance: the model is cleared<br/>for the data's level and for images"]
-  S --> P["Your model endpoint"]:::outside
-```
+## What success looks like
 
-*A call refused at any check is recorded like a call, with the reason.*
+A test turn answers from the endpoint you chose, and the usage page shows its cost. A call that the gateway refuses is logged the same way, with the reason, so you can see why a call stopped, for example because the key had spent its budget or the model was not cleared for the data.
 
-- Agents and workflows name an alias, such as `default`, in place of a provider's model id. Moving an alias to another model is a
-  new version of the alias; no agent changes.
-- Each caller has its own model key: per service purpose, per agent, per workflow or per person. Only a hash of a key
-  is stored.
-- The provider's key is held by the gateway alone. No other part of Ops AI, and no team, can read it. Outside
-  development the gateway refuses provider keys from its environment, so the key lives only where an admin saved it.
-- Any endpoint that speaks the OpenAI chat completions API can serve: a public provider, a private deployment, or the
-  bank's own gateway.
+## What skipping the gateway would cost
 
-## Options
+If each agent held its own provider key, you could not tell which agent spent the money, a leaked key would mean finding every place that held it, and a confidential document could reach a model nobody had cleared for it. Routing every call through one gateway gives you one place to set budgets, rotate keys and read the log.
+
+## What the gateway checks
+
+<!-- site: sequence caption="A model call from an agent or workflow to your endpoint, and the checks in between" -->
+1. **Agent or workflow → AI gateway**: Asks for a model by alias, with its own model key
+   - The gateway checks that the key is known, not expired and not revoked, that it is within its budget and its calls-per-minute rate, and which model the alias points at.
+2. **AI gateway → Your model endpoint**: Forwards the request with the provider key
+   - Before this, the gateway checks that the alias is cleared for the data's level and for images. A refusal is logged and nothing leaves.
+3. **Your model endpoint → AI gateway**: Answers
+4. **AI gateway → Agent or workflow**: Returns the answer
+   - The call is recorded with its key, model, tokens, cost, time taken and outcome, and no text.
+
+## How keys and aliases work
+
+- Agents and workflows name an alias such as `default` and not a provider's model id. Moving an alias to another model is a new version of the alias, and no agent changes.
+- Each caller has its own model key: for a service purpose, an agent, a workflow or a person. Ops AI stores only a hash of the key. When you rotate a key, the old secret keeps working for 15 minutes so callers can pick up the new one.
+- Provider keys are stored sealed, and they belong to one organisation. Outside development the gateway refuses provider keys from its environment, so a key exists only where an admin saved it.
+- A model key can carry a budget, a limit on calls per minute, an expiry date and a daily spending cap that resets at midnight UTC.
+
+## Settings
 
 | Control | What it does | Default | Who changes it |
 |---|---|---|---|
-| Provider connections and keys | Where the install's models are called and the key each signs in with | None until an admin adds one | An account admin, in Settings › Workspace › Models |
-| Clearance per alias version | The highest data level the model may receive (public, internal, confidential, restricted) and whether it may receive images and files | Set per version | The operator, when binding an alias |
-| Budget per key | A spending cap in money; the call that would pass it is refused | Per key | The operator |
-| Budget per organisation on a shared key | An organisation's share of a key's budget | Per key | The operator |
-| Rate per key | Calls per minute | Per key | The operator |
-| Budget per conversation | Caps on model calls and cost per chat; a spent budget pauses the chat until a person continues or ends it | 200 calls and 5.00 in the price table's currency, when the agent sets none; never unlimited | A builder, on the agent |
+| Provider connections and keys | Where models are called and the key each signs in with | None until an admin adds one | A Security admin, in Settings › Models › Connections |
+| Alias versions and clearance | The highest data level the model may receive, and whether it may receive images and files | Set on each version | The workspace owner, in Settings › Models › Aliases |
+| Budget and rate per model key | A spending cap in money, and calls per minute. The call that would pass the cap is refused | Rate: 600 calls a minute. Budget: set when the key is issued | Whoever operates the installation, through the models service |
+| Budget per organisation on a shared key | An organisation's share of a key's budget | Not set | Whoever operates the installation |
+| Budget per conversation | Caps on model calls and cost for each chat. A spent budget pauses the chat until a person continues or ends it | 200 calls and 5.00 in the price table's currency, when the agent sets none. Never unlimited | A builder, on the agent |
 | Model calls per turn | How many model calls one answer may make | 50 | A builder, on the agent |
-| AI steps in workflows | Whether a team's workflows may call a model at all | Off | A Security admin, in Governance › Policies |
+| AI steps in workflows | Whether a team's workflows may call a model at all | Off | A builder or admin of the team, in Govern › Policies |
 
-## Limits
+## What is not built yet
 
-- Every call is treated as internal data today, so an alias must be cleared for internal to serve. Marking each call
-  with the level of the data it carries is planned.
-- Model aliases, keys and connections belong to the installation and are shared by every organisation on it.
-- Failover between providers, a budget per team, and serving Anthropic's own API are planned.
-- The release includes a test model that answers from fixed rules and calls no provider. It is for trying the platform
-  and for automated checks, not for production.
+- Every call is treated as internal data today, so an alias must be cleared for internal data to serve any call. Marking each call with the level of the data it carries is planned.
+- Model aliases belong to the installation, so every team on it shares them. Provider keys, model keys and the call log belong to one organisation each.
+- Failover between providers and a budget per team are planned.
+- The release includes a test model that answers from fixed rules and calls no provider. It is for trying the platform and for automated checks, and you should not use it in production.
 
 ## Next
 
