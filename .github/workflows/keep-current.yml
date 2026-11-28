@@ -1,7 +1,8 @@
-# Keeps open pull requests current with develop. When develop moves, develop is merged (never rebased) into every open
-# pull request that is behind it: not a draft, not from a fork, not Dependabot's, and not in the merge queue (a push to a
-# queued pull request takes it out). A pull request that conflicts gets the label needs-merge and one comment naming the
-# conflicting files. A pull request leaving draft is brought current the same way. The decisions are
+# Keeps pull requests that are about to queue current with develop. When develop moves, develop is merged (never
+# rebased) into every open pull request that is behind it and has auto-merge on: not a draft, not from a fork, not
+# Dependabot's, and not in the merge queue (a push to a queued pull request takes it out). Each merge re-runs the whole
+# ci, so a pull request nobody has armed is left alone; turning auto-merge on brings that one current. A pull request
+# that conflicts gets the label needs-merge and one comment naming the conflicting files. The decisions are
 # scripts/pr_flow.py sync-prs (`--dry-run` prints them; its --self-test is in make checks).
 # The push goes over the deploy key so the merge commit gets its own CI run (.github/actions/push-key).
 name: keep-current
@@ -10,7 +11,7 @@ on:
   push:
     branches: [develop]
   pull_request:
-    types: [ready_for_review]
+    types: [auto_merge_enabled]
     branches: [develop]
   workflow_dispatch:
     inputs:

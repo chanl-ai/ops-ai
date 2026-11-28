@@ -76,14 +76,16 @@ def ready_reasons(needs: dict[str, dict[str, str]], behind: int, codeql: dict[st
 
 
 def to_sync(prs: list[dict], behind: set[int]) -> list[int]:
-    """The pull requests develop is merged into: open, not a draft, from this repository, behind, and not in the queue
-    (a push to a queued pull request takes it out, and every queue merge moves develop). Dependabot keeps its own
-    branches current and stops once another author pushes to one."""
+    """The pull requests develop is merged into: open, not a draft, from this repository, behind, with auto-merge on
+    (each merge into a pull request re-runs the whole ci, so only one that is about to queue is worth it), and not in
+    the queue (a push to a queued pull request takes it out, and every queue merge moves develop). Dependabot keeps
+    its own branches current and stops once another author pushes to one."""
     return [
         p["number"]
         for p in prs
         if p["number"] in behind
         and not p.get("isDraft")
+        and p.get("autoMergeRequest")
         and not p.get("isCrossRepository")
         and not p.get("isInMergeQueue")
         and not str(p.get("headRefName", "")).startswith("dependabot/")
@@ -256,7 +258,8 @@ def open_prs() -> list[dict]:
     q = (
         "query($o:String!,$n:String!){repository(owner:$o,name:$n){"
         'pullRequests(states:OPEN,baseRefName:"develop",first:100){nodes{'
-        "number isDraft headRefName isCrossRepository isInMergeQueue labels(first:30){nodes{name}}}}}}"
+        "number isDraft headRefName isCrossRepository isInMergeQueue autoMergeRequest{enabledAt} "
+        "labels(first:30){nodes{name}}}}}}"
     )
     return json.loads(gh("api", "graphql", "-f", f"query={q}", "-f", f"o={owner}", "-f", f"n={name}"))["data"][
         "repository"
@@ -390,6 +393,7 @@ def sync_trace(starts: bool) -> tuple[list[tuple[int, int]], int, list[str]]:
             "headRefName": f"b{k}",
             "isCrossRepository": False,
             "isInMergeQueue": False,
+            "autoMergeRequest": {"enabledAt": "2026-11-27T10:00:00Z"},
             "labels": {"nodes": []},
         }
         for k in range(7)
@@ -455,16 +459,41 @@ def self_test() -> int:
     )
     green = {"checks": {"result": "success"}, "docs": {"result": "skipped"}}
     prs = [
-        {"number": 1, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": False},
-        {"number": 2, "isDraft": True, "isCrossRepository": False, "isInMergeQueue": False},
-        {"number": 3, "isDraft": False, "isCrossRepository": True, "isInMergeQueue": False},
-        {"number": 4, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": True},
-        {"number": 5, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": False},
+        {
+            "number": 1,
+            "isDraft": False,
+            "isCrossRepository": False,
+            "isInMergeQueue": False,
+            "autoMergeRequest": {"enabledAt": "t"},
+        },
+        {
+            "number": 2,
+            "isDraft": True,
+            "isCrossRepository": False,
+            "isInMergeQueue": False,
+            "autoMergeRequest": {"enabledAt": "t"},
+        },
+        {
+            "number": 3,
+            "isDraft": False,
+            "isCrossRepository": True,
+            "isInMergeQueue": False,
+            "autoMergeRequest": {"enabledAt": "t"},
+        },
+        {
+            "number": 4,
+            "isDraft": False,
+            "isCrossRepository": False,
+            "isInMergeQueue": True,
+            "autoMergeRequest": {"enabledAt": "t"},
+        },
+        {"number": 5, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": False, "autoMergeRequest": None},
         {
             "number": 6,
             "isDraft": False,
             "isCrossRepository": False,
             "isInMergeQueue": False,
+            "autoMergeRequest": {"enabledAt": "t"},
             "headRefName": "dependabot/npm/x",
         },
     ]
@@ -513,8 +542,8 @@ def self_test() -> int:
             ["job checks is failure", "job docs is cancelled"],
         ),
         (
-            "drafts, forks, queued, dependabot and current pull requests are left alone",
-            to_sync(prs, {1, 2, 3, 4, 6}),
+            "drafts, forks, queued, dependabot, current and auto-merge-off pull requests are left alone",
+            to_sync(prs, {1, 2, 3, 4, 5, 6}),
             [1],
         ),
         (
