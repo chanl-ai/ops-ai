@@ -95,3 +95,10 @@ def test_a_group_that_already_ended_is_not_an_error(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(os, "killpg", refused)
     at_most.kill_group(12345)
+
+
+def test_a_command_inside_a_slot_that_asks_for_the_same_kind_runs_at_once(tmp_path: Path) -> None:
+    inner = f"{sys.executable} {SCRIPT} 1 t -- echo inner"
+    outer = [sys.executable, str(SCRIPT), "1", "t", "--", "sh", "-c", inner]
+    ran = subprocess.run(outer, env=_env(tmp_path), capture_output=True, text=True, timeout=20, check=False)
+    assert ran.returncode == 0 and "inner" in ran.stdout, ran

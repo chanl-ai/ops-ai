@@ -71,6 +71,12 @@ def main() -> int:
         print("usage: at-most.py <N> <kind> -- <command>...", file=sys.stderr)
         return 2
     n, kind, cmd = int(sys.argv[1]), sys.argv[2], sys.argv[4:]
+    # A command already inside a slot of this kind (a make target that takes the slot, run under at-most) runs at
+    # once: waiting would be on its own parent's slot, which never frees.
+    held = os.environ.get("OPS_SLOT_HELD", "").split(",")
+    if kind in held:
+        return run_in_group(cmd)
+    os.environ["OPS_SLOT_HELD"] = ",".join([*filter(None, held), kind])
     os.makedirs(DIR, exist_ok=True)
     said = False
     while True:
