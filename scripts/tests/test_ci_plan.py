@@ -119,7 +119,7 @@ def _ci_ok() -> tuple[dict[str, Any], set[str]]:
 
 
 def _gate(needs: dict[str, str]) -> int:
-    script = _ci_ok()[0]["steps"][0]["run"]
+    script = _ci_ok()[0]["steps"][-1]["run"]
     env = {"NEEDS": json.dumps({k: {"result": v} for k, v in needs.items()}, indent=2), "PATH": os.environ["PATH"]}
     return subprocess.run(["bash", "-c", script], env=env, capture_output=True, check=False).returncode
 

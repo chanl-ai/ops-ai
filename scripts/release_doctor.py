@@ -19,6 +19,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import release
+
 ROOT = Path(__file__).resolve().parents[1]
 SELF = {"scripts/release_doctor.py", "scripts/tests/test_release.py"}
 SKIP_DIRS = ("docs/plans/", "docs/usecases/", "changelog/", "node_modules/", "apps/docs/")
@@ -136,7 +139,7 @@ def static_problems() -> list[str]:
 
 
 def judge_live(state: dict) -> list[str]:
-    """`state`: branches {name: version file text}, tags [names], off_main [vX.Y.Z tags that are not ancestors of main], main_version, develop_has_main bool, merge_backs [{number, head, armed}]."""
+    """`state`: branches {name: version file text}, tags [names], off_main [vX.Y.Z tags that are not ancestors of main], main_version, develop_has_main bool, proofs {branch: (problem or None, push run id or None)}, merge_backs [{number, head, armed}]."""
     out = []
     branches = state["branches"]
     if len(branches) > 1:
@@ -150,16 +153,16 @@ def judge_live(state: dict) -> list[str]:
                 f"{name}'s version file says {have}. Fix: git push the branch with the file set to {m.group(1)} (a pull request into it)"
             )
     released = sorted(
-        (t[1:] for t in state["tags"] if re.fullmatch(r"v\d+\.\d+\.\d+", t)),
+        (t[1:] for t in state["tags"] if re.fullmatch(r"v\d+\.\d+\.\d+", t) and t not in state["off_main"]),
         key=lambda v: tuple(map(int, v.split("."))),
     )
+    for tag in state["off_main"]:
+        out.append(
+            f"{tag} is not reachable from main (only release-finish.yml tags, on main). "
+            f"Fix: git push origin :refs/tags/{tag}"
+        )
     if released:
         newest = released[-1]
-        for tag in state["off_main"]:
-            out.append(
-                f"{tag} is not reachable from main (only release-finish.yml tags, on main). "
-                f"Fix: git push origin :refs/tags/{tag}"
-            )
         open_versions = {re.sub(r"^release/", "", b) for b in branches if b.startswith("release/")}
         main = state["main_version"]
         if main != newest and main not in open_versions:
@@ -170,6 +173,10 @@ def judge_live(state: dict) -> list[str]:
         out.append(
             f"develop lacks commits of main (a merge-back is missing). Fix: gh workflow run release-finish.yml -f branch=release/{state['main_version']}"
         )
+    for name, (why, run_id) in state["proofs"].items():
+        if why:
+            fix = f"gh run rerun {run_id} --failed" if run_id else f"git push origin {name}"
+            out.append(f"{name}: release branch head has no green release-proof ({why}). Fix: {fix}")
     for pr in state["merge_backs"]:
         if not pr["armed"]:
             out.append(
@@ -180,6 +187,19 @@ def judge_live(state: dict) -> list[str]:
 
 def sh(*cmd: str) -> str:
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=True).stdout
+
+
+def proof_of(sha: str) -> tuple[str | None, str | None]:
+    """The release-proof verdict of the push run of a commit: (why not, run id)."""
+    runs = json.loads(
+        sh("gh", "api", f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?event=push&head_sha={sha}&per_page=1")
+    )["workflow_runs"]
+    if not runs:
+        return "no push run of that commit", None
+    jobs = json.loads(sh("gh", "api", f"repos/{{owner}}/{{repo}}/actions/runs/{runs[0]['id']}/jobs?per_page=100"))[
+        "jobs"
+    ]
+    return release.proof_problem(jobs), str(runs[0]["id"])
 
 
 def live_state() -> dict:
@@ -203,6 +223,7 @@ def live_state() -> dict:
     )
     return {
         "branches": branches,
+        "proofs": {b: proof_of(sh("git", "rev-parse", f"origin/{b}").strip()) for b in branches},
         "tags": tags,
         "off_main": [t for t in released if not ancestor(t, "origin/main")],
         "main_version": sh("git", "show", "origin/main:deploy/release/version").strip(),

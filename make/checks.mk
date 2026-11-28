@@ -212,7 +212,7 @@ check-paths.new-migration-self-test = ^scripts/new_migration\.py$$
 # The release is one flow (docs/deploy/release.md): no stale mention of the old ones, matching versions, the page lists
 # the targets that exist. `make release-doctor LIVE=1` adds the checks that read GitHub.
 check-run.release-doctor = $(PY) scripts/release_doctor.py
-check-paths.release-doctor = .
+check-paths.release-doctor = ^(docs/deploy/release\.md|make/release\.mk|scripts/release.*|deploy/release/version|sdk/typescript/package\.json|sdk/python/pyproject\.toml|sdk/python/src/ops_ai/__init__\.py|uv\.lock|\.github/workflows/.*)$$
 check-run.ci-trivial-self-test = $(PY) scripts/ci_trivial.py --self-test
 check-paths.ci-trivial-self-test = ^scripts/ci_trivial\.py$$
 check-run.pr-flow-self-test = $(PY) scripts/pr_flow.py --self-test

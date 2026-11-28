@@ -11,6 +11,10 @@
                  staging deploy and click walk succeeded; prints the staging URL. An rc tag publishes nothing
   finish         what release-finish.yml does after the pull request merged: prints the tag to make for BRANCH at SHA
                  (version from deploy/release/version there), refusing when the file and the branch name disagree
+  latest         prints the newest vX.Y.Z tag reachable from origin/main (release candidates are not releases): the
+                 release the upgrade proof starts from (ci.yml, job release-proof)
+  proof          reads the jobs of a push run (the Actions API's jobs list) on stdin and exits 1 unless its
+                 `release-proof` job succeeded; a skipped or missing one fails too (the release pull request's gate)
   check-version  exits 1 when BRANCH (default: the checked-out branch) is release/X.Y.Z and HEAD's
                  deploy/release/version is not X.Y.Z (ci.yml, job release-proof)
 """
@@ -121,6 +125,23 @@ def sdk_edits(read: Callable[[str], str | None], v: str) -> dict[str, str]:
         if new != lock:
             out[UV_LOCK] = new
     return out
+
+
+def latest_release(tags: list[str], on_main: Callable[[str], bool]) -> str | None:
+    """The newest vX.Y.Z among the tags `on_main` accepts; a tag made off main (a develop commit) does not count."""
+    for v in reversed(release_tags(tags)):
+        if on_main(f"v{v}"):
+            return f"v{v}"
+    return None
+
+
+def proof_problem(jobs: list[dict[str, Any]]) -> str | None:
+    """Why the push run of a release branch is no proof, or None when its `release-proof` job succeeded."""
+    found = [j for j in jobs if j.get("name") == "release-proof"]
+    if not found:
+        return "the push run has no release-proof job"
+    state = found[0].get("conclusion") or found[0].get("status")
+    return None if state == "success" else f"release-proof of the push run is {state}, not success"
 
 
 def remote_branches() -> list[str]:
@@ -303,6 +324,28 @@ def main() -> int:
                 raise Refusal(wrong)
             print(f"release: {branch}: {VERSION_FILE} says {file_version('HEAD')}")
             return 0
+        if command == "latest":
+            run("git", "fetch", "--quiet", "--tags", "origin", "main")
+            tags = run("git", "tag", "--list", "v[0-9]*").split()
+
+            def ok(t: str) -> bool:
+                return (
+                    subprocess.run(["git", "merge-base", "--is-ancestor", t, "origin/main"], check=False).returncode
+                    == 0
+                )
+
+            found = latest_release(tags, ok)
+            if not found:
+                raise Refusal("no vX.Y.Z tag is reachable from origin/main")
+            print(found)
+            return 0
+        if command == "proof":
+            data = json.load(sys.stdin)
+            problem = proof_problem(data["jobs"] if isinstance(data, dict) else data)
+            if problem:
+                raise Refusal(problem)
+            print("release: release-proof of the push run succeeded")
+            return 0
         if command == "finish":
             print(finish_tag(os.environ.get("BRANCH", ""), file_version(os.environ.get("SHA", "HEAD")), tag_names()))
             return 0
@@ -310,7 +353,7 @@ def main() -> int:
             return start(dry, hotfix=command == "hotfix-start")
         if command == "rc":
             return rc(dry)
-        raise Refusal("usage: release.py start | hotfix-start | rc | finish | check-version")
+        raise Refusal("usage: release.py start | hotfix-start | rc | finish | latest | proof | check-version")
     except Refusal as why:
         print(f"release: refused: {why}", file=sys.stderr)
         return 1

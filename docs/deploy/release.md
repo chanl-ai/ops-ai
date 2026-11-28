@@ -26,6 +26,7 @@ with a notice naming the branch, so the candidate on staging is not overwritten.
 | `deploy/release/version` | The version a checkout installs; equals both SDK versions on every branch (`make release-doctor`) |
 | `vX.Y.Z` | The merge commit on `main`. Starts SDK publishing and image builds. Never moved |
 | `vX.Y.Z-rc.N` | A candidate on the release branch. Publishes nothing |
+| Publishing | A tag builds and checks the images and SDKs but pushes nothing until the variables `IMAGES_PUBLISH` and `SDK_PUBLISH` are 1 (images also need write access of the repository to the ghcr packages) |
 
 ## When something is stuck
 

@@ -358,8 +358,9 @@ jobs:
           exit $failed
 
   release-proof:
-    # A release or hotfix branch: its version file matches its name, the upgrade from the last tag's schema on a seeded
-    # database, and a fresh install through ./install.sh, on every push to it. Both come before the vX.Y.Z tag publishes the images, so the install pulls images built from this commit from
+    # A release or hotfix branch: its version file matches its name, the upgrade from the offline floor and from the
+    # latest release on a seeded database, and a fresh install through ./install.sh, on every push to it. The pull
+    # request into main is not mergeable unless this job succeeded on its head (ci-ok reads the push run). Both come before the vX.Y.Z tag publishes the images, so the install pulls images built from this commit from
     # a registry inside the runner (BUILD=1); the pull from ghcr.io is a check after the tag
     # (docs/deploy/release.md). Needs the whole history and its tags.
     needs: plan
@@ -381,17 +382,17 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
         run: python3 scripts/release.py check-version
-      - name: The upgrade from the last release
+      - name: The upgrade from the offline floor
+        # The oldest supported install (docs/deploy/database.md), reported apart from the upgrade most installs make.
+        run: make db-scripts-proof FROM="$(sed -n 's/^FLOOR=//p' deploy/database/proof.sh)"
+      - name: The upgrade from the latest release
+        # The newest vX.Y.Z tag reachable from main (scripts/release.py latest; rc tags and date tags are not releases).
         run: |
-          last=$(git tag --list 'v20*' --sort=-v:refname | head -1)
-          [ -n "$last" ] || { echo "::error title=No release tag::The upgrade proof needs the last release's tag."; exit 1; }
+          last=$(python3 scripts/release.py latest)
           floor=$(sed -n 's/^FLOOR=//p' deploy/database/proof.sh)
-          if git merge-base --is-ancestor "$floor" "$last"; then from=$last; else
-            from=$floor
-            echo "$last is before $floor, the offline-upgrade floor (docs/deploy/database.md); proving from $floor"
-          fi
-          echo "upgrade from $from"
-          make db-scripts-proof FROM="$from"
+          if git merge-base --is-ancestor "$last" "$floor"; then echo "$last is not after $floor, which the step above proved"; exit 0; fi
+          echo "upgrade from $last"
+          make db-scripts-proof FROM="$last"
       - name: A fresh install
         run: make install-proof BUILD=1
 
@@ -618,6 +619,8 @@ jobs:
     # 5 minutes, except for a release pull request, which waits for the push run of its commit (up to 90).
     timeout-minutes: 90
     steps:
+      - if: github.event_name == 'pull_request' && github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A release pull request reports the push run of its commit
         if: github.event_name == 'pull_request' && github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
         env:
@@ -625,9 +628,13 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           for _ in $(seq 180); do
-            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$SHA&per_page=1" --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' 2>/dev/null || true)
+            found=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$SHA&per_page=1" --jq '.workflow_runs[0] | "\(.id) \(.status) \(.conclusion)"' 2>/dev/null || true)
+            id=${found%% *}; run=${found#* }
             case "$run" in
-              "completed success") echo "the push run of $SHA passed"; exit 0 ;;
+              "completed success")
+                # A green run is not enough: its release-proof must have run and passed, or the release was not proven.
+                gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" | python3 scripts/release.py proof && exit 0
+                echo "::error title=Release not proven::the push run of $SHA has no passing release-proof"; exit 1 ;;
               "completed "*) echo "::error title=Candidate not green::the push run of $SHA ended: $run"; exit 1 ;;
             esac
             sleep 30

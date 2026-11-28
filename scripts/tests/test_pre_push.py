@@ -147,16 +147,16 @@ def console_push(repo: Path, tmp_path: Path, local: str, _since: str) -> tuple[i
 
 
 def console_repo(tmp_path: Path, change: str) -> tuple[Path, str, str]:
-    """A repo whose origin/main is the base and whose origin/develop holds one console change on top of it."""
+    """A repo whose origin/develop is the base and whose origin/feat/console holds one console change on top of it."""
     repo, base = make_repo(tmp_path)
-    git(repo, "update-ref", "refs/remotes/origin/main", base)
+    git(repo, "update-ref", "refs/remotes/origin/develop", base)
     (repo / "apps/console/src").mkdir(parents=True)
     (repo / "apps/console/src/a.ts").write_text("export const a = 1\n")
     (repo / "bad.py").write_text(change)
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "console change")
     head = git(repo, "rev-parse", "HEAD")
-    git(repo, "update-ref", "refs/remotes/origin/develop", head)
+    git(repo, "update-ref", "refs/remotes/origin/feat/console", head)
     return repo, base, head
 
 

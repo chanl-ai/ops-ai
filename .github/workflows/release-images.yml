@@ -7,7 +7,9 @@
 # with a fix available, a keyless cosign signature, and a GitHub build provenance attestation. On a tag the SBOMs are
 # attached to that tag's GitHub release (made as a draft when there is none). docs/security.md shows how to verify.
 #
-# Proof mode (run by hand with proof set) builds for linux/amd64 and pushes to a registry inside the runner, so every
+# Publishing is off until the repository variable IMAGES_PUBLISH is 1 (and the ops-ai repository has write access to the
+# ghcr packages): a tag then builds, scans and signs in proof mode only, as sdk-publish.yml does without SDK_PUBLISH.
+# Proof mode (also run by hand with proof set) builds for linux/amd64 and pushes to a registry inside the runner, so every
 # step runs and nothing reaches ghcr.io.
 name: release-images
 
@@ -60,8 +62,9 @@ jobs:
         image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
         ports: ["5000:5000"]
     env:
-      PROOF: ${{ inputs.proof && 'true' || 'false' }}
-      IMAGE_PREFIX: ${{ inputs.proof && 'localhost:5000/ops-ai' || 'ghcr.io/chanl-ai/ops-ai' }}
+      # Proof mode unless publishing is on: every step runs against a registry inside the runner and nothing reaches ghcr.io.
+      PROOF: ${{ (inputs.proof || vars.IMAGES_PUBLISH != '1') && 'true' || 'false' }}
+      IMAGE_PREFIX: ${{ (inputs.proof || vars.IMAGES_PUBLISH != '1') && 'localhost:5000/ops-ai' || 'ghcr.io/chanl-ai/ops-ai' }}
       TARGETS: platform agents tools models kb files documents runner opa proxy console db-scripts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -167,7 +170,7 @@ jobs:
   release:
     # Its own job, so the only step holding a token that can write the repository is this upload.
     needs: images
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && vars.IMAGES_PUBLISH == '1'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -221,16 +221,43 @@ def test_the_live_doctor_names_the_missing_tag_merge_back_and_arming_with_the_co
         "off_main": ["v1.2.2"],
         "main_version": "1.2.1",
         "develop_has_main": False,
+        "proofs": {"release/1.2.2": ("release-proof of the push run is skipped, not success", "99")},
         "merge_backs": [{"number": 7, "head": "merge-back/release-1.2.1", "armed": False}],
     }
     out = release_doctor.judge_live(state)
-    assert [line.split(" ")[0] for line in out] == ["more", "v1.2.2", "main's", "develop", "merge-back"], out
+    assert [line.split(" ")[0] for line in out] == [
+        "more",
+        "v1.2.2",
+        "main's",
+        "develop",
+        "release/1.2.2:",
+        "merge-back",
+    ], out
     assert "git push origin :refs/tags/v1.2.2" in out[1]
     assert "gh workflow run release-finish.yml -f branch=release/1.2.1" in out[2]
-    assert "gh pr merge --auto --merge 7" in out[4]
+    assert "has no green release-proof" in out[4] and "gh run rerun 99 --failed" in out[4]
+    assert "gh pr merge --auto --merge 7" in out[5]
     assert (
         release_doctor.judge_live(
-            {**state, "branches": {}, "tags": ["v1.2.1"], "off_main": [], "develop_has_main": True, "merge_backs": []}
+            {
+                **state,
+                "branches": {},
+                "tags": ["v1.2.1"],
+                "off_main": [],
+                "develop_has_main": True,
+                "proofs": {},
+                "merge_backs": [],
+            }
         )
         == []
     )
+
+
+def test_the_upgrade_starts_at_the_newest_release_on_main_and_only_a_passing_proof_makes_it_mergeable() -> None:
+    tags = ["v1.0.0", "v1.1.0", "v1.2.0", "v1.2.1-rc.1", "v1.2.2", "v2026-10-23.1"]
+    assert release.latest_release(tags, lambda t: t != "v1.2.2") == "v1.2.0"
+    assert release.latest_release(tags, lambda t: False) is None
+    ran = {"name": "release-proof", "conclusion": "success"}
+    assert release.proof_problem([ran]) is None
+    for jobs in ([], [{**ran, "conclusion": "skipped"}], [{**ran, "conclusion": "failure"}]):
+        assert release.proof_problem(jobs)
