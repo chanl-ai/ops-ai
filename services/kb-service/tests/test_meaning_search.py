@@ -7,24 +7,27 @@ source taken out of a base is still found by its vectors."""
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from ops_kb.embedding import Backlog, embed_all
+from ops_kb.embedding import Backlog, ModelsEmbedder, embed_all
 from ops_kb.files import KnowledgeFiles
 from ops_kb.retrieval import Search
 from ops_kb.schedule import WITHDRAWN_KEPT
 from ops_kb.search import HybridRetriever
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.vectors import PgVectorStore, VectorHit
+from ops_service_kit.model_calls import ModelCalls
 from ops_store import isolation
 from ops_store.dialect import vector_index_ddl
 
@@ -33,7 +36,7 @@ from .pdfs import policy_pdf
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
 from .test_sync import file_source, upload
-from .vectors_fake import ConceptEmbedder
+from .vectors_fake import ConceptEmbedder, concept_vector
 
 SECTIONS = [
     (
@@ -282,3 +285,129 @@ async def test_a_slow_embedding_model_skips_the_meaning_lane_at_the_search_wait(
     found = await asyncio.wait_for(stack.search(kb["id"], "early repayment charge on my loan"), 5)
     assert found["lanes"]["skipped"] == [{"lane": "meaning", "reason": "embedding_unavailable: timeout"}], found
     assert sections(found)[:1] == ["Early repayment"]
+
+
+class Models:
+    """models-service's embeddings route as kb-service calls it: the reply names the model serving the alias, and a
+    down model answers 503. `calls` counts every request."""
+
+    def __init__(self) -> None:
+        self.model, self.down, self.calls = "scripted/concept-embed", False, 0
+        # A tenant whose budget is spent: the first one to call, when `spent` is set.
+        self.spent: str | None = None
+        self.refused: list[str] = []
+
+    def answer(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        tenant = request.headers["x-tenant-id"]
+        if self.spent == "first":
+            self.spent = tenant
+        if tenant == self.spent:
+            self.refused.append(tenant)
+            error = {"code": "tenant_budget_exhausted", "message": "this tenant's budget is spent"}
+            return httpx.Response(429, json={"success": False, "error": error})
+        if self.down:
+            error = {"code": "provider_unavailable", "message": "the provider did not answer"}
+            return httpx.Response(503, json={"success": False, "error": error})
+        body = json.loads(request.content)
+        texts = [body["input"]] if isinstance(body["input"], str) else body["input"]
+        rows = [{"object": "embedding", "index": i, "embedding": concept_vector(t, 64)} for i, t in enumerate(texts)]
+        usage = {"prompt_tokens": sum(len(t.split()) for t in texts)}
+        return httpx.Response(200, json={"object": "list", "model": self.model, "data": rows, "usage": usage})
+
+
+async def _with_vectors(engine: AsyncEngine, tenant: str) -> None:
+    with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
+        if not await PgVectorStore(engine).ready():
+            pytest.skip("This PostgreSQL has no pgvector; make db-move-image moves the local stack onto it.")
+
+
+async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    """An admin points the environment's embedding alias at another model (Settings, Model aliases): the alias name is
+    unchanged, so vectors are keyed by the model that served them; the first search after the move makes them stale."""
+    await _with_vectors(engine, tenant)
+    models = Models()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
+        embedder = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        files = KnowledgeFiles(tmp_path)
+        readings = LocalReadings(files)
+        async with kb_client(engine, tenant, files=files, readings=readings, embedder=embedder) as client:
+            stack = Stack(client, embedder, readings)  # pyright: ignore[reportArgumentType]
+            store, vectors = KnowledgeStore(engine), PgVectorStore(engine)
+            _, kb = await stack.base()
+            await embed_all(store, vectors, embedder, Backlog())
+            assert sections(await stack.search(kb["id"], PARAPHRASE))[:1] == ["Early repayment"]
+            models.model = "scripted/concept-embed-2"
+            stale = await stack.search(kb["id"], PARAPHRASE)
+            assert stale["lanes"]["skipped"] == [{"lane": "meaning", "reason": "no_vectors"}], stale["lanes"]
+            reads = len(readings.reads)
+            assert await embed_all(store, vectors, embedder, Backlog()) > 0
+            assert len(readings.reads) == reads
+            again = await stack.search(kb["id"], PARAPHRASE)
+            assert again["lanes"]["ran"] == ["keyword", "meaning"] and sections(again)[:1] == ["Early repayment"]
+            embedding = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))["embedding"]
+            assert embedding["model"] == "scripted/concept-embed-2" and embedding["embedded"] == embedding["units"], (
+                embedding
+            )
+
+
+async def test_a_down_model_gives_one_reason_and_one_call_per_search_however_long_the_process_has_run(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    """A process that has not yet heard from the model must answer as one that has: the same skip reason, one call
+    per search (the question's), and a base's detail read with no call and the stored vectors' model."""
+    await _with_vectors(engine, tenant)
+    models = Models()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
+        warm = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        files = KnowledgeFiles(tmp_path)
+        readings = LocalReadings(files)
+        async with kb_client(engine, tenant, files=files, readings=readings, embedder=warm) as client:
+            stack = Stack(client, warm, readings)  # pyright: ignore[reportArgumentType]
+            _, kb = await stack.base()
+            await embed_all(KnowledgeStore(engine), PgVectorStore(engine), warm, Backlog())
+            models.down = True
+            calls = models.calls
+            found = await stack.search(kb["id"], PARAPHRASE)
+            assert models.calls == calls + 1
+            reason = found["lanes"]["skipped"]
+        assert reason == [{"lane": "meaning", "reason": "embedding_unavailable: provider_unavailable"}], reason
+        cold = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        async with kb_client(engine, tenant, files=files, readings=readings, embedder=cold) as client:
+            stack = Stack(client, cold, readings)  # pyright: ignore[reportArgumentType]
+            stack.made = 1
+            for _ in range(2):
+                calls = models.calls
+                found = await stack.search(kb["id"], PARAPHRASE)
+                assert (found["lanes"]["skipped"], models.calls) == (reason, calls + 1)
+            calls = models.calls
+            embedding = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))["embedding"]
+            assert (embedding["model"], models.calls) == ("scripted/concept-embed", calls), embedding
+            _, unembedded = await stack.base()
+            calls = models.calls
+            found = await stack.search(unembedded["id"], PARAPHRASE)
+            assert (found["lanes"]["skipped"], models.calls) == ([{"lane": "meaning", "reason": "no_vectors"}], calls)
+
+
+async def test_a_tenant_the_model_refuses_holds_no_other_tenant_back(engine: AsyncEngine, tmp_path: Path) -> None:
+    """One tenant out of budget is refused by models-service; the beat still embeds every other tenant's units."""
+    tenants = [f"t_{uuid4().hex[:10]}" for _ in range(2)]
+    await _with_vectors(engine, tenants[0])
+    bases: dict[str, str] = {}
+    for t in tenants:
+        files = KnowledgeFiles(tmp_path / t)
+        async with kb_client(engine, t, files=files) as client:
+            stack = Stack(client, ConceptEmbedder(), LocalReadings(files))
+            bases[t] = (await stack.base())[1]["id"]
+    models = Models()
+    models.spent = "first"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
+        embedder = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        await embed_all(KnowledgeStore(engine), PgVectorStore(engine), embedder, Backlog())
+    vectors = PgVectorStore(engine)
+    for t in tenants:
+        with isolation.tenant_wide("test: coverage", tenant_id=t):
+            embedded, units = await vectors.coverage(t, [bases[t]], model="scripted/concept-embed", width=64)
+        assert (embedded == units > 0) == (t != models.spent), (t, models.spent, embedded, units)
