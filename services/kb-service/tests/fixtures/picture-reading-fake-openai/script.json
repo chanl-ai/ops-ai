@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "when": "Page \\d+ of the document",
+      "tool": "final_result",
+      "arguments": {
+        "text": "Mobile app. Intake service. Event queue.",
+        "description": "Three boxes joined left to right by arrows: the Mobile app sends work to the Intake service, which puts it on the Event queue."
+      }
+    }
+  ]
+}

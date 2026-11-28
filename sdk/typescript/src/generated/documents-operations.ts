@@ -277,7 +277,8 @@ export const documentsOperations = {
     "query": [
       "ocr",
       "language",
-      "page"
+      "page",
+      "pictureSensitivity"
     ],
     "stream": false
   },

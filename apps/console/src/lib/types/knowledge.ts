@@ -201,6 +201,10 @@ export interface ItemDetail {
   versions: ItemVersionRow[];
 }
 
+/** What was read from an item's file, by section, each block with its places on the page (GET /v1/items/{id}/text). */
+export type ItemText = Reply<'items_get_item_text'>;
+export type ItemTextBlock = ItemText['sections'][number]['blocks'][number];
+
 export type ItemWithDetail = Narrow<Reply<'items_get_item'>, ItemNarrow & { sourceType: SourceType; detail: ItemDetail; reading?: ItemReading | null; settingsUsed?: ItemSettingsUsed | null }> & ItemViewOnly;
 
 /** One item or listing a run could not take in, with the step it failed at and why. */

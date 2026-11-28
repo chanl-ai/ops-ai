@@ -12,7 +12,7 @@ from typing import TypedDict
 
 import httpx
 
-from ops_identity import ServiceCallError, ServiceClient, segment
+from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, segment
 from ops_service_kit.http import Json, JsonValue, PageJSON
 from ops_service_kit.narrow import a_list, an_object
 from ops_service_kit.settings import Settings
@@ -63,8 +63,12 @@ def _id(value: str) -> str:
         raise DocumentNotFound(404, "not_found", f"No {value!r}") from None
 
 
-def _refused(e: ServiceCallError) -> DocumentsRefused:
+def _refused(e: ServiceCallError) -> DocumentsRefused | ServiceUnreachable:
+    """The refusal as callers handle it. A 503 `policy_unread` (documents-service could not read the team's picture
+    policy) is unreachable, so a knowledge sync waits and asks again instead of failing the file for good."""
     code, message = e.code or "error", str(e)
+    if e.status == 503 and code == "policy_unread":
+        return ServiceUnreachable(message)
     return DocumentNotFound(404, code, message) if e.status == 404 else DocumentsRefused(e.status, code, message)
 
 
@@ -123,6 +127,7 @@ class DocumentsClient:
         file_id: str,
         *,
         ocr: str = "auto",
+        pictures: str | None = None,
         wait_s: float = 0.0,
         poll_s: float = 1.0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -131,12 +136,14 @@ class DocumentsClient:
         form fields and OCR quality. Keyed by the file's bytes and the OCR settings, so every caller of the same file
         (a knowledge base, a chat attachment, an agent's read_file) gets the one reading already made. A reading made
         in the background is waited for up to `wait_s`; the answer is then the reading as it is, still `queued` or
-        `reading` when it took longer, and documents-service reports `reading.finished` when it ends."""
+        `reading` when it took longer, and documents-service reports `reading.finished` when it ends. `pictures` is a
+        knowledge item's sensitivity: pages with no text may then be described by a model, when the team allows it."""
+        params = {"ocr": ocr} | ({"pictureSensitivity": pictures} if pictures else {})
         try:
             answer = await self._documents.request(
                 "POST",
                 "/v1/documents/readings",
-                json={"fileId": file_id, "ocr": ocr},
+                json={"fileId": file_id, **params},
                 tenant=tenant,
                 team=team,
                 timeout=180,  # a small file is read inside the answer
@@ -145,18 +152,21 @@ class DocumentsClient:
             while answer.get("status") in READING_PENDING and time.monotonic() < ends:
                 await sleep(poll_s)
                 answer = await self._documents.request(
-                    "GET", f"/v1/documents/readings/{_id(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
+                    "GET", f"/v1/documents/readings/{_id(file_id)}", params=params, tenant=tenant, team=team
                 )
         except ServiceCallError as e:
             raise _refused(e) from e
         return answer
 
-    async def reading_now(self, tenant: str, team: str, file_id: str, *, ocr: str = "auto") -> Json:
+    async def reading_now(
+        self, tenant: str, team: str, file_id: str, *, ocr: str = "auto", pictures: str | None = None
+    ) -> Json:
         """The file's reading as it is now, never asked for: status `none` when nobody asked, and a failed one stays
         failed (asking again with `reading` reads the file again)."""
+        params = {"ocr": ocr} | ({"pictureSensitivity": pictures} if pictures else {})
         try:
             return await self._documents.request(
-                "GET", f"/v1/documents/readings/{_id(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
+                "GET", f"/v1/documents/readings/{_id(file_id)}", params=params, tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e

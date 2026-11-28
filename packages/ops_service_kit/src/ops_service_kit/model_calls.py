@@ -8,12 +8,14 @@ budget line in models-service, never a provider credential) and every call goes 
   (`ops_ingest.ModelClient`).
 
 A refusal keeps models-service's own code (`key_budget_exhausted`, `rate_limited`, `sensitivity_not_cleared`,
-`alias_not_found`, ...) on `ModelCallError`, so a caller decides from the code rather than from the message.
-documents-service's extraction carries its own copy of the call and moves onto this one in a follow-on."""
+`alias_not_found`, ...) on `ModelCallError`, so a caller decides from the code rather than from the message, and an
+answer in another shape is `models_answer_unreadable`. `Usage` collects what a caller's calls spent. No other module
+posts to models-service's model routes (`ops_service_kit.standards`, rule SC1)."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -24,15 +26,20 @@ FALLBACK_ALIAS = "default"
 # Codes for a call that never reached models-service, or whose answer could not be read.
 UNREACHABLE = "models_unreachable"
 UNREADABLE = "models_answer_unreadable"
+# models-service's model routes; only this client posts to them (rule SC1, `standards.check_model_calls`).
+CHAT_ROUTE = "/v1/models/chat/completions"
+EMBED_ROUTE = "/v1/models/embeddings"
 
 
 class ModelCallError(Exception):
-    """models-service could not be reached, or refused the call with `code` and HTTP `status` (0 when unreached)."""
+    """models-service could not be reached, or refused the call with `code` and HTTP `status` (0 when unreached);
+    `alias` is the alias that refused it, when one did."""
 
-    def __init__(self, message: str, *, code: str = UNREACHABLE, status: int = 0) -> None:
+    def __init__(self, message: str, *, code: str = UNREACHABLE, status: int = 0, alias: str | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+        self.alias = alias
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,18 @@ class Embedded:
 
     vectors: list[list[float]]
     input_tokens: int
+
+
+@dataclass
+class Usage:
+    """What a caller's calls spent, as models-service billed them: each call it is passed to adds its count and tokens,
+    so one record covers a first ask and its re-ask."""
+
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    # The alias that answered the latest call: a structured call falls back to `default` when its own is not bound.
+    alias: str | None = None
 
 
 def _headers(key: str, tenant: str, step: str, sensitivity: str) -> dict[str, str]:
@@ -67,10 +86,21 @@ def _chat_body(alias: str, messages: list[dict[str, Any]], **extra: Any) -> dict
     return {"model": alias, "messages": messages, **extra}
 
 
-def _structured_answer(r: httpx.Response) -> Any:
-    message = cast(dict[str, Any], cast(dict[str, Any], r.json())["choices"][0]["message"])
-    calls = cast(list[dict[str, Any]], message.get("tool_calls") or [])
-    raw = calls[0]["function"]["arguments"] if calls else message.get("content")
+def _structured_answer(r: httpx.Response, alias: str, usage: Usage | None) -> Any:
+    try:
+        data = cast(dict[str, Any], r.json())
+        message = cast(dict[str, Any], cast(list[dict[str, Any]], data["choices"])[0]["message"])
+        calls = cast(list[dict[str, Any]], message.get("tool_calls") or [])
+        raw = calls[0]["function"]["arguments"] if calls else message.get("content")
+        counted = cast(dict[str, Any], data.get("usage") or {})
+        tokens = (int(counted.get("prompt_tokens") or 0), int(counted.get("completion_tokens") or 0))
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+        raise ModelCallError(f"models-service's answer could not be read: {e!r}", code=UNREADABLE) from e
+    if usage is not None:
+        usage.calls += 1
+        usage.input_tokens += tokens[0]
+        usage.output_tokens += tokens[1]
+        usage.alias = alias
     try:
         return json.loads(raw) if isinstance(raw, str) else {}
     except json.JSONDecodeError:
@@ -97,17 +127,31 @@ class ModelCalls:
     alias: str = FALLBACK_ALIAS
 
     async def structured(
-        self, system: str, user: str, schema: dict[str, Any], *, tenant: str, step: str, sensitivity: str = "internal"
+        self,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        *,
+        tenant: str,
+        step: str,
+        sensitivity: str = "internal",
+        run: str | None = None,
+        parts: Sequence[dict[str, Any]] = (),
+        usage: Usage | None = None,
     ) -> Any:
         """The answer's arguments; {} when the model answered with something unreadable, which fails the caller's own
-        schema check rather than raising."""
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        schema check rather than raising. `parts` go after the user text in its message (a page image's
+        `image_url`), `run` is the X-Run-Id the call is logged and capped under, and `usage` is added to once the call
+        is answered."""
+        content: str | list[dict[str, Any]] = [{"type": "text", "text": user}, *parts] if parts else user
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": content}]
         tools = [{"type": "function", "function": {"name": "final_result", "parameters": schema}}]
+        headers = {**_headers(self.key, tenant, step, sensitivity), **({"X-Run-Id": run} if run else {})}
         for name in dict.fromkeys((self.alias, FALLBACK_ALIAS)):
             try:
                 r = await self.http.post(
-                    "/v1/models/chat/completions",
-                    headers=_headers(self.key, tenant, step, sensitivity),
+                    CHAT_ROUTE,
+                    headers=headers,
                     json=_chat_body(name, messages, tools=tools, tool_choice="required"),
                 )
             except httpx.HTTPError as e:
@@ -115,8 +159,10 @@ class ModelCalls:
             if r.status_code == 404 and "alias_not_found" in r.text and name != FALLBACK_ALIAS:
                 continue
             if r.status_code >= 400:
-                raise refusal(r)
-            return _structured_answer(r)
+                refused = refusal(r)
+                refused.alias = name
+                raise refused
+            return _structured_answer(r, name, usage)
         raise ModelCallError(f"models-service has neither {self.alias} nor {FALLBACK_ALIAS}", code="alias_not_found")
 
     async def embed(
@@ -137,9 +183,7 @@ class ModelCalls:
         if width is not None:
             body["dimensions"] = width
         try:
-            r = await self.http.post(
-                "/v1/models/embeddings", headers=_headers(self.key, tenant, step, sensitivity), json=body
-            )
+            r = await self.http.post(EMBED_ROUTE, headers=_headers(self.key, tenant, step, sensitivity), json=body)
         except httpx.HTTPError as e:
             raise ModelCallError(f"models-service could not be reached: {e}") from e
         if r.status_code >= 400:
@@ -169,7 +213,7 @@ class IngestModel:
     def complete(self, prompt: str, *, alias: str, max_tokens: int) -> str:
         try:
             r = self.http.post(
-                "/v1/models/chat/completions",
+                CHAT_ROUTE,
                 headers={
                     **_headers(self.key, self.tenant, self.step, self.sensitivity),
                     **({"X-Run-Id": self.run_id} if self.run_id else {}),

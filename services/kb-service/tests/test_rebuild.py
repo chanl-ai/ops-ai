@@ -34,7 +34,10 @@ class HeldReadings(LocalReadings):
         self.release = asyncio.Event()
         self.release.set()
 
-    async def reading(self, tenant: str, team: str, file_id: str, *, ocr: str) -> dict[str, Any]:
+    async def reading(
+        self, tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None
+    ) -> dict[str, Any]:
+        del pictures
         await self.release.wait()
         return await super().reading(tenant, team, file_id, ocr=ocr)
 

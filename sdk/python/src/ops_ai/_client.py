@@ -448,6 +448,11 @@ class Knowledge(Resource):
         """Puts one item into a push source. The same name and text again answers `unchanged`."""
         return self._raw.kb.sources_put_item(source_id, {"name": name, "title": title, "text": text, **fields})
 
+    def text(self, item_id: str, *, page: int | None = None) -> Any:
+        """What was read from one page of a document's file (the first unless `page` is given), by section, each
+        paragraph with its places on the page, and every page's summary."""
+        return self._raw.kb.items_get_item_text(item_id, page=page)
+
 
 class AsyncKnowledge(AsyncResource):
     async def search(self, body: dict[str, Any]) -> Any:
@@ -466,6 +471,9 @@ class AsyncKnowledge(AsyncResource):
 
     async def push(self, source_id: str, name: str, *, title: str, text: str, **fields: Any) -> Any:
         return await self._raw.kb.sources_put_item(source_id, {"name": name, "title": title, "text": text, **fields})
+
+    async def text(self, item_id: str, *, page: int | None = None) -> Any:
+        return await self._raw.kb.items_get_item_text(item_id, page=page)
 
 
 class OpsAI:

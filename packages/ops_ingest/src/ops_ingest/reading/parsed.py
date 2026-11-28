@@ -114,6 +114,10 @@ def to_parsed_document(
     dropped = 0
     for page in reading.pages:
         at = page.number if paged else None
+        if page.source == "model":
+            # A model's description of a picture is its own evidence: cited at its page, never folded into the
+            # author's text of the page before it.
+            builder.break_at(at)
         for block in page.blocks:
             if (furniture and block.furniture) or (has_main and not block.main and block.kind != "title"):
                 dropped += len(block.text)

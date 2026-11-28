@@ -95,6 +95,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/items/{item_id}/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Item Text
+         * @description What was read from one page of the document's file (the first unless `page` is given; past the last page,
+         *     the last), section by section, each paragraph with its lines' places on the page, with every page's summary
+         *     and why any page was not read: the text beside the original in the document view.
+         */
+        get: operations["items_get_item_text"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/items/{item_id}/verify": {
         parameters: {
             query?: never;
@@ -1086,6 +1108,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ItemText] */
+        Envelope_ItemText_: {
+            data: components["schemas"]["ItemText"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ItemWithDetail] */
         Envelope_ItemWithDetail_: {
             data: components["schemas"]["ItemWithDetail"];
@@ -1677,6 +1708,38 @@ export interface components {
             preset: string;
             /** Strategies */
             strategies: string[];
+        };
+        /**
+         * ItemText
+         * @description What was read from an item's file, section by section after the source's cleaning, with each block's place on
+         *     its page, for the document view beside the original. `status` is done, reading (documents-service has not
+         *     finished), or none (the item has no file, or no reading can be had now); `notes` say in plain words what was not
+         *     read or could not be shown.
+         */
+        ItemText: {
+            /** Fileid */
+            fileId: string | null;
+            /** Itemid */
+            itemId: string;
+            /** Mimetype */
+            mimeType: string | null;
+            /** Notes */
+            notes: string[];
+            /** Page */
+            page: number | null;
+            /** Paged */
+            paged: boolean;
+            /** Pages */
+            pages: components["schemas"]["TextPage"][];
+            /** Readerversion */
+            readerVersion: string | null;
+            /** Sections */
+            sections: components["schemas"]["TextSection"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "reading" | "none";
         };
         /**
          * ItemUnit
@@ -3444,6 +3507,62 @@ export interface components {
             /** Staleafterdays */
             staleAfterDays: number;
         };
+        /** TextBlock */
+        TextBlock: {
+            /** Boxes */
+            boxes: components["schemas"]["TextBox"][];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "paragraph" | "table";
+            /** Page */
+            page: number | null;
+            /** Readby */
+            readBy: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TextBox
+         * @description Where a block sits on its page, as fractions of the page from its top left (documents-service's boxes).
+         */
+        TextBox: {
+            /** H */
+            h: number;
+            /** Page */
+            page: number;
+            /** W */
+            w: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** TextPage */
+        TextPage: {
+            /** Number */
+            number: number;
+            /** Readby */
+            readBy: string;
+            /** Unreadreason */
+            unreadReason?: string | null;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** TextSection */
+        TextSection: {
+            /** Blocks */
+            blocks: components["schemas"]["TextBlock"][];
+            /** Headingpath */
+            headingPath: string[];
+            /** Id */
+            id: string;
+            /** Page */
+            page: number | null;
+        };
         /** TokenRange */
         TokenRange: {
             /** High */
@@ -3838,6 +3957,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Item_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    items_get_item_text: {
+        parameters: {
+            query?: {
+                page?: number | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ItemText_"];
                 };
             };
             /** @description Invalid request */

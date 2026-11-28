@@ -549,6 +549,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `services/agents-service/workflow-node-coverage.md` | Which seeded workflow runs each node type and which use-case check proves it (customer_hold uc-248, complaint_triage uc-249) |
 | `services/kb-service/overview.md` | kb-service: knowledge bases with owners, file sources, sync into page and section passages, full-text retrieval, changes, and what is not built |
 | `services/kb-service/experiments/meaning-threshold.md` | Meaning threshold: where the meaning lane's floor sits, from real embeddings |
+| `services/kb-service/experiments/sample-base.md` | Sample project base: 40 documents and 40 questions, and today's score on the scripted model |
 | `services/models-service/overview.md` | models-service: aliases, keys with budgets, admission and OpenAI-compatible egress with a metadata-only call log |
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
 | `services/tools-service/design.md` | tools-service design: the flow, the API, the data and the sequences; the console's screens are the Apps menu (guide/apps.md) |
@@ -679,3 +680,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/files-service/a-watched-folder-brings-files-in.md` | uc-779: A watched folder brings files in |
 | `usecases/models-service/a-provider-type-added-as-a.md` | uc-791: A provider type added as a file shows in the add list |
 | `usecases/models-service/an-admin-connects-anthropic-and-an.md` | uc-792: An admin connects Anthropic and an agent's model settings reach its chat |
+| `usecases/kb-service/open-a-document-beside-the-text.md` | uc-950: Open a document beside the text read from it |

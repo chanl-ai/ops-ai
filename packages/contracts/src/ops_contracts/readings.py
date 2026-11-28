@@ -12,9 +12,14 @@ FAILED = "reading.failed"
 CHARS_PER_TOKEN = 4
 
 
-def event_key(name: str, *, digest: str, reader_version: str, settings_key: str, file_id: str) -> str:
-    """The key a reading's end is posted under for one file holding its bytes: unique per file and outcome."""
-    return f"{name}:{digest}:{reader_version}:{settings_key}:{file_id}"
+def event_key(
+    name: str, *, digest: str, reader_version: str, settings_key: str, file_id: str, described: int | None = None
+) -> str:
+    """The key a reading's end is posted under for one file holding its bytes: unique per file and outcome. A retry
+    that describes more pages is posted again under the count of pages a model has described (`described`), which
+    grows with every such retry, so each is its own event and one delivered twice keeps one key."""
+    key = f"{name}:{digest}:{reader_version}:{settings_key}:{file_id}"
+    return key if described is None else f"{key}:m{described}"
 
 
 def within(

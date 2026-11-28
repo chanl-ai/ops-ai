@@ -17,12 +17,13 @@ from pydantic.alias_generators import to_camel
 
 #: Part of every stored reading's key. Raised whenever the output for the same bytes and settings changes, so an old
 #: reading is read again rather than served.
-READER_VERSION = "reading-4"
+READER_VERSION = "reading-5"
 
 OcrMode = Literal["off", "auto", "always"]
-#: How a page was read: its text layer, OCR of the whole page, its text layer plus OCR of its picture areas, or not at
-#: all (`unread_reason` says why).
-PageSource = Literal["text", "ocr", "mixed", "none"]
+#: How a page was read: its text layer, OCR of the whole page, its text layer plus OCR of its picture areas, a model
+#: that can see describing a page that had no text (documents-service's picture reading), or not at all
+#: (`unread_reason` says why).
+PageSource = Literal["text", "ocr", "mixed", "model", "none"]
 BlockKind = Literal["title", "heading", "paragraph", "table"]
 FieldKind = Literal["text", "checkbox", "choice", "signature"]
 Box = list[float]
@@ -87,8 +88,8 @@ class Block(_Model):
     caption: str | None = None
     #: The worksheet a spreadsheet table came from.
     sheet: str | None = None
-    #: Whether the block came from the text layer or from OCR.
-    read_by: Literal["text", "ocr"] = "text"
+    #: Whether the block came from the text layer, from OCR, or from a model describing the page's picture.
+    read_by: Literal["text", "ocr", "model"] = "text"
     #: An HTML block inside page furniture (navigation, banners, footers), or inside the main or article element. Kept
     #: in the reading so a cleaning change splits it again without reading the page again.
     furniture: bool = False

@@ -30,6 +30,16 @@ class DocumentBuilder:
         section = Section(heading_path=path, level=level, blocks=[], page=page, furniture=furniture, main=main)
         self._sections.append(section)
 
+    def break_at(self, page: int | None) -> None:
+        """Starts a new section under the same headings from `page`, so what follows is cited at its own page rather
+        than at the page its section began on."""
+        last = self._sections[-1]
+        if not last.blocks:
+            last.page = page
+            return
+        path = [t for _, t in self._stack]
+        self._sections.append(Section(heading_path=path, level=last.level, blocks=[], page=page))
+
     def paragraph(self, text: str, page: int | None = None, *, furniture: bool = False, main: bool = False) -> None:
         text = text.strip()
         if text:

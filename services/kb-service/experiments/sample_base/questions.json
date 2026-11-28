@@ -1,0 +1,427 @@
+{
+ "about": "The fixed list of 40 questions on the sample base, ten of each kind. A question is answered when one of the first three citations is a document in expect (at page, when page is set).",
+ "questions": [
+  {
+   "id": "q01",
+   "kind": "who",
+   "project": "claims-intake",
+   "question": "Who leads the Claims intake redesign?",
+   "expect": [
+    "claims-intake-team-roster.pdf",
+    "claims-intake-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q02",
+   "kind": "who",
+   "project": "claims-intake",
+   "question": "Who is on call for the Intake service?",
+   "expect": [
+    "claims-intake-team-roster.pdf"
+   ],
+   "page": null
+  },
+  {
+   "id": "q03",
+   "kind": "who",
+   "project": "claims-intake",
+   "question": "Who owns the photo upload success rate report?",
+   "expect": [
+    "claims-intake-team-roster.pdf",
+    "claims-intake-risk-register.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q04",
+   "kind": "how",
+   "project": "claims-intake",
+   "question": "How does work get from the Mobile app to the Event queue?",
+   "expect": [
+    "claims-intake-architecture-review.pdf"
+   ],
+   "page": 2
+  },
+  {
+   "id": "q05",
+   "kind": "how",
+   "project": "claims-intake",
+   "question": "What happens to work from the Mobile app when the Intake service stops?",
+   "expect": [
+    "claims-intake-runbook.pdf",
+    "claims-intake-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q06",
+   "kind": "why",
+   "project": "claims-intake",
+   "question": "Why did the Claims intake redesign choose an event queue between intake and the adjusters?",
+   "expect": [
+    "claims-intake-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q07",
+   "kind": "why",
+   "project": "claims-intake",
+   "question": "Why was a nightly batch file not chosen?",
+   "expect": [
+    "claims-intake-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q08",
+   "kind": "why",
+   "project": "claims-intake",
+   "question": "What problem led to the decision on an event queue between intake and the adjusters?",
+   "expect": [
+    "claims-intake-decision-note.docx",
+    "claims-intake-meeting-notes.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q09",
+   "kind": "changed",
+   "project": "claims-intake",
+   "question": "What changed in the Claims intake redesign on 14 October 2026?",
+   "expect": [
+    "claims-intake-changelog.md",
+    "claims-intake-release-notes.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q10",
+   "kind": "changed",
+   "project": "claims-intake",
+   "question": "What changed for the Event queue?",
+   "expect": [
+    "claims-intake-changelog.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q11",
+   "kind": "who",
+   "project": "meter-data",
+   "question": "Who leads the Meter data platform?",
+   "expect": [
+    "meter-data-team-roster.pdf",
+    "meter-data-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q12",
+   "kind": "who",
+   "project": "meter-data",
+   "question": "Who is on call for the Head-end system?",
+   "expect": [
+    "meter-data-team-roster.pdf"
+   ],
+   "page": null
+  },
+  {
+   "id": "q13",
+   "kind": "who",
+   "project": "meter-data",
+   "question": "Who owns the reads received on time report?",
+   "expect": [
+    "meter-data-team-roster.pdf",
+    "meter-data-risk-register.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q14",
+   "kind": "how",
+   "project": "meter-data",
+   "question": "How does work get from the Smart meters to the Billing store?",
+   "expect": [
+    "meter-data-architecture-review.pdf"
+   ],
+   "page": 2
+  },
+  {
+   "id": "q15",
+   "kind": "how",
+   "project": "meter-data",
+   "question": "What happens to work from the Smart meters when the Head-end system stops?",
+   "expect": [
+    "meter-data-runbook.pdf",
+    "meter-data-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q16",
+   "kind": "why",
+   "project": "meter-data",
+   "question": "Why did the Meter data platform choose fifteen-minute interval reads instead of daily reads?",
+   "expect": [
+    "meter-data-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q17",
+   "kind": "why",
+   "project": "meter-data",
+   "question": "Why was estimated profiles from daily totals not chosen?",
+   "expect": [
+    "meter-data-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q18",
+   "kind": "why",
+   "project": "meter-data",
+   "question": "What problem led to the decision on fifteen-minute interval reads instead of daily reads?",
+   "expect": [
+    "meter-data-decision-note.docx",
+    "meter-data-meeting-notes.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q19",
+   "kind": "changed",
+   "project": "meter-data",
+   "question": "What changed in the Meter data platform on 3 September 2026?",
+   "expect": [
+    "meter-data-changelog.md",
+    "meter-data-release-notes.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q20",
+   "kind": "changed",
+   "project": "meter-data",
+   "question": "What changed for the Billing store?",
+   "expect": [
+    "meter-data-changelog.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q21",
+   "kind": "who",
+   "project": "sb-lending",
+   "question": "Who leads the Small business lending portal?",
+   "expect": [
+    "sb-lending-team-roster.pdf",
+    "sb-lending-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q22",
+   "kind": "who",
+   "project": "sb-lending",
+   "question": "Who is on call for the Credit decision engine?",
+   "expect": [
+    "sb-lending-team-roster.pdf"
+   ],
+   "page": null
+  },
+  {
+   "id": "q23",
+   "kind": "how",
+   "project": "sb-lending",
+   "question": "How does work get from the Applicant portal to the Loan servicing?",
+   "expect": [
+    "sb-lending-architecture-review.pdf"
+   ],
+   "page": 2
+  },
+  {
+   "id": "q24",
+   "kind": "how",
+   "project": "sb-lending",
+   "question": "What happens to work from the Applicant portal when the Credit decision engine stops?",
+   "expect": [
+    "sb-lending-runbook.pdf",
+    "sb-lending-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q25",
+   "kind": "how",
+   "project": "sb-lending",
+   "question": "What are the parts of the Small business lending portal?",
+   "expect": [
+    "sb-lending-onboarding.pdf",
+    "sb-lending-glossary.md",
+    "sb-lending-architecture-review.pdf"
+   ],
+   "page": null
+  },
+  {
+   "id": "q26",
+   "kind": "why",
+   "project": "sb-lending",
+   "question": "Why did the Small business lending portal choose cash-flow underwriting from bank statements?",
+   "expect": [
+    "sb-lending-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q27",
+   "kind": "why",
+   "project": "sb-lending",
+   "question": "Why was bureau scores alone not chosen?",
+   "expect": [
+    "sb-lending-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q28",
+   "kind": "changed",
+   "project": "sb-lending",
+   "question": "What changed in the Small business lending portal on 21 August 2026?",
+   "expect": [
+    "sb-lending-changelog.md",
+    "sb-lending-release-notes.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q29",
+   "kind": "changed",
+   "project": "sb-lending",
+   "question": "What changed for the Loan servicing?",
+   "expect": [
+    "sb-lending-changelog.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q30",
+   "kind": "changed",
+   "project": "sb-lending",
+   "question": "What shipped in release 2.0 of the Small business lending portal?",
+   "expect": [
+    "sb-lending-release-notes.md",
+    "sb-lending-changelog.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q31",
+   "kind": "who",
+   "project": "clinic-scheduling",
+   "question": "Who leads the Clinic scheduling service?",
+   "expect": [
+    "clinic-scheduling-team-roster.pdf",
+    "clinic-scheduling-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q32",
+   "kind": "who",
+   "project": "clinic-scheduling",
+   "question": "Who is on call for the Scheduling service?",
+   "expect": [
+    "clinic-scheduling-team-roster.pdf"
+   ],
+   "page": null
+  },
+  {
+   "id": "q33",
+   "kind": "how",
+   "project": "clinic-scheduling",
+   "question": "How does work get from the Patient app to the Clinic calendar?",
+   "expect": [
+    "clinic-scheduling-architecture-review.pdf"
+   ],
+   "page": 2
+  },
+  {
+   "id": "q34",
+   "kind": "how",
+   "project": "clinic-scheduling",
+   "question": "What happens to work from the Patient app when the Scheduling service stops?",
+   "expect": [
+    "clinic-scheduling-runbook.pdf",
+    "clinic-scheduling-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q35",
+   "kind": "how",
+   "project": "clinic-scheduling",
+   "question": "What are the parts of the Clinic scheduling service?",
+   "expect": [
+    "clinic-scheduling-onboarding.pdf",
+    "clinic-scheduling-glossary.md",
+    "clinic-scheduling-architecture-review.pdf"
+   ],
+   "page": null
+  },
+  {
+   "id": "q36",
+   "kind": "why",
+   "project": "clinic-scheduling",
+   "question": "Why did the Clinic scheduling service choose holding a slot for ten minutes while the patient confirms?",
+   "expect": [
+    "clinic-scheduling-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q37",
+   "kind": "why",
+   "project": "clinic-scheduling",
+   "question": "Why was first come first served with no hold not chosen?",
+   "expect": [
+    "clinic-scheduling-decision-note.docx"
+   ],
+   "page": null
+  },
+  {
+   "id": "q38",
+   "kind": "changed",
+   "project": "clinic-scheduling",
+   "question": "What changed in the Clinic scheduling service on 2 November 2026?",
+   "expect": [
+    "clinic-scheduling-changelog.md",
+    "clinic-scheduling-release-notes.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q39",
+   "kind": "changed",
+   "project": "clinic-scheduling",
+   "question": "What changed for the Clinic calendar?",
+   "expect": [
+    "clinic-scheduling-changelog.md"
+   ],
+   "page": null
+  },
+  {
+   "id": "q40",
+   "kind": "changed",
+   "project": "clinic-scheduling",
+   "question": "What shipped in release 2.0 of the Clinic scheduling service?",
+   "expect": [
+    "clinic-scheduling-release-notes.md",
+    "clinic-scheduling-changelog.md"
+   ],
+   "page": null
+  }
+ ]
+}

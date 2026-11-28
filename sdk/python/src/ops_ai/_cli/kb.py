@@ -30,6 +30,9 @@ def main(argv: list[str]) -> int:
     items = sub.add_parser("items", parents=common, help="a source's items")
     items.add_argument("source")
     items.add_argument("--search")
+    text = sub.add_parser("text", parents=common, help="what was read from an item's file, by section")
+    text.add_argument("item")
+    text.add_argument("--page", type=int, help="only this page of a paged file (default: every page)")
     create = sub.add_parser("create", parents=common, help="a knowledge base")
     create.add_argument("name")
     create.add_argument("--owner", help="the person who answers for it")
@@ -102,6 +105,13 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "items":
         rows = every_page(lambda **q: kb.sources_list_items(ns.source, **q), search=ns.search)
         return table(ns, rows, "id", "title", "status", "mime")
+    if ns.verb == "text":
+        found = dict(ops.knowledge.text(ns.item, page=ns.page))
+        if ns.page is None and found.get("paged"):
+            # The service answers one page at a time; the command reads the whole file unless one page is asked for.
+            rest = [ops.knowledge.text(ns.item, page=n) for n in range(2, len(found.get("pages", [])) + 1)]
+            found["sections"] = [s for t in (found, *rest) for s in t.get("sections", [])]
+        return emit(ns, found, text=_text(found))
     if ns.verb == "create":
         return emit(ns, ops.knowledge.add_base(ns.name, owner=ns.owner))
     if ns.verb == "add-source":
@@ -138,6 +148,17 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "change":
         return emit(ns, kb.changes_get_change(ns.change))
     return 2
+
+
+def _text(found: Any) -> str:
+    """Each section's headings, then its paragraphs with their page and who read them."""
+    out: list[str] = []
+    for section in found.get("sections", []):
+        out.append("# " + " > ".join(section.get("headingPath") or ["(no heading)"]))
+        for block in section.get("blocks", []):
+            at = f"p{block['page']} " if block.get("page") else ""
+            out.append(f"  [{at}{block.get('readBy', 'text')}] {block.get('text', '')}")
+    return "\n".join([*out, *found.get("notes", [])]) or found.get("status", "")
 
 
 def _rows_of(found: Any, key: str) -> list[Any]:

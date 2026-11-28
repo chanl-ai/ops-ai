@@ -336,7 +336,7 @@ class LayoutPage(Out):
     # Points; None for formats with no pages (DOCX, HTML).
     width: float | None
     height: float | None
-    source: Literal["text", "ocr", "mixed", "none"]
+    source: Literal["text", "ocr", "mixed", "model", "none"]
 
 
 class LayoutCell(Out):
@@ -421,12 +421,18 @@ class TestRun(Out):
     error: str | None = None
 
 
+PictureSensitivity = Literal["public", "internal", "confidential", "restricted"]
+
+
 class ReadingIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     # off: text layers only; auto: scans and the picture parts of mixed pages; always: every page, for a bad text layer.
     ocr: OcrMode = "auto"
     # A Tesseract language, or several joined by + (eng+fra).
     language: str = Field("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$")
+    # A knowledge read's sensitivity: pages with no text may be shown to a model cleared for it, when the team's
+    # pageImages policy allows. Left out, nothing leaves the service.
+    picture_sensitivity: PictureSensitivity | None = None
 
 
 class ReadingSettingsOut(Out):
@@ -471,7 +477,7 @@ class ReadingBlock(Out):
     cells: list[ReadingCell] = Field(default_factory=list[ReadingCell])
     caption: str | None = None
     sheet: str | None = None
-    read_by: Literal["text", "ocr"] = "text"
+    read_by: Literal["text", "ocr", "model"] = "text"
     furniture: bool = False
     main: bool = False
 
@@ -500,7 +506,7 @@ class ReadingPage(Out):
     number: int
     width: float | None = None
     height: float | None = None
-    source: Literal["text", "ocr", "mixed", "none"]
+    source: Literal["text", "ocr", "mixed", "model", "none"]
     image_share: float = 0.0
     text: str = ""
     blocks: list[ReadingBlock] = Field(default_factory=list[ReadingBlock])

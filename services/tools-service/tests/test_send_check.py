@@ -55,6 +55,7 @@ class Judge(ModelCalls):
         tenant: str,
         step: str,
         sensitivity: str = "internal",
+        **_: Any,
     ) -> Any:
         del sensitivity
         self.calls += 1
