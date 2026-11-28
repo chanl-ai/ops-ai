@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: offset-guard port-list up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: offset-guard port-list up sample-install down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -14,11 +14,12 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
-up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
+up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down; OPS_INFRA=shared (offset stacks) reuses the default stack's containers with its own database
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
 	@# Always migrate, never drop data on its own. A chain the database holds ahead of this checkout
 	@# stops here with the chain named; only RESET=1 or make reset-db wipes. KEEP_DATA=1 is accepted and changes nothing.
+	@if [ "$(OPS_INFRA)" = shared ]; then uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --create; fi
 	@if [ "$(RESET)" = "1" ]; then $(MAKE) -s reset-db; fi
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" || { \
 		echo "make up stopped: the database is ahead of this checkout (above). Nothing was changed."; exit 1; }
@@ -45,15 +46,16 @@ up: offset-guard db-up ## Compose, migrate every chain in place, then the servic
 	@# Every member role has an account that signs in, so a walk or a use case as any role never needs a manual seed.
 	@# A warning, not a stop: a stack started with its own seed file or everyone as admin holds other roles by design.
 	@$(MAKE) -s seed-roles ENV=local || echo "make up: a member role cannot sign in with its seeded account (lines above); walks as that role will fail"
-	@# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try; the marker
-	@# goes with the database (make reset-db removes it). SAMPLE=0 skips it.
-	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
-		$(MAKE) -s sample-team && touch "$(OPS_RUN_DIR)/sample-team.installed"; \
-	fi
-	@# The demo policy library, once per database, in team Platform where the signed-in dev admin sees it.
-	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then \
-		$(MAKE) -s sample-library && touch "$(OPS_RUN_DIR)/sample-library.installed"; \
-	fi
+	@$(MAKE) -s sample-install
+
+# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try, and the demo
+# policy library in team Platform where the signed-in dev admin sees it; the markers go with the database (make reset-db
+# removes them). Each touch has a line of its own with no $(MAKE): make -n runs a line holding $(MAKE), skips this one.
+sample-install: ## The sample team and the demo policy library, once per database (make up runs it; SAMPLE=0 skips)
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then $(MAKE) -s sample-team; fi
+	@if [ "$(SAMPLE)" != "0" ]; then touch "$(OPS_RUN_DIR)/sample-team.installed"; fi
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then $(MAKE) -s sample-library; fi
+	@if [ "$(SAMPLE)" != "0" ]; then touch "$(OPS_RUN_DIR)/sample-library.installed"; fi
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
 	@if [ "$(CONFIRM)" != yes ]; then \
@@ -62,7 +64,7 @@ reset-db: ## Wipe the stack's database and rebuild it empty from the chains; ask
 	fi
 	@$(STACK) stop-for-reset
 	@rm -f "$(OPS_RUN_DIR)/sample-team.installed" "$(OPS_RUN_DIR)/sample-library.installed"
-	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset --confirmed-by-reset-db
 	@$(MAKE) -s migrate
 
 down: ## Stop what `make up` started, then compose (KEEP_DB=1 leaves compose running)

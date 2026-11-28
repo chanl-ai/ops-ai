@@ -81,15 +81,12 @@ async def start_run(
     run_key: str | None,
     created_by: str,
     started_via: str | None = None,
-    started_by_approver: bool = False,
     after_seconds: float = 0,
 ) -> tuple[RunRow, bool]:
     """Writes the run on `stored` (a definition row) with its start work row, or returns the run that already has
     `run_key`. Returns (run, created). An input the trigger's schema refuses answers 422 `invalid_input` naming the
     field and the reason, and text that reads as a declared number is stored as the number. A version paused or
-    superseded since it was read is refused here, under the lock the run's write takes. `started_by_approver` is
-    `approves_own_writes` of the person starting it, read here because the worker that runs its steps has no
-    principal."""
+    superseded since it was read is refused here, under the lock the run's write takes."""
     run_id = new_id(RUN_PREFIX.rstrip("_"))
     try:
         return await starts.start(
@@ -106,7 +103,6 @@ async def start_run(
                 "input": input,
                 "created_by": created_by,
                 "started_via": started_via,
-                "started_by_approver": started_by_approver,
                 "after_seconds": after_seconds,
             },
             REGISTRY,

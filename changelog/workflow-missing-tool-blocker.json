@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-21",
-  "title": "A workflow step naming a missing tool stops publish",
-  "description": "Publishing a workflow now lists a tool step whose tool your team does not have, on that step, and refuses the publish until the step changes.",
-  "tag": "improved"
-}

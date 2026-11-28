@@ -1527,10 +1527,10 @@ CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.workflow_schedules_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.workflow_schedules,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER UPDATE
+CREATE SECURITY POLICY ops_security.workflow_schedules_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.workflow_schedules,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.workflow_schedules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.workflow_schedules AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.task_assists_tenant

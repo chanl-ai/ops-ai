@@ -5019,8 +5019,12 @@ class PublishReview(TypedDict, closed=True):
     agentPublish: NotRequired[AgentPublishRequest | None]
     agentSlug: str
     approvals: list[str]
+    approvalsNeeded: NotRequired[int]
     assignee: NotRequired[str | None]
+    canAssign: NotRequired[bool | None]
     canDecide: NotRequired[bool | None]
+    canReassign: NotRequired[bool | None]
+    canReturn: NotRequired[bool | None]
     confidence: float
     createdAt: str
     currency: str
@@ -5043,6 +5047,7 @@ class PublishReview(TypedDict, closed=True):
     status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     title: str
     toolModule: NotRequired[ToolModuleReviewRef | None]
+    viewerApproved: NotRequired[bool | None]
     workflowId: str
     workflowName: str
 
@@ -5140,13 +5145,18 @@ class StoryRead(TypedDict, closed=True):
 
 class ThreadReview(TypedDict, closed=True):
     actionFields: NotRequired[list[ActionField]]
+    actionLabel: NotRequired[str | None]
     actionTool: str
     agentSlug: str
     amount: NotRequired[float | None]
     approvals: list[str]
+    approvalsNeeded: NotRequired[int]
     assignee: NotRequired[str | None]
     calls: NotRequired[dict[str, JsonValue] | None]
+    canAssign: NotRequired[bool | None]
     canDecide: NotRequired[bool | None]
+    canReassign: NotRequired[bool | None]
+    canReturn: NotRequired[bool | None]
     caseId: NotRequired[str | None]
     caseTitle: NotRequired[str | None]
     confidence: float | None
@@ -5185,6 +5195,7 @@ class ThreadReview(TypedDict, closed=True):
     stepUpRef: NotRequired[str | None]
     task: NotRequired[TypedTask | None]
     title: str
+    viewerApproved: NotRequired[bool | None]
     workflowId: str
     workflowName: str
     workflowVersion: NotRequired[int | None]

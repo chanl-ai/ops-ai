@@ -70,6 +70,18 @@ suites against a SQL Server container, failing on a skipped SQL Server test, req
 `make uc-sql-server` for the use cases on SQL Server. Needed: the service suites' both-database tests as each lane adds
 them.
 
+## TS9 Clocks, databases, sources and exports
+
+Rule: (a) a timing-dependent test uses an injected or frozen clock; a longer timeout or sleep is not a fix. (b) A test or
+script never resets, drops or truncates a database a running stack uses; tests create a throwaway database or use an
+unreachable port. (c) A check is fixed at its source, never by skipping a case; the check and the code it guards read
+one source of the fact. (d) Self-tests and dry runs run from a `git archive` export, never inside a checkout: `make -n`
+executes recipe lines that hold `$(MAKE)`.
+Why: a longer sleep only moves the flake; a reset on a live database destroys someone's work; a skipped case hides the
+breach the check exists for; a dry run that executes recipes changes the checkout it was meant to inspect.
+
+Check: review; `scripts/test_db.py` makes the throwaway database. No check yet for (a), (c) and (d).
+
 ## TS7 Tests and code by different hands
 
 Rule: the test designer commits failing tests and changes no product code; the builder changes no test file after that

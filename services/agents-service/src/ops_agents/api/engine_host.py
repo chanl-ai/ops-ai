@@ -53,7 +53,7 @@ from ..store.leases import LeaseHeldError, Leases
 from ..store.reviews import ReviewStore
 from .engine_agents import KernelAgents
 from .event_workflows import EVENT_WORKFLOWS, handlers
-from .platform_policies import PolicySource, PolicyUnread
+from .platform_policies import PolicySource
 from .task_assist import TaskAssist, kernel_assist
 
 log = get_logger("ops_agents.api.engine_host")
@@ -237,55 +237,6 @@ class GatewayExpressions:
             return await self.gateway.evaluate(expressions, values)
 
 
-class StarterApprovals:
-    """A review step approving one write, decided as the run starter's own when they may approve it: the run recorded at
-    its start that they hold reviews.decide under the four-eyes policy. Only
-    a write one person approves without a step-up qualifies, the operation's policy and the workspace's stepUp read
-    live; anything unread leaves the step waiting for a person. The approval is recorded as the starter's, so the
-    tool node mints its token from it as from any decision."""
-
-    def __init__(self, db: AsyncEngine, gateway: GatewayClient | None, policies: PolicySource | None = None) -> None:
-        self.db = db
-        self.gateway = gateway
-        self.policies = policies
-
-    async def decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
-        run = await RunStore(EngineTransactions(self.db)).row(run_id)
-        if run is None or not run.started_by_approver or self.gateway is None:
-            return None
-        call = dict(cast(Json, payload["call"]))
-        tool = str(call["tool"])
-        try:
-            with outside_call():
-                policy = await self.gateway.tool_policy(tool)
-            approval = dict(policy.get("approval") or {})
-            stepped = bool(await self.policies.value("stepUp")) if self.policies is not None else False
-        except (ServiceCallError, PolicyUnread, KeyError, TypeError, ValueError):
-            return None
-        if stepped or approval.get("stepUp") or int(cast(float | str, approval.get("approvers") or 1)) > 1:
-            return None
-        starter, digest = run.created_by, input_hash(call["input"])
-        found = await ReviewStore(self.db).approve(
-            run_id, str(call["step"]), starter, digest, distinct=False, team_id=run.team_id
-        )
-        if not found:
-            return None
-        await EventLog(self.db).append(
-            thread_id=run_id,
-            team_id=run.team_id,
-            run_id=run_id,
-            type_="decided",
-            node=node_id,
-            data={"decision": "approved", "option": None, "decidedBy": starter, "own": True},
-        )
-        return {
-            "decision": "approved",
-            "by": starter,
-            "call": call,
-            "approval": {"step": str(call["step"]), "tool": tool, "inputHash": digest, "approvers": [*found]},
-        }
-
-
 class RunReviews:
     """A review step's review is its run: the worker records the waiting step on the run when the graph pauses, and
     Reviews lists it from there. Opening is therefore idempotent by construction. With `assist`, a typed step's task
@@ -297,11 +248,9 @@ class RunReviews:
         self,
         assist: TaskAssist | None = None,
         tx: EngineTransactions | None = None,
-        starters: StarterApprovals | None = None,
     ) -> None:
         self.assist = assist
         self.tx = tx
-        self.starters = starters
         # Held so a running assist is not collected before it ends.
         self._writing: set[asyncio.Task[None]] = set()
 
@@ -315,9 +264,6 @@ class RunReviews:
                     self._writing.add(task)
                     task.add_done_callback(self._done)
         return run_id
-
-    async def own_decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
-        return await self.starters.decision(run_id, node_id, payload) if self.starters is not None else None
 
     def _done(self, task: asyncio.Task[None]) -> None:
         self._writing.discard(task)
@@ -335,11 +281,10 @@ def assisted_reviews(
     db: AsyncEngine,
     agents: KernelAgents,
     policies: PolicySource,
-    starters: StarterApprovals | None = None,
 ) -> RunReviews:
     """The worker's reviews port with task assist. Closing `stack` (the worker stopping) waits for the assists
     still being written, so one is not lost mid-call and its task does not stay pending."""
-    reviews = RunReviews(kernel_assist(db, agents, policies), EngineTransactions(db), starters)
+    reviews = RunReviews(kernel_assist(db, agents, policies), EngineTransactions(db))
     stack.push_async_callback(reviews.settled)
     return reviews
 

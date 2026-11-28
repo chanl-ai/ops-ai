@@ -198,9 +198,7 @@ async def list_reviews(rt: Rt, me: Reader, q: Annotated[ReviewsQuery, Query()]) 
 async def _with_can_decide(rt: Runtime, me: Principal, review: hitl_facade.Review) -> hitl_facade.Review:
     """The review with whether the caller may decide it now: the console shows Approve and Reject only then."""
     waiting = review.get("status") in ("pending", "in_review")
-    out = review.copy()
-    out["canDecide"] = waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))
-    return out
+    return hitl_facade.with_rights(me, review, waiting and await hitl_facade.can_decide(rt, me, str(review["id"])))
 
 
 @console_router.get("/by-run-key/{run_key:path}", response_model=Envelope[Review])

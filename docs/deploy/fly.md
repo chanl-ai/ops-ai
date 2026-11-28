@@ -19,7 +19,7 @@ committed configs `deploy/fly/staging/<app>.toml`.
 | <app-prefix>-agents | agents | 512 MB | `:8700` | `/api/agents/` |
 | <app-prefix>-worker | agents, `python -m ops_agents.api.worker` | 512 MB | none | none |
 | <app-prefix>-tools | tools | 256 MB | `:8720` | `/api/tools/` |
-| <app-prefix>-models | models | 256 MB | `:8730` | none |
+| <app-prefix>-models | models | 256 MB | `:8730` | `/api/models/v1/` for the settings routes only (provider keys, connections, provider types, aliases) |
 | <app-prefix>-fake | models, `python -m fake_openai` | 256 MB | `:8746` | none |
 | <app-prefix>-bank | tools, `uvicorn fake_bank.app:app`: the bank stand-in, synthetic customers only | 256 MB | `:8080` | its own origin, https://<app-prefix>-bank.fly.dev |
 | <app-prefix>-kb | kb | 256 MB | `:8740` | `/api/kb/` |

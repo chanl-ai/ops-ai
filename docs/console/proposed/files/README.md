@@ -6,14 +6,14 @@ takes these screenshots; once approved they move to `docs/console/approved/files
 
 | Screen | 1280 px | 400 px |
 |---|---|---|
-| A file not read yet | [file-preview-unread-1280](file-preview-unread-1280.png) | |
-| Extract | [extract-dialog-1280](extract-dialog-1280.png) | |
-| Preview after a read: the PDF with the fields beside it | [file-preview-1280](file-preview-1280.png) | [file-preview-400](file-preview-400.png) |
-| Fields | [file-fields-1280](file-fields-1280.png) | [file-fields-400](file-fields-400.png) |
-| Files with Read as | [files-read-as-1280](files-read-as-1280.png) | |
-| Field boxes on the page, a field and its box selecting each other | [file-preview-boxes-1280](file-preview-boxes-1280.png) | |
-| A corrected value with what was read beside it | [file-fields-corrected-1280](file-fields-corrected-1280.png) | |
-| Fields restyled, before and after | [fields-look-fields-side-by-side](fields-look-fields-side-by-side.png), [fields-look-preview-side-by-side](fields-look-preview-side-by-side.png) | |
+| A file not read yet | [file-preview-unread-1280](https://opsai.chanl.ai/docs/console/proposed/files/file-preview-unread-1280.png) | |
+| Extract | [extract-dialog-1280](https://opsai.chanl.ai/docs/console/proposed/files/extract-dialog-1280.png) | |
+| Preview after a read: the PDF with the fields beside it | [file-preview-1280](https://opsai.chanl.ai/docs/console/proposed/files/file-preview-1280.png) | [file-preview-400](https://opsai.chanl.ai/docs/console/proposed/files/file-preview-400.png) |
+| Fields | [file-fields-1280](https://opsai.chanl.ai/docs/console/proposed/files/file-fields-1280.png) | [file-fields-400](https://opsai.chanl.ai/docs/console/proposed/files/file-fields-400.png) |
+| Files with Read as | [files-read-as-1280](https://opsai.chanl.ai/docs/console/proposed/files/files-read-as-1280.png) | |
+| Field boxes on the page, a field and its box selecting each other | [file-preview-boxes-1280](https://opsai.chanl.ai/docs/console/proposed/files/file-preview-boxes-1280.png) | |
+| A corrected value with what was read beside it | [file-fields-corrected-1280](https://opsai.chanl.ai/docs/console/proposed/files/file-fields-corrected-1280.png) | |
+| Fields restyled, before and after | [fields-look-fields-side-by-side](https://opsai.chanl.ai/docs/console/proposed/files/fields-look-fields-side-by-side.png), [fields-look-preview-side-by-side](https://opsai.chanl.ai/docs/console/proposed/files/fields-look-preview-side-by-side.png) | |
 
 Differences from the design, and why:
 

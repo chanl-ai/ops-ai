@@ -14,7 +14,7 @@ something print what they would do unless `DRY=0`.
 | 1. Build | Builder | A feature pull request targets `release/current`. CI does not run on a pull request into it or a push to it (`ci.yml`), so a builder runs only the tests it touches |
 | 2. Take in | `ops-release` agent | `make release-intake` (below) merges each finished pull request into the train with its own merge commit, merges `develop` in when it moves, runs `ci-local` and pushes when green; the agent resolves the conflicts and reds it reports |
 | 3. Try on staging | Owner | After telling the owner, `make stg-deploy-ci REF=release/current` deploys the train by hand. A push to the train deploys nothing; the owner sets `STAGING_HOLD` while trying it. Only fixes go on the train |
-| 4. Version | Maintainer | `make release-version V=X.Y.Z` (preview), then `DRY=0`: one commit on the train that sets `deploy/release/version`. `release-pr` refuses when the file says anything else |
+| 4. Version | Maintainer | `make release-version V=X.Y.Z` (preview), then `DRY=0`: one commit on the train that sets `deploy/release/version` and folds the changelog fragments into `changelog/releases/X.Y.Z.json`. `release-pr` refuses when the file says anything else |
 | 5. Open the PR | Maintainer | In a checkout at the train's head, `make release-pr V=X.Y.Z` (preview), then `DRY=0`: runs `make ci-local`, then opens `release/current` into `develop` titled `release: X.Y.Z into develop` |
 | 6. Queue | Owner | Queues the pull request after approving it. A push to it while queued drops it from the queue, so the train stays frozen until it lands. The queue merges with a merge commit |
 | 7. Tag | Automatic | `release-tag.yml` runs after `ci.yml` finishes on a push to `develop`, and only when that run's staging deploy and click walk passed (or a person starts it with `walk_passed` set); `scripts/release-tag.sh` refuses to push on GitHub without `WALK_PASSED=1`. When the merge subject, or the first body line of the merge commit, is `release: X.Y.Z into develop`, it tags that commit `vX.Y.Z`; otherwise a `feat` merge is the next minor version, a `fix` or `perf` merge the next patch, and any other type gets no tag |
@@ -71,8 +71,8 @@ guard applies).
 | No pull request from the branch is open | Yes | Yes | Prints that pull request and stops |
 | The branch has something `origin/develop` lacks | Yes | Yes | Says so |
 
-The check on the train is `make ci-local`, not a staging deploy by hand. Pushes to `release/**` run no CI, so a check
-has to run somewhere, and `ci-local` runs the jobs the merge queue will run, on the same commit, in the maintainer's
+The check on the train is `make ci-local`, not a staging deploy by hand. A pull request into `release/**` runs no CI, so a check
+has to run before the push, and `ci-local` runs the jobs the merge queue will run, on the same commit, in the maintainer's
 checkout. It needs no owner approval, no wait for staging, and does not touch the shared app. The staging deploy is
 still the owner's way to try the release by hand (step 3), but it is not recorded anywhere a script can read. A preview
 (`DRY=1`) does not run `ci-local`.
@@ -113,15 +113,41 @@ anything that is not a fast-forward, and the script never forces.
 
 | Event | Workflow | What it does |
 |---|---|---|
-| Pull request into `release/**`, push to `release/**` | None | `ci.yml` does not run |
+| Pull request into `release/**` | None | `ci.yml` does not run; the push that follows the merge does |
 | Pull request into `develop` or `main`, merge queue entry | `ci.yml`, `codeql.yml` | The checks; the queue merges only on green. `scorecard.yml` runs only when the pull request changes workflows, Dockerfiles or `sdk/check.sh` |
 | Push to `develop` | `ci.yml`, then `deploy-staging.yml`; `release-tag.yml` after a green staging walk | Checks, then a deploy to staging unless a numbered `release/X.Y.Z` or a `hotfix/*` branch exists or `STAGING_HOLD` is set. `release-tag.yml` tags a release merge and moves `main` |
-| Push to `hotfix/**` | `ci.yml`, then `deploy-staging.yml` | Checks in full whatever changed, then deploys that branch with the click walk |
+| Push to `develop` | `keep-current.yml` | Merges develop into every open pull request that is behind it; a conflict gets the label `needs-merge` and a comment naming the files |
+| A merge queue run of `ci.yml` finishes | `queue-retry.yml` | First failure: reruns the failed jobs. Second failure: comments each failed job and its first error line on the pull request. A green rerun queues the pull request again |
+| A `release/*` or `hotfix/*` pull request merges into `main` | `merge-back.yml` | Opens `merge-back/<name>` (cut from main, develop merged in) into develop with auto-merge on |
+| Push to `release/X.Y.Z` or `hotfix/**` | `ci.yml`, then `deploy-staging.yml`, then the web scan; `release-security.yml`; `codeql.yml` | Checks in full whatever changed, then deploys that branch with the click walk and runs an OWASP ZAP baseline scan of staging (report only: the report is an artifact and a warning does not fail the job). `release-security.yml` audits dependencies and licences, checks the SBOM, and builds, scans and signs every image in a registry inside the runner |
 | Tag `vX.Y.Z` | `sdk-publish.yml` | Builds, signs and attests both packages, and publishes a package only when its version is not on PyPI or npm yet. A published version cannot be reused, so raise the versions in `sdk/python/pyproject.toml` and `sdk/typescript/package.json` on the train. Without the repository variable `SDK_PUBLISH=1` and the `NPM_TOKEN` and `PYPI_TOKEN` secrets, every run is a dry run |
 | Tag `vX.Y.Z` | `release-images.yml` | Builds every image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/chanl-ai/ops-ai/<image>` |
 | `main` moves | The docs site on Vercel (`docs/deploy/docs-site.md`); `codeql.yml`, `scorecard.yml` | Builds `apps/docs`, skipped when none of `docs`, `services`, `apps/docs` and `pnpm-lock.yaml` changed; code scanning and the OpenSSF Scorecard |
 
 A move of `main` does not touch staging.
+
+## Branch automation
+
+Heavy runs happen on GitHub Actions, never on a laptop. A builder runs the tests of the files touched and pushes.
+
+| Need | What does it |
+|---|---|
+| The full `make verify` on a branch | `make gha-verify BRANCH=x` starts `verify-full.yml` there, watches it and prints the first error line of each failed job |
+| A pull request stays current with develop | `keep-current.yml` merges develop in (never a rebase) when develop moves and when a pull request leaves draft |
+| The queue takes only what is ready | `ci.yml` job `ready` fails when the branch is behind develop, CodeQL is red or another job is red; `ci-ok`, the one required check, needs it |
+| Generated OpenAPI documents and SDK files | `ci.yml` job `generated` runs `make openapi` on the pull request; `generated-commit` pushes any difference to its branch. Not for a fork, never in the queue |
+| A red queue run | `queue-retry.yml`: one rerun of the failed jobs, then a comment with each failed job's first error line. A flaky use case is quarantined in `config/quarantine.json` and does not fail the run |
+| A fix pushed to a queued pull request | `make requeue PR=n` takes it out of the queue and queues it again at the end |
+| A new lane of work | `make lane BRANCH=x`: a worktree off `origin/develop` with the main checkout's `.venv` and `node_modules` linked in |
+| Release and hotfix branches return to develop | `merge-back.yml`, after the merge into main |
+
+`keep-current.yml`, `generated-commit` and `merge-back.yml` push over the write deploy key (`.github/actions/push-key`),
+because a push made with the workflow token starts no checks. Without the key they push with the token and warn that
+the pushed commit will have no `ci-ok`.
+
+The sections above on the train (`release-intake`, `release-pr`, `release-tag`) describe a release that returns to
+develop first and is tagged there. Status: being replaced by a `release/X.Y.Z` branch that merges into main; those
+targets still work as written until they are changed.
 
 ## First run of the tag and nightly workflows
 
@@ -150,7 +176,7 @@ A `walk_passed=true` dispatch counts only from a repository admin; a writer's di
 | A numbered `release/X.Y.Z` or a `hotfix/*` branch exists on origin | Freezes develop merges the same way: the deploy is skipped and the job fails red with the branch names |
 | A hand-started run | Overrides the hold and the freeze, as before; the summary says so |
 
-The rule is `scripts/staging_hold.py`, which `deploy-staging.yml` calls; `scripts/tests/test_staging_hold.py` proves it.
+A release or hotfix branch whose head is already an ancestor of the deployed commit protects nothing, so it does not freeze staging (a notice names it); a head the runner cannot read keeps the freeze. The rule is `scripts/staging_hold.py`, which `deploy-staging.yml` calls; `scripts/tests/test_staging_hold.py` proves it.
 
 ## Version tags
 

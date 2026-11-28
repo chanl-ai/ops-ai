@@ -1,54 +1,57 @@
 # Start the day from chat
 
-Status: current. In the console today; the SDK calls below were run against a running install.
+Status: current.
 
-**Open the chat home, ask what needs you, and decide each waiting task where you stand.**
+This guide shows you how to open the chat home, ask what needs you, and decide each waiting task without leaving the chat.
 
 ## Your morning is spread across several tools
 
-An operations person's morning is spread across tools: approvals in one queue, case notes in another, the handbook in a
-third, and a colleague to ask what happened to yesterday's run. The approvals that block a customer wait the longest,
-because nobody knows they are waiting.
+If you work in operations, your morning is probably spread across several tools. Approvals sit in one queue, case
+notes in another and the handbook in a third, and you still have to ask a colleague what happened to yesterday's run.
+The approvals that block a customer wait the longest, because nobody knows they are waiting.
 
-The chat home puts them in one place. One question lists what needs you, each answer is one click from done, and the
-same chat answers questions from the handbook and follows up on a run.
+The chat home brings all of this into one place. You ask one question to see what needs you, and each answer is one
+click from done. The same chat also answers questions from the handbook and follows up on a run for you.
 
 ## The plan
 
 <!-- site: steps -->
-1. **Sign in.** The chat home opens first. Under the message box sit four starting points: **What needs me today**,
+1. **Sign in.** The chat home opens first, with four starting points under the message box: **What needs me today**,
    **Find a case**, **Start a workflow** (shown to people who may run workflows) and **What happened to a run**. When
-   something is waiting, up to three hints from your own work replace them: your longest-waiting Human Task, the case
-   due soonest and your newest run in flight.
-2. **Ask what needs you.** Press **What needs me today** (or the waiting-task hint) or type it. The assistant lists your Human Tasks, oldest first,
-   as cards with **Approve** and **Reject**.
-3. **Decide in the chat.** A decision here goes through the same review as the **Human Tasks** page, with the same
-   rules: a payment asks you to sign in again before it approves, and a second approver is needed where the policy says so.
-4. **Ask about the work.** "What does the handbook say about debit disputes after 60 days?" A team's agents answer
-   from the knowledge bases they are given, and cite the section each answer came from.
-5. **Follow up on a run.** Press **What happened to a run** and name it. The assistant reads the run and says where it
-   is.
+   something is waiting for you, up to three hints from your own work take their place. They point to your
+   longest-waiting Human Task, the case due soonest and your newest run in flight.
+2. **Ask what needs you.** Press **What needs me today** (or the waiting-task hint), or type the question yourself. The
+   assistant lists your Human Tasks as cards, oldest first, and each card has **Approve** and **Reject**.
+3. **Decide in the chat.** A decision you make here goes through the same review as one made on the **Human Tasks**
+   page, under the same rules. A payment asks you to sign in again before it approves, and a second approver is needed
+   wherever the policy says so.
+4. **Ask about the work.** You might ask, "What does the handbook say about debit disputes after 60 days?" Your
+   team's agents answer from the knowledge bases they are given, and each answer cites the section it came from.
+5. **Follow up on a run.** Press **What happened to a run** and name the run you mean. The assistant reads it and tells
+   you where it is.
 
 ## Try it
 
 Sign in and ask **What needs me today**. If a card is waiting, press **Approve** or **Reject**. If the list is empty,
-start a task with [Card disputes](card-disputes.md) first.
+start a task with [Card disputes](card-disputes.md) first so that you have something to decide.
 
-![The chat home: Good morning, Maya; a message box; four starting points (What needs me today, Find a case, Start a workflow, What happened to a run); and your waiting work below](images/chat-home-light.png)
+![The chat home: Good morning, Maya; a message box; four starting points (What needs me today, Find a case, Start a workflow, What happened to a run); and your waiting work below](https://opsai.chanl.ai/docs/guide/use-cases/images/chat-home-light.png)
 
 ## What success looks like
 
-Every task waiting on you is listed once, a task you decide leaves the list, and the **Human Tasks** page shows the
-same decision with who made it and when. A question about policy comes back with the section it came from.
+You see every task that is waiting on you, each listed once. When you decide a task it leaves the list, and the
+**Human Tasks** page shows the same decision with who made it and when. When you ask a question about policy, the
+answer comes back with the section it came from.
 
 ## What skipping it costs
 
-Without one place to start, an approval waits in a queue nobody opened and the customer behind it waits with it. The
-approver then decides from a queue instead of from the question that made the task.
+Without one place to start, an approval can sit in a queue that nobody has opened, and the customer behind it waits
+too. When the approver finally gets to it, they decide from a queue instead of from the question that created the
+task.
 
 ## What the assistant can see
 
-The assistant acts as you. It reads only what you may see in your team, and it can do only what you may do.
+The assistant acts as you, so it reads only what you may see in your team and can do only what you may do.
 
 | You ask | It uses | Needs |
 |---|---|---|
@@ -60,7 +63,8 @@ The assistant acts as you. It reads only what you may see in your team, and it c
 
 ## Do it from code
 
-List the Human Tasks waiting in a team and decide one. The API calls them reviews; the SDK and CLI call them tasks.
+The samples below list the Human Tasks waiting in a team and decide one, and they were run against a running install. The API calls these reviews, while the SDK
+and the CLI call them tasks.
 
 ```python tab="Python"
 from ops_ai import OpsAI
@@ -87,7 +91,8 @@ opsai tasks approve wfrun_... --reason "Checked against the handbook."
 
 ## Limits
 
-- The assistant decides only tasks you may decide. A task that needs a second approver stays open until one approves.
+- The assistant can decide only the tasks you may decide. A task that needs a second approver stays open until that
+  second person approves it.
 
 ## Next
 

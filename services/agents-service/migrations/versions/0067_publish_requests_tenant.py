@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0067_publish_requests_tenant"
 down_revision = "0066_engine_runs_list_indexes"
 branch_labels = None
@@ -32,7 +34,7 @@ def upgrade() -> None:
     op.execute(f"ALTER TABLE {TABLE} DROP CONSTRAINT {TABLE}_pkey")
     op.execute(f"ALTER TABLE {TABLE} ADD PRIMARY KEY (tenant_id, id)")
     # Roles are cluster-wide, so another database on the same server may already have created it.
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {TABLE} TO {TENANT_ROLE}")
     op.execute(f"ALTER TABLE {TABLE} ENABLE ROW LEVEL SECURITY")
     op.execute(f"ALTER TABLE {TABLE} FORCE ROW LEVEL SECURITY")

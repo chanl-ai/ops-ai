@@ -539,16 +539,18 @@
                 "value": "Here is what the policy says [1]."
               }
             ],
+            "actionLabel": "Send reply",
             "actionTool": "send_reply",
             "agentSlug": "wire_hold_review",
             "amount": null,
             "approvals": [],
+            "approvalsNeeded": 1,
             "assignee": null,
             "calls": null,
             "confidence": 0.0,
             "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
             "createdAt": "<timeZ>",
-            "currency": "USD",
+            "currency": null,
             "customer": "",
             "decidingTeam": {
               "id": "team_ops",
@@ -603,16 +605,18 @@
                 "value": "Here is what the policy says [1]."
               }
             ],
+            "actionLabel": "Send reply",
             "actionTool": "send_reply",
             "agentSlug": "wire_hold_review",
             "amount": null,
             "approvals": [],
+            "approvalsNeeded": 1,
             "assignee": null,
             "calls": null,
             "confidence": 0.0,
             "consequence": "Send reply: to ops@bank.example, subject Re: Hold the wire, body Here is what the policy says [1].",
             "createdAt": "<timeZ>",
-            "currency": "USD",
+            "currency": null,
             "customer": "",
             "decidingTeam": {
               "id": "team_ops",
@@ -729,17 +733,22 @@
                 "value": "Here is what the policy says [1]."
               }
             ],
+            "actionLabel": "Send reply",
             "actionTool": "send_reply",
             "agentSlug": "wire_hold_review",
             "amount": null,
             "approvals": [],
+            "approvalsNeeded": 1,
             "assignee": null,
             "calls": null,
+            "canAssign": true,
             "canDecide": true,
+            "canReassign": false,
+            "canReturn": false,
             "confidence": 0.0,
             "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
             "createdAt": "<timeZ>",
-            "currency": "USD",
+            "currency": null,
             "customer": "",
             "decidingTeam": {
               "id": "team_ops",
@@ -776,6 +785,7 @@
             "status": "pending",
             "stepUp": false,
             "title": "Review Wire hold review",
+            "viewerApproved": false,
             "workflowId": "wire_hold_review",
             "workflowName": "Wire hold review"
           },
@@ -794,17 +804,22 @@
                 "value": "Here is what the policy says [1]."
               }
             ],
+            "actionLabel": "Send reply",
             "actionTool": "send_reply",
             "agentSlug": "wire_hold_review",
             "amount": null,
             "approvals": [],
+            "approvalsNeeded": 1,
             "assignee": null,
             "calls": null,
+            "canAssign": true,
             "canDecide": true,
+            "canReassign": false,
+            "canReturn": false,
             "confidence": 0.0,
             "consequence": "Send reply: to ops@bank.example, subject Re: Hold the wire, body Here is what the policy says [1].",
             "createdAt": "<timeZ>",
-            "currency": "USD",
+            "currency": null,
             "customer": "",
             "decidingTeam": {
               "id": "team_ops",
@@ -841,6 +856,7 @@
             "status": "pending",
             "stepUp": false,
             "title": "Review Wire hold review",
+            "viewerApproved": false,
             "workflowId": "wire_hold_review",
             "workflowName": "Wire hold review"
           }
@@ -905,17 +921,22 @@
             "value": "Here is what the policy says [1]."
           }
         ],
+        "actionLabel": "Send reply",
         "actionTool": "send_reply",
         "agentSlug": "wire_hold_review",
         "amount": null,
         "approvals": [],
+        "approvalsNeeded": 1,
         "assignee": null,
         "calls": null,
+        "canAssign": true,
         "canDecide": true,
+        "canReassign": false,
+        "canReturn": false,
         "confidence": 0.0,
         "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
         "createdAt": "<timeZ>",
-        "currency": "USD",
+        "currency": null,
         "customer": "",
         "decidingTeam": {
           "id": "team_ops",
@@ -952,6 +973,7 @@
         "status": "pending",
         "stepUp": false,
         "title": "Review Wire hold review",
+        "viewerApproved": false,
         "workflowId": "wire_hold_review",
         "workflowName": "Wire hold review"
       },

@@ -2,7 +2,7 @@
 # check in verify-changed.sh and pre-commit (`make checks STAGED=1`) all run `make checks`, so a check added here runs
 # in every one of them and none can run a shorter list. A check is a name in CHECKS, the command that runs it and, for
 # pre-commit, the staged paths that can change its result. Each is proven red by its own test or `--self-test`.
-.PHONY: checks checks-list checks-history ci-local merge-ready
+.PHONY: checks checks-list checks-history ci-local gha-verify requeue
 
 ##@ Checks
 
@@ -28,10 +28,10 @@ CHECKS = \
   tests-typecheck-self-test tests-typecheck-commits \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
-  ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
-  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes \
+  ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards known-traps \
+  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
-  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test
+  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test md-images md-images-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -100,6 +100,13 @@ check-paths.api-changelog = ^docs/architecture/migration/api-changes\.md$$|^docs
 check-run.api-changes-gap = $(PY) sdk/api_changes_gap.py
 check-paths.api-changes-gap = ^services/[^/]+/openapi\.json$$|^docs/architecture/migration/api-changes\.md$$|^sdk/api_changes_gap\.py$$
 
+# A markdown image that does not load from the docs site: a relative path, raw.githubusercontent.com, or a site URL
+# with no file under docs/ (apps/docs/scripts/copy-images.mjs publishes them).
+check-run.md-images = $(PY) scripts/check_md_images.py
+check-paths.md-images = \.md$$|^docs/.*\.(png|jpe?g|gif|svg|webp)$$|^scripts/check_md_images\.py$$|^apps/docs/src/lib/repo\.mjs$$
+check-run.md-images-self-test = $(PY) scripts/check_md_images.py --self-test
+check-paths.md-images-self-test = ^scripts/check_md_images\.py$$
+
 # Layer directions and database drivers only in stores (.importlinter).
 check-run.lint-imports = $(LINT_IMPORTS)
 check-paths.lint-imports = ^(services|packages)/.*\.py$$|^\.importlinter$$|(^|/)pyproject\.toml$$
@@ -109,6 +116,10 @@ check-run.changelog-entries = node scripts/changelog-check.mjs --entries
 check-paths.changelog-entries = ^changelog/|^roadmap\.json$$|^scripts/changelog-check\.mjs$$
 check-run.console-standards = node apps/console/scripts/check-standards.mjs && node apps/console/scripts/check-standards.mjs --self-test
 check-paths.console-standards = ^apps/console/
+
+# Each folder guide's "Known traps" section: at most 12 lines, each `trigger => fix`, with the plants that prove it can fail.
+check-run.known-traps = node scripts/check-known-traps.mjs && node scripts/check-known-traps.mjs --self-test
+check-paths.known-traps = (^|/)CLAUDE\.md$$|^scripts/check-known-traps\.mjs$$
 
 # A migration whose downgrade() does nothing, beyond scripts/downgrades-waiting.txt, which only shrinks.
 check-run.downgrades = $(PY) scripts/check_downgrades.py --all
@@ -137,6 +148,11 @@ check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
 # with its reason; the allowlist only shrinks. Read from the committed openapi.json files.
 check-run.list-routes = $(PY) scripts/check_list_routes.py && $(PY) scripts/check_list_routes.py --self-test
 check-paths.list-routes = ^services/[^/]+/openapi\.json$$|^list-routes-allowlist\.txt$$|^scripts/check_list_routes\.py$$
+
+# Every /api/<service>/ path the console's clients call has a route in each gateway config (deploy/**/Caddyfile); a
+# call the gateway leaves out falls through to the console and answers 404.
+check-run.gateway-routes = $(PY) scripts/check_gateway_routes.py && $(PY) scripts/check_gateway_routes.py --self-test
+check-paths.gateway-routes = ^deploy/.*Caddyfile$$|^deploy/compose/app\.yaml$$|^apps/console/src/lib/api/.*-http\.ts$$|^apps/console/src/lib/api/index\.ts$$|^scripts/check_gateway_routes\.py$$
 
 # Strict types on the code and its tests: `packages` as one run, and each service through its own typecheck target. A new
 # test file's untyped helper reached CI because nothing on this list type-checked tests. Pre-commit runs only the members
@@ -193,6 +209,10 @@ check-paths.ci-local-self-test = ^scripts/ci_local\.py$$|^\.github/workflows/ci\
 
 check-run.new-migration-self-test = $(PY) scripts/new_migration.py --self-test
 check-paths.new-migration-self-test = ^scripts/new_migration\.py$$
+check-run.pr-flow-self-test = $(PY) scripts/pr_flow.py --self-test
+check-paths.pr-flow-self-test = ^scripts/pr_flow\.py$$
+check-run.lane-self-test = bash scripts/lane.sh --self-test
+check-paths.lane-self-test = ^scripts/lane\.sh$$
 check-run.builder-watch-self-test = bash scripts/builder-watch.sh --self-test
 check-paths.builder-watch-self-test = ^scripts/builder-watch\.sh$$
 
@@ -202,6 +222,10 @@ ci-local: db-up ## CI's planned jobs run here in parallel (BASE=origin/develop, 
 checks-list: ## Print each check on the list with the command it runs
 	@$(foreach c,$(CHECKS),printf '%s\t%s\n' '$(c)' '$(check-run.$(c))';)
 
-merge-ready: ## Pull request PR=N: ci-local on its head against origin/develop, then into the merge queue when green (not merged while develop has no queue rule)
-	@test -n "$(PR)" || { echo "usage: make merge-ready PR=<number>"; exit 2; }
-	@BASE=$(or $(BASE),origin/develop) bash $(ROOT)/scripts/merge_ready.sh "$(PR)"
+gha-verify: ## The full `make verify` on GitHub for BRANCH (verify-full.yml): start it, watch it, print the first error line of each failed job; exit 1 when red
+	@test -n "$(BRANCH)" || { echo "usage: make gha-verify BRANCH=<branch>"; exit 2; }
+	@python3 $(ROOT)/scripts/pr_flow.py verify --branch "$(BRANCH)"
+
+requeue: ## Pull request PR=N: out of the merge queue, then back in at the end once its checks pass (after a fix pushed to a queued branch)
+	@test -n "$(PR)" || { echo "usage: make requeue PR=<number>"; exit 2; }
+	@bash $(ROOT)/scripts/requeue.sh "$(PR)"

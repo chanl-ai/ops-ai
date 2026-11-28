@@ -9,14 +9,14 @@ by uc-142 (`docs/usecases/console/channels-real.md`) and uc-199 (`docs/usecases/
 
 | Screen | Route | 1280 px | 400 px |
 |---|---|---|---|
-| Hub: a card per kind, then every connection with what it serves, version, status and 24-hour traffic | `/preview/channels` | [hub-1280](hub-1280.png) | [hub-400](hub-400.png) |
-| Arriving from the old Deployments address | `/preview/deployments` | [from-deployments-1280](from-deployments-1280.png) | [from-deployments-400](from-deployments-400.png) |
-| Email: landing (state, what it includes, 7-day count, View activity) and its mailboxes | `/preview/channels/email` | [email-1280](email-1280.png) | [email-400](email-400.png) |
-| Chat embed | `/preview/channels/chat` | [chat-1280](chat-1280.png) | [chat-400](chat-400.png) |
-| API | `/preview/channels/api` | [api-1280](api-1280.png) | [api-400](api-400.png) |
-| A kind coming soon (MCP; Slack and Teams the same) | `/preview/channels/mcp` | [mcp-1280](mcp-1280.png) | [mcp-400](mcp-400.png) |
-| An agent's Channels tab: versions live, and where it answers with version, status and traffic | `/preview/channels/agent` | [agent-1280](agent-1280.png) | [agent-400](agent-400.png) |
-| Activity, opened from a channel's View activity | `/preview/channels/activity?channel=email` | [activity-1280](activity-1280.png) | [activity-400](activity-400.png) |
+| Hub: a card per kind, then every connection with what it serves, version, status and 24-hour traffic | `/preview/channels` | [hub-1280](https://opsai.chanl.ai/docs/console/approved/channels/hub-1280.png) | [hub-400](https://opsai.chanl.ai/docs/console/approved/channels/hub-400.png) |
+| Arriving from the old Deployments address | `/preview/deployments` | [from-deployments-1280](https://opsai.chanl.ai/docs/console/approved/channels/from-deployments-1280.png) | [from-deployments-400](https://opsai.chanl.ai/docs/console/approved/channels/from-deployments-400.png) |
+| Email: landing (state, what it includes, 7-day count, View activity) and its mailboxes | `/preview/channels/email` | [email-1280](https://opsai.chanl.ai/docs/console/approved/channels/email-1280.png) | [email-400](https://opsai.chanl.ai/docs/console/approved/channels/email-400.png) |
+| Chat embed | `/preview/channels/chat` | [chat-1280](https://opsai.chanl.ai/docs/console/approved/channels/chat-1280.png) | [chat-400](https://opsai.chanl.ai/docs/console/approved/channels/chat-400.png) |
+| API | `/preview/channels/api` | [api-1280](https://opsai.chanl.ai/docs/console/approved/channels/api-1280.png) | [api-400](https://opsai.chanl.ai/docs/console/approved/channels/api-400.png) |
+| A kind coming soon (MCP; Slack and Teams the same) | `/preview/channels/mcp` | [mcp-1280](https://opsai.chanl.ai/docs/console/approved/channels/mcp-1280.png) | [mcp-400](https://opsai.chanl.ai/docs/console/approved/channels/mcp-400.png) |
+| An agent's Channels tab: versions live, and where it answers with version, status and traffic | `/preview/channels/agent` | [agent-1280](https://opsai.chanl.ai/docs/console/approved/channels/agent-1280.png) | [agent-400](https://opsai.chanl.ai/docs/console/approved/channels/agent-400.png) |
+| Activity, opened from a channel's View activity | `/preview/channels/activity?channel=email` | [activity-1280](https://opsai.chanl.ai/docs/console/approved/channels/activity-1280.png) | [activity-400](https://opsai.chanl.ai/docs/console/approved/channels/activity-400.png) |
 
 What the real pages must keep:
 

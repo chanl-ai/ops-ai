@@ -36,7 +36,7 @@ corrected.
 | [Console, SDKs and CLI](standards/console-and-sdk.md) | `UI1` to `UI7` | No browser-side joins or `.reduce()`; hooks only; server paging; generated SDKs; CLI over the client |
 | [Errors, logging and observability](standards/observability.md) | `OB1` to `OB6` | Kit logging; one request line with ids; typed errors; up and ready; timeouts |
 | [Security](standards/security.md) | `SC1` to `SC6` | Two gateways; audit in the same transaction; secrets write-only; dependencies; nothing committed that identifies a customer |
-| [Tests](standards/testing.md) | `TS1` to `TS8` | Failure modes first; a budget per change; seen failing once; public seams; use cases per layer |
+| [Tests](standards/testing.md) | `TS1` to `TS9` | Failure modes first; a budget per change; seen failing once; public seams; use cases per layer |
 | [Delivery, deploy and upgrade](standards/delivery.md) | `DL1` to `DL9` | Branch and pull request; one gate; a separate reviewer; staging on every merge; tagged production; proven upgrades |
 
 ## The layers in one picture
@@ -157,6 +157,7 @@ or runs only on a full CI plan or nightly. No: nothing fails today; the page say
 | `TS6` | Scripted model, throwaway database, both databases | partial |
 | `TS7` | Tests and code by different hands | yes |
 | `TS8` | No test of a library | no |
+| `TS9` | Clocks, databases, sources and exports | no |
 | `DL1` | A branch, a pull request, never the trunk | yes |
 | `DL2` | One gate, the same locally and in CI | partial |
 | `DL3` | A reviewer who did not write it | no |

@@ -104,6 +104,10 @@ Broken on the current checkout: `deploy/database/tests` has 4 failures. The SQL 
 tools stop at earlier revisions than the chains (`test_mssql_ddl.py`, fixed by `make db-ddl-golden` after review), and
 agents revision `0099_review_asker_is_person` does not render as offline SQL (`test_offline.py`).
 
+## Known traps
+
+- A route the console calls but `fly/Caddyfile` does not list falls through to the console and answers 404 on every target that shares the file => models-service routes only its settings paths, so a new console call on it needs its pattern in `@models_settings`. `scripts/check_gateway_routes.py` (in `make checks`) fails the missing route.
+
 ## Generated files
 
 | File | Written by | Check |

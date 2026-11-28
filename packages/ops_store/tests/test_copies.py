@@ -75,11 +75,7 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             await c.run_sync(meta.drop_all)
             await c.run_sync(meta.create_all)
             if request.param == "postgresql":
-                await c.execute(
-                    sa.text(
-                        f"DO $$ BEGIN CREATE ROLE {ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
-                    )
-                )
+                await c.execute(sa.text(role_ddl(ROLE)))
                 await c.execute(sa.text(role_ddl(SYSTEM, bypass=True)))
                 statements: list[str] = []
                 for table in meta.sorted_tables:

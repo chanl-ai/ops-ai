@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-22",
-  "title": "See every person's app sign-ins and end one",
-  "description": "Admins can list who signed in to which of the team's apps, with counts that work, ended and failed and when each was last used, and end a person's sign-in. The person's next call asks them to connect again and names who ended it, and the audit log records it.",
-  "tag": "new"
-}

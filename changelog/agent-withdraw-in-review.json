@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "Take back an agent version waiting for review",
-  "description": "An agent version that waits for a reviewer now shows its review, so the person who sent it can withdraw it, edit it and send it again from the agent page."
-  ,"tag": "fix"
-}

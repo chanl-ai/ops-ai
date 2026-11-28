@@ -26,8 +26,10 @@ def decided(node: str, option: str) -> dict[str, Any]:
 async def test_two_review_steps_are_two_reviews_and_reject_is_rejected() -> None:
     rt: Any = SimpleNamespace()
     # The case is named, so the view reads no database.
-    first = await engine_reviews.view(rt, RUN, decided("check", "hold"), case_id="case_1", titles=TITLES)
-    second = await engine_reviews.view(rt, RUN, decided("confirm", "reject"), case_id="case_1", titles=TITLES)
+    first = await engine_reviews.view(rt, RUN, decided("check", "hold"), case_id="case_1", titles=TITLES, approvals={})
+    second = await engine_reviews.view(
+        rt, RUN, decided("confirm", "reject"), case_id="case_1", titles=TITLES, approvals={}
+    )
     assert (first["id"], second["id"]) == ("wfrun_1:check:1", "wfrun_1:confirm:1")
     assert (first["status"], second["status"]) == ("approved", "rejected")
     assert engine_reviews.run_of(second["id"]) == "wfrun_1"
@@ -36,7 +38,7 @@ async def test_two_review_steps_are_two_reviews_and_reject_is_rejected() -> None
 
 async def test_a_step_no_model_scored_has_no_confidence() -> None:
     rt: Any = SimpleNamespace()
-    review = await engine_reviews.view(rt, RUN, decided("check", "hold"), case_id="case_1", titles=TITLES)
+    review = await engine_reviews.view(rt, RUN, decided("check", "hold"), case_id="case_1", titles=TITLES, approvals={})
     assert review["confidence"] is None
 
 

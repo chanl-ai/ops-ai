@@ -1,7 +1,7 @@
 """Drop the model-call ledger and the thread budgets: the model gateway keeps both now
 
 Revision ID: 20261126_2300_drop_model_ledger
-Revises: 20261124_2313_agent_instruction
+Revises: 20261126_1200_schedule_teams
 
 Every model call names its budget and replay key to models-service, which reserves, records and replays it
 (docs/design/agents-v2/model-gateway.md), so `model_call_records`, `thread_budgets` and their 0104 side tables have no
@@ -21,7 +21,7 @@ from ops_store.dialect import db_now
 from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
 
 revision = "20261126_2300_drop_model_ledger"
-down_revision = "20261124_2313_agent_instruction"
+down_revision = "20261126_1200_schedule_teams"
 branch_labels = None
 depends_on = None
 

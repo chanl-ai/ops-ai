@@ -5,6 +5,7 @@ Status: current.
 Every change to `services/`, `packages/` or `apps/console/` follows `docs/architecture/engineering-standards.md`,
 which names the rule each check enforces. Every folder has a `CLAUDE.md` saying what it owns and how to run, test and
 lint it; the index is the "Folder guides" section of `CLAUDE.md`. Read the guide for the folder you change.
+Copilot, Cursor and Codex read the nearest `CLAUDE.md`, including its "Known traps", before editing.
 
 ## Branches, pull requests and commits
 
