@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-21",
-  "title": "Agent tabs have their own addresses",
-  "description": "Settings, Evals, Channels, Versions, Usage and Limits each open at their own link on an agent, so a tab can be shared or reloaded. Versions and widgets and limits moved to their own tabs.",
-  "tag": "improved"
-}

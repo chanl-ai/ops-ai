@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-23",
-  "title": "Steps explain themselves",
-  "description": "A workflow step now says what it does in plain words and shows what it receives from the steps before it, with the values your team's last run gave them. Pick a value by name instead of typing a path.",
-  "tag": "improved"
-}

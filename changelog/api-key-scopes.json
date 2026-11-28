@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-25",
-  "title": "API keys offer the scopes they really have",
-  "description": "Creating an API key now offers Read and Write, the two scopes a key is checked against. A Read key can only look things up; a Write key can also start runs and change records.",
-  "tag": "fix"
-}
