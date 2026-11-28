@@ -100,6 +100,7 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 ## Known traps
 
 - A lease test that waits on real time against a short ttl => build the lease on the suite's `LeaseClock` (`make(clock)`) and lapse it with `clock.advance`; a loaded CI runner can take longer than the ttl between two acquires, so a live lease reads as lapsed
+- A migration creates a role with its own `DO $$ BEGIN CREATE ROLE ...; EXCEPTION WHEN duplicate_object ... END $$` and two databases migrate at once, so the second dies on `pg_authid_rolname_index` (a unique violation, not `duplicate_object`) => create every role with `role_ddl` in `schema.py`, which catches both; a role, a database or an extension is server-wide, so its create must tolerate a concurrent create
 
 ## Known traps
 

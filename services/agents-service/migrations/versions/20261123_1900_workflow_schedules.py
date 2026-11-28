@@ -20,7 +20,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
+from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl, role_ddl
 
 revision = "20261123_1900_workflow_schedules"
 down_revision = "20261124_0257_skill_owner_ids"
@@ -68,7 +68,7 @@ def upgrade() -> None:
             op.execute(statement)
     if dialect != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON workflow_schedules TO {TENANT_ROLE}")
     op.execute("ALTER TABLE workflow_schedules ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE workflow_schedules FORCE ROW LEVEL SECURITY")
