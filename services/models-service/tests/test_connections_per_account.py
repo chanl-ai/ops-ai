@@ -69,10 +69,10 @@ async def rig(models: Models) -> AsyncIterator[Rig]:
     for _ in range(2):
         tenant = f"t_{uuid4().hex[:8]}"
         app = create_models_app(models.engine, upstream=upstream)
-        # Each account's first admin, who is also its Owner, so it may write aliases too.
+        # Each account's admin, who is not its Owner: settings.manage writes connections and aliases alike.
         # The connection and alias routes take the tenant caller, the key routes the principal: both are this person.
-        app.dependency_overrides[current_principal] = people(tenant, owner=True)
-        app.dependency_overrides[current_tenant_caller] = people(tenant, owner=True)
+        app.dependency_overrides[current_principal] = people(tenant)
+        app.dependency_overrides[current_tenant_caller] = people(tenant)
         hooks = {"response": [response_checker(app)]}
         transport = httpx.ASGITransport(app=app)
         accounts.append(Account(tenant, httpx.AsyncClient(transport=transport, base_url="http://m", event_hooks=hooks)))

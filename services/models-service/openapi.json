@@ -4179,7 +4179,7 @@
     },
     "/v1/models/chat-model": {
       "put": {
-        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet. The chat aliases are the install's, so this\nalso needs `install.manage` (403 `install_admin_only`).",
+        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet. The chat aliases are the account's, written\nas any alias is (`settings.manage`, 403 `admin_only`).",
         "operationId": "providers_set_chat_model",
         "parameters": [
           {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { without } from './schema-values.ts';
-import { aliasWriteAccess, usedByLabel, connectionBody, knobProblems, settingsForAlias } from './model-forms.ts';
+import { usedByLabel, connectionBody, knobProblems, settingsForAlias } from './model-forms.ts';
 import type { KnobSchema, ProviderTypeInfo } from './types/models.ts';
 
 const secret = { type: 'string', 'x-secret': true } as const;
@@ -59,15 +59,6 @@ test('an agent moved to another alias keeps only the settings the new model take
 // when the catalog default later moves.
 test('resetting a setting removes its key instead of storing the default', () => {
   assert.deepEqual(without({ temperature: 0.3, max_tokens: 2000 }, 'temperature', undefined), { max_tokens: 2000 });
-});
-
-// Alias writes need install.manage (the workspace owner); an admin without it must see the aliases with the reason and
-// no way to start a write that models-service would refuse.
-test('someone without install.manage sees aliases read only with the reason', () => {
-  assert.deepEqual(aliasWriteAccess(true), { editable: true, reason: null });
-  const viewer = aliasWriteAccess(false);
-  assert.equal(viewer.editable, false);
-  assert.match(String(viewer.reason), /Only the workspace owner changes model aliases/);
 });
 
 // An alias whose use the service cannot count must not read "0 agents": that invites removing one that is in use.

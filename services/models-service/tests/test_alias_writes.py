@@ -1,6 +1,6 @@
-"""Who changes model aliases, by failure mode: an alias is install-wide (one install serves one account), so a
-workspace's Admin, even of its Security team, creating or re-pointing one would change every team's model. Only the
-install admin (`install.manage`, held by Owner) writes them; reading them is unchanged."""
+"""Who changes model aliases, by failure mode: an owner-only rule outside the roles matrix refuses the account admin the
+matrix allows; or someone the matrix does not allow (`settings.manage`, as for provider connections) re-points every
+agent of the account onto another model."""
 
 from __future__ import annotations
 
@@ -32,20 +32,21 @@ async def client(models: Models) -> AsyncIterator[httpx.AsyncClient]:
         yield c
 
 
-async def test_only_the_install_admin_creates_or_versions_an_alias(client: httpx.AsyncClient) -> None:
+async def test_the_roles_matrix_decides_who_creates_or_versions_an_alias(client: httpx.AsyncClient) -> None:
     name = f"fast-{uuid4().hex[:6]}"
     version = {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal"}
 
-    # The account admin (Admin of the Security team) is refused; the same person as Owner is not.
-    refused = await client.post("/v1/models/aliases", json={"name": name, **version})
-    assert refused.status_code == 403, refused.text
-    assert refused.json()["error"]["code"] == "install_admin_only"
-    made = await client.post("/v1/models/aliases", json={"name": name, **version}, headers={"X-Owner": "yes"})
+    # An account admin (Admin of the Security team holds settings.manage) creates and re-points one, not being Owner.
+    made = await client.post("/v1/models/aliases", json={"name": name, **version})
     assert made.status_code == 201, made.text
-
     edit = await client.post(f"/v1/models/aliases/{name}/versions", json={**version, "modelId": "m-2"})
-    assert edit.status_code == 403, edit.text
-    assert edit.json()["error"]["code"] == "install_admin_only"
-    # Reading stays with whoever read before: the account admin still lists the alias at its first version.
+    assert edit.status_code == 201, edit.text
+
+    # A viewer of the Security team lacks the cell: refused as for provider connections, whatever team it names.
+    viewer = {"X-Role": "viewer"}
+    refused = await client.post("/v1/models/aliases", json={"name": f"{name}-v", **version}, headers=viewer)
+    versioned = await client.post(f"/v1/models/aliases/{name}/versions", json=version, headers=viewer)
+    assert (refused.status_code, versioned.status_code) == (403, 403), (refused.text, versioned.text)
+    assert {refused.json()["error"]["code"], versioned.json()["error"]["code"]} == {"admin_only"}
     listed = await client.get(f"/v1/models/aliases/{name}/versions")
-    assert [v["version"] for v in listed.json()["data"]["data"]] == [1], listed.text
+    assert [v["version"] for v in listed.json()["data"]["data"]] == [1, 2], listed.text

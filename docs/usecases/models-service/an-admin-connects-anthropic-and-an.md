@@ -53,6 +53,7 @@ tokens. It assumes the committed model catalog; nothing is fetched at run time.
 | 2 | The admin posts an Anthropic connection with base URL the fake, key name `UC792_ANTHROPIC` and the key in `secrets` | 201; neither that reply nor the connection list holds any part of the key |
 | 3 | The admin tests the key against the fake's loopback address | 422 `endpoint_refused`: a key test only goes to a public address (the success path is covered in `tests/test_provider_registry.py`) |
 | 4 | The admin maps alias `fast-…` to `claude-haiku-4-5` on the connection | 201 |
+| 4a | The admin re-points the alias; a viewer of Operations tries the same | The admin's is 201 and the alias has versions 1 and 2; the viewer's is 403 `admin_only` |
 | 5 | The builder reads `GET /v1/model-aliases/{alias}/knobs` on agents-service | Exactly temperature, top p, top k, thinking budget and longest answer; temperature's default is 1 and maximum 1 |
 | 6 | The builder makes an agent on the alias and saves temperature 1.6, then temperature 0.4, top k 30 and a thinking budget of 2,000 | The first is 422 naming Temperature; the second is saved and read back |
 | 7 | The builder tests the agent | 200; the fake received temperature 0.4, `top_k` 30 and `thinking: {type: enabled, budget_tokens: 2000}` |

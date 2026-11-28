@@ -148,6 +148,8 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/model-providers', served: Boolean(modelsUrl) },
+  // Only the single gateway answers usage; the per-service stack reads it from the mock.
+  { prefix: '/settings/workspace/usage', served: Boolean(baseUrl) },
   { prefix: '/data/files', served: Boolean(filesUrl) },
   { prefix: '/data/document-types', served: Boolean(documentsUrl) },
   { prefix: '/govern/access', served: onPlatform },

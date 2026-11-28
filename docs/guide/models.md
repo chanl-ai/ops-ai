@@ -78,7 +78,7 @@ rather than the model.
 | OpenAI, Anthropic, Google Gemini, Azure OpenAI and Amazon Bedrock as provider types, each with its own fields | Built: the console's Connect a provider lists them from the registry |
 | Failover between providers | Planned |
 | Live calls to Amazon Bedrock, Google Gemini and Anthropic | **Unverified**: these adapters were tested against fakes only and never called with a real key; try one with a real key before relying on it |
-| A console page for connections, aliases and keys | Built: Settings › Workspace › Models (Connections, Aliases; only the workspace owner changes aliases, since they apply to every team); an agent's Model dialog offers only the settings its alias's model takes, with defaults and Reset |
+| A console page for connections, aliases and keys | Built: Settings › Workspace › Models (Connections, Aliases; an account admin changes both, as the roles matrix gives `settings.manage`, and anyone else is told who does); an agent's Model dialog offers only the settings its alias's model takes, with defaults and Reset |
 
 ## Keys, budgets and spend caps
 

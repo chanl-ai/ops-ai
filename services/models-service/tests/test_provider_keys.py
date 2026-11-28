@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from fastapi import Header, Request
 from pydantic import SecretStr
 
-from ops_access import ANY_TEAM, OWNER, builtin_roles_for
+from ops_access import builtin_roles_for
 from ops_identity import Principal
 from ops_identity.fastapi import current_principal
 from ops_models.__main__ import dev_provider_keys
@@ -42,17 +42,15 @@ def _provider(seen: list[str | None]) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
 
 
-def people(tenant: str, *, owner: bool = False) -> Any:
+def people(tenant: str) -> Any:
     """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
-    is the account admin); with `owner` or `X-Owner` also the workspace's Owner (the install admin), as an install's
-    first admin is. A request with a bearer token (a service) is resolved as usual."""
+    is the account admin). A request with a bearer token (a service) is resolved as usual."""
 
     async def as_person(
         request: Request,
         authorization: Annotated[str | None, Header()] = None,
         x_team_id: Annotated[str | None, Header()] = None,
         x_role: Annotated[str | None, Header()] = None,
-        x_owner: Annotated[str | None, Header()] = None,
     ) -> Principal:
         if authorization:
             return await current_principal(request, authorization=authorization)
@@ -67,7 +65,7 @@ def people(tenant: str, *, owner: bool = False) -> Any:
             team_id=team,
             team_ids=[team],
             roles={team: x_role or "admin"},
-            access={team: held, **({ANY_TEAM: [OWNER.id]} if owner or x_owner else {})},
+            access={team: held},
             scopes=[],
             auth_method="session",
             # The workspace's Security team, which platform-service names in every person's token.

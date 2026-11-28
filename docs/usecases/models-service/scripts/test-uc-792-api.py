@@ -1,7 +1,7 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
 """uc-792 An admin connects Anthropic and an agent's model settings reach its chat, api layer:
-docs/usecases/models-service/an-admin-connects-anthropic-and-an.md, steps 1-7 and 16.
+docs/usecases/models-service/an-admin-connects-anthropic-and-an.md, steps 1-7, 4a and 16.
 
 The run's own models-service and the fake OpenAI (services/models-service/scripts/fake_openai), standing in for
 Anthropic's OpenAI-compatible endpoint: it answers only the key in FAKE_OPENAI_API_KEY and keeps the settings of each
@@ -21,6 +21,8 @@ KEY = "sk-ant-uc792-0123456789abcdef"
 os.environ["FAKE_OPENAI_API_KEY"] = KEY
 ADMIN = {"X-Team-Id": "team_security", "X-Dev-User": "n.petrov@harborpine.example"}
 BUILDER = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
+# A viewer of Operations: no settings.manage, so no alias writes.
+MEMBER = {**TEAM, "X-Dev-User": "r.menon@harborpine.example"}
 MODEL = "claude-haiku-4-5"
 RUN = uuid.uuid4().hex[:6]
 ALIAS = f"fast-{RUN}"
@@ -70,6 +72,20 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc792-fake-"))) as fake_v1:
         version = {"providerId": pid, "modelId": MODEL, "clearedSensitivity": "confidential"}
         mapped = m.post("/v1/models/aliases", json={"name": ALIAS, **version}, headers=ADMIN)
         check("4 the admin maps alias fast to Claude Haiku 4.5 on it", mapped.status_code == 201, mapped.text[:300])
+
+        # The roles matrix decides who changes an alias (settings.manage), as for connections: the account admin
+        # re-points it, a member without the cell is refused, and no owner-only rule stands in between.
+        repointed = m.post(f"/v1/models/aliases/{ALIAS}/versions", json=version, headers=ADMIN)
+        refused = m.post(f"/v1/models/aliases/{ALIAS}/versions", json=version, headers=MEMBER)
+        versions = [v.get("version") for v in (data(m.get(f"/v1/models/aliases/{ALIAS}/versions", headers=ADMIN)) or {}).get("data", [])]
+        check(
+            "4a the admin re-points alias fast (version 2) and a member is refused 403 admin_only",
+            repointed.status_code == 201
+            and refused.status_code == 403
+            and refused.json()["error"]["code"] == "admin_only"
+            and versions == [1, 2],
+            {"repointed": repointed.text[:200], "refused": refused.text[:200], "versions": versions},
+        )
 
         with agents(models_url=models_url, models_key="mk_dev_agents") as api:
             knobs = data(api.get(f"/v1/model-aliases/{ALIAS}/knobs", headers=BUILDER)) or {}

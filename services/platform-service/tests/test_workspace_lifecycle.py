@@ -109,7 +109,7 @@ def _code(r: Any) -> str:
 
 
 def test_admin_holds_no_workspace_or_install_cell_and_owner_holds_only_them() -> None:
-    # The install's model aliases apply to every team, so a workspace Admin holding install.manage could re-point them.
+    # The workspace and install cells are Owner's alone, so a workspace Admin cannot transfer or close the workspace.
     owner_areas = ("workspace", "install")
     assert not [g for g in ADMIN.grants if g[0] in owner_areas]
     owner = next(r for r in BUILTIN_ROLES if r.id == "owner")

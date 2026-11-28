@@ -12,8 +12,6 @@ import { PASSWORD } from '@ops-ai/usecase-runner/steps';
 import { JAMES, as } from '../../lib/workflow_ui.mjs';
 
 const SAM = 's.adeyemi@harborpine.example';
-// The workspace owner holds install.manage, which alias writes need; Sam manages settings but not the install.
-const OWNER = 'w.kamau@harborpine.example';
 const TAG = Math.random().toString(36).slice(2, 6);
 const CONNECTION = `anthropic-${TAG}`;
 const ALIAS = `fast-${TAG}`;
@@ -90,26 +88,24 @@ await withUiStack(
         await admin.keyboard.press('Escape');
       });
 
-      const owner = await consoleSignIn(browser, consoleUrl, OWNER, PASSWORD, errors);
-      owner.setDefaultTimeout(30_000);
-      await step('11 the workspace owner makes alias fast on the connection, picking the model from its catalog', async () => {
-        await owner.goto(`${consoleUrl}/settings/workspace/model-aliases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await owner.getByTestId('alias-add').click();
-        const dialog = owner.getByRole('dialog');
+      await step('11 the account admin, not the workspace owner, makes alias fast on the connection, picking the model from its catalog', async () => {
+        await admin.goto(`${consoleUrl}/settings/workspace/model-aliases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await admin.getByTestId('alias-add').click();
+        const dialog = admin.getByRole('dialog');
         await dialog.getByTestId('alias-name').fill(ALIAS);
         await dialog.getByTestId('alias-connection').click();
-        await owner.getByPlaceholder('Search connections…').last().fill(CONNECTION);
-        await owner.getByRole('option', { name: new RegExp(CONNECTION) }).first().click();
+        await admin.getByPlaceholder('Search connections…').last().fill(CONNECTION);
+        await admin.getByRole('option', { name: new RegExp(CONNECTION) }).first().click();
         await dialog.getByTestId('alias-model').click();
-        await owner.getByPlaceholder('Search models…').last().fill('haiku');
-        await owner.getByTestId(`alias-model-option-${MODEL}`).click();
+        await admin.getByPlaceholder('Search models…').last().fill('haiku');
+        await admin.getByTestId(`alias-model-option-${MODEL}`).click();
         await dialog.getByTestId('alias-catalog').waitFor();
         await dialog.getByTestId('alias-cleared').click();
-        await owner.getByRole('option', { name: 'Confidential' }).click();
-        await owner.screenshot({ path: join(SHOTS, 'alias-dialog.png') });
+        await admin.getByRole('option', { name: 'Confidential' }).click();
+        await admin.screenshot({ path: join(SHOTS, 'alias-dialog.png') });
         await dialog.getByTestId('alias-save').click();
         await dialog.waitFor({ state: 'detached' });
-        const row = owner.locator('tr', { hasText: ALIAS });
+        const row = admin.locator('tr', { hasText: ALIAS });
         await row.waitFor();
         const shown = (await row.innerText()).replace(/\s+/g, ' ');
         check('11 the Aliases list shows the new alias with its connection, model and clearance', [ALIAS, CONNECTION, MODEL, 'Confidential'].every((t) => shown.includes(t)), shown);
@@ -158,13 +154,6 @@ await withUiStack(
         check('14 the provider received temperature 0.4, top k 30 and a thinking budget of 2,000', turn.status === 200 && last.temperature === 0.4 && last.top_k === 30 && last.thinking?.type === 'enabled' && last.thinking?.budget_tokens === 2000, { status: turn.status, received: received.slice(-3) });
       });
 
-      await step('16 an admin without install.manage sees the aliases read only, with the reason', async () => {
-        await admin.goto(`${consoleUrl}/settings/workspace/model-aliases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await admin.getByTestId('alias-read-only').waitFor({ timeout: 60_000 });
-        const text = await admin.getByTestId('alias-read-only').innerText();
-        check('16 Sam sees the alias list, the owner-only reason and no Make alias button', text.includes('Only the workspace owner changes model aliases') && (await admin.getByTestId('alias-add').count()) === 0 && (await admin.locator('tr', { hasText: ALIAS }).count()) === 1, text);
-      });
-
       await step('15 a builder is offered no Models pages and cannot list or add a connection', async () => {
         await builder.goto(`${consoleUrl}/settings/workspace/model-providers`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await builder.getByText('Only an account admin').first().waitFor({ timeout: 60_000 });
@@ -174,7 +163,7 @@ await withUiStack(
         check('15 the page says only an account admin changes models, the rail has no Connections link, the API answers 403', rail === 0 && listed.status === 403 && !body.includes(CONNECTION), { rail, status: listed.status });
       });
 
-      const pages = [...everyone, await admin.content(), await owner.content(), await builder.content()];
+      const pages = [...everyone, await admin.content(), await builder.content()];
       check('no page shows the provider key', pages.every((p) => !p.includes(FAKE_OPENAI_KEY)));
       check('no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {

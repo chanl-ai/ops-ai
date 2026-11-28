@@ -605,11 +605,11 @@ def create_models_app(
     connections_guard = Depends(connections_caller)
 
     async def alias_writer(p: CurrentTenantCaller) -> Principal:
-        """Aliases are install-wide (one install serves one account): every team's agents run on them, so a person
-        creates or re-points one only with `install.manage`, which Owner holds and a workspace Admin does not. An
-        install's own scripts (a service token) write them as before."""
+        """An alias is its account's, and every team's agents in that account run on it, so a person creates or
+        re-points one with the cell the roles matrix gives for the account's model setup (`settings.manage`, as for
+        provider connections and keys). An install's own scripts (a service token) write them as before."""
         if p.kind != "service":
-            access.can(p, "install", "manage", what="the install's model aliases", code="install_admin_only")
+            access.can(p, "settings", "manage", what="model aliases", code="admin_only")
         return p
 
     alias_write_guard = Depends(alias_writer)
@@ -871,8 +871,8 @@ def create_models_app(
     async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key
         belongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or
-        version 1 on a fresh install, where no chat alias exists yet. The chat aliases are the install's, so this
-        also needs `install.manage` (403 `install_admin_only`)."""
+        version 1 on a fresh install, where no chat alias exists yet. The chat aliases are the account's, written
+        as any alias is (`settings.manage`, 403 `admin_only`)."""
         await saved_key(p, body.key_name)
         await alias_writer(p)
         if body.provider == "azure-openai":

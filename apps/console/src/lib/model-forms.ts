@@ -101,10 +101,13 @@ export function priceProblem(value: string): string | undefined {
   return Number.isFinite(n) && n >= 0 ? undefined : 'Enter a price of 0 or more.';
 }
 
-/** Who may change aliases: they apply to every team in the install, so models-service asks for install.manage. */
-export const ALIAS_READ_ONLY_REASON = 'Only the workspace owner changes model aliases, because they apply to every team in the install.';
-export function aliasWriteAccess(canManageInstall: boolean | undefined): { editable: boolean; reason: string | null } {
-  return canManageInstall === true ? { editable: true, reason: null } : { editable: false, reason: canManageInstall === undefined ? null : ALIAS_READ_ONLY_REASON };
+/**
+ * Who sets up the account's models: connections, keys and aliases all take `settings.manage`, which the roles matrix
+ * gives an admin on the Security team. Every page that tells someone without it says so in these words.
+ */
+export const MODEL_SETUP_ROLE = 'an account admin';
+export function modelSetupOnly(what: string): string {
+  return `Only ${MODEL_SETUP_ROLE} sees and changes ${what}. Ask an admin on your account.`;
 }
 
 /** The Used by cell: a count of agents, or a dash when the service does not know (never 0, which would claim it is free to remove). */

@@ -54,8 +54,8 @@ async def rig(models: Models) -> AsyncIterator[Rig]:
     # Fresh names stand in for `default` and `assistant`, which the seeded account holds.
     names = (f"chat-{uuid4().hex[:8]}", f"assist-{uuid4().hex[:8]}")
     app = create_models_app(models.engine, upstream=_provider(seen), chat_aliases=names)
-    # The install's first admin chooses the chat model: an account admin who is also the workspace's Owner.
-    app.dependency_overrides[current_principal] = people(tenant, owner=True)
+    # The account admin chooses the chat model, with settings.manage as for any alias.
+    app.dependency_overrides[current_principal] = people(tenant)
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://models", event_hooks=hooks

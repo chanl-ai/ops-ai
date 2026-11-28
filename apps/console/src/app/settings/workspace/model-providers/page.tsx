@@ -30,7 +30,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { useProviderTypes } from '@/hooks/model-queries';
 import { useProviderConnections } from '@/hooks/provider-connection-queries';
 import { useCheckProviderKey, useProviderKeys, useRemoveProviderKey, useSaveProviderKey } from '@/hooks/provider-key-queries';
-import { keyWhere } from '@/lib/model-forms';
+import { keyWhere, modelSetupOnly } from '@/lib/model-forms';
 import { plural, relativeTime } from '@/lib/format';
 import type { ProviderConnection } from '@/lib/types/models';
 import type { ProviderKey } from '@/lib/types/provider-keys';
@@ -245,6 +245,7 @@ export default function ModelProvidersPage() {
 
   return (
     <SettingsPageLayout
+      sample={false}
       section="Connections"
       description="Where the workspace’s AI models are called, and the key each one signs in with. A key is never shown after saving."
       actions={
@@ -258,7 +259,7 @@ export default function ModelProvidersPage() {
       {!admin ? (
         <Alert>
           <Info />
-          <AlertDescription>Only an account admin (an admin on the Security team) sees and changes model provider keys.</AlertDescription>
+          <AlertDescription>{modelSetupOnly('model connections and provider keys')}</AlertDescription>
         </Alert>
       ) : connections.isPending || keys.isPending ? (
         <PageSkeleton statCards={0} tableRows={2} />
