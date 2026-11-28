@@ -26,7 +26,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="uc-951-cli-") as tmp, kb(Path(tmp) / "files") as k:
         base = data(k.post("/v1/knowledge-bases", json={"name": "Claims intake", "owner": "maya@harborpine.example"}))
         src = data(k.post("/v1/sources", json={"type": "push", "name": "Project files", "kbIds": [base["id"]]}))
-        body = {"name": "project-update.pptx", "content": base64.b64encode(api.deck()).decode(), "mime": api.PPTX}
+        body = {"name": "project-update.pptx", "content": base64.b64encode(api.deck(closing="Questions")).decode(), "mime": api.PPTX}
         item = data(k.post(f"/v1/sources/{src['id']}/items", json=body))["item"]
         config = Path(tmp) / "ops-config.json"
         profile = {"baseUrl": "http://127.0.0.1", "team": "team_ops", "services": {"kb": str(k.base_url).rstrip("/")}}
@@ -41,6 +41,11 @@ def main() -> None:
             and "[p1 text] The event queue went live in three regions" in ran.stdout
             and "[p3 text] Replay after an outage is tested every quarter" in ran.stdout,
             {"out": ran.stdout[-600:], "err": ran.stderr[-400:]},
+        )
+        check(
+            "5 a slide of pictures says it was not described, and a slide with only a title prints its title",
+            "not described" in ran.stdout and "[p4 text] Questions" in ran.stdout,
+            {"out": ran.stdout[-900:]},
         )
     finish()
 

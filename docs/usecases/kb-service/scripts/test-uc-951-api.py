@@ -49,10 +49,11 @@ def diagram_png() -> io.BytesIO:
     return out
 
 
-def deck() -> bytes:
-    """A three-slide project update: a title slide, a slide that is only the architecture diagram, next steps."""
+def deck(*, closing: str | None = None) -> bytes:
+    """A three-slide project update: a title slide, a slide that is only the architecture diagram, next steps; with
+    `closing`, a fourth slide that holds only that title."""
     prs = Presentation()
-    slides = [
+    slides: list[tuple[str, str] | None] = [
         ("Claims intake: project update", "The event queue went live in three regions on 14 October."),
         None,
         ("Next steps", "Replay after an outage is tested every quarter."),
@@ -63,6 +64,8 @@ def deck() -> bytes:
             slide.shapes.title.text, slide.placeholders[1].text = content
         else:
             slide.shapes.add_picture(diagram_png(), Inches(1), Inches(1.5), width=Inches(8))
+    if closing is not None:
+        prs.slides.add_slide(prs.slide_layouts[5]).shapes.title.text = closing
     out = io.BytesIO()
     prs.save(out)
     return out.getvalue()
