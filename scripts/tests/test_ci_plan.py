@@ -336,3 +336,15 @@ def test_the_repo_job_is_one_matrix_entry_per_suite_and_check(tmp_path: Path) ->
     parts = [e["part"] for e in json.loads(p["repo_jobs"])]
     assert parts == [*p["repo_pool"].split(), "checks", "scripts", "sdk"], parts
     assert len(parts) >= 8 and plan(tmp_path, "docs/guide/plugins.md")["repo_jobs"] == "[]"
+
+
+def test_the_sql_server_job_has_one_matrix_entry_per_service_with_a_store_and_all_run_side_by_side(
+    tmp_path: Path,
+) -> None:
+    job = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["store-mssql"]
+    assert job["strategy"]["fail-fast"] is False and job["timeout-minutes"] == 20, job["strategy"]
+    entries = {e["unit"] for e in json.loads(plan(tmp_path, "services/kb-service/src/ops_kb/app.py")["mssql_jobs"])}
+    # A new service with a store folder cannot be left out of the SQL Server run.
+    with_store = {p.parents[2].name for p in (ROOT / "services").glob("*/src/*/store")}
+    assert with_store and with_store <= entries and "packages" in entries, (with_store, entries)
+    assert plan(tmp_path, "docs/guide/plugins.md")["mssql_jobs"] == "[]"

@@ -17,7 +17,7 @@ base=${1:?usage: ci-plan.sh <base sha | file of changed paths>}
 cd "$(git rev-parse --show-toplevel)"
 if [ "${CI_TESTED:-}" = true ] && [ "${GITHUB_REF:-}" = refs/heads/develop ] && [ "${CI_FULL:-}" != true ]; then
   for k in full heavy release console docs scripts code mssql store; do echo "$k=false"; done
-  for k in repo_jobs services packages service_jobs; do echo "$k=[]"; done
+  for k in repo_jobs services packages service_jobs mssql_jobs; do echo "$k=[]"; done
   echo "repo_pool="
   exit 0
 fi
@@ -102,11 +102,10 @@ if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed" \
 # The SQL Server job runs the store, kit and identity suites and, per service, route tests that reach the database too
 # (platform-service's policies and reply pins among them), so any service, package or database script change runs it;
 # documents, the console, the SDK and scripts alone do not.
-if [ "$full" = true ]; then echo "mssql=true"; else
-  echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
-fi
-# store=true when the diff touches a service's store, any migrations folder, ops_store or the database scripts: where SQL
-# Server breaks and PostgreSQL does not. ci.yml's store-mssql never runs on a pull request (unless ci:full): the merge
-# queue and develop pushes run it whenever mssql=true. ci_local.py's MSSQL_PATHS is the same rule for a local run.
+if [ "$full" = true ]; then mssql=true; else mssql=$(flag '^(services/|packages/|deploy/database/)'); fi
+echo "mssql=$mssql"
+# Its matrix: one entry per unit of scripts/mssql-store-tests.json (the shared packages, each service), all of them
+# whenever the job runs; they run side by side, each with its own SQL Server.
+if [ "$mssql" = true ]; then echo "mssql_jobs=$(python3 scripts/mssql_store_tests.py units)"; else echo "mssql_jobs=[]"; fi
 echo "store=$(flag '^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/')"
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi

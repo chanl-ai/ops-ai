@@ -65,6 +65,7 @@ jobs:
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
       code: ${{ steps.plan.outputs.code }}
       mssql: ${{ steps.plan.outputs.mssql }}
+      mssql_jobs: ${{ steps.plan.outputs.mssql_jobs }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
     steps:
@@ -297,10 +298,17 @@ jobs:
     # Never on a pull request (heavy is false there, a store change included) unless it carries ci:full: the merge queue
     # and develop pushes run it whenever the plan says mssql, and a release or hotfix branch runs it with its full plan,
     # so a SQL Server failure first shows in the queue.
+    # One job per unit, side by side, each with its own SQL Server: the shared packages and every service in
+    # scripts/mssql-store-tests.json (the plan prints them as mssql_jobs). Run in turn they took 30 minutes.
     needs: plan
     if: needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.mssql_jobs) }}
+    name: store-mssql ${{ matrix.unit }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     services:
       postgres:
         # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).
@@ -327,6 +335,7 @@ jobs:
           for _ in $(seq 60); do docker logs ops-mssql 2>&1 | grep -q "ready for client" && break; sleep 2; done
           docker logs ops-mssql 2>&1 | grep -q "ready for client" || { docker logs ops-mssql | tail -20; exit 1; }
       - name: The both-database suites
+        if: matrix.unit == 'packages'
         shell: bash
         run: |
           uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
@@ -337,37 +346,30 @@ jobs:
           if grep -E "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$RUNNER_TEMP/mssql-suites.log"; then
             echo "::error title=SQL Server not tested::A both-database test skipped SQL Server (above)."; exit 1
           fi
-      - name: The services' store tests on both databases
+      - name: The service's store tests on both databases
+        if: matrix.unit != 'packages'
         shell: bash
+        env:
+          SERVICE: ${{ matrix.unit }}
         run: |
-          # Each service's database_url runs on PostgreSQL and on a scratch SQL Server database holding its golden DDL
-          # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
-          # provider, storage and route tests stay in the service job, on PostgreSQL.
-          declare -A files=(
-            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py tests/store/test_schedule_teams_migration.py tests/store/test_workflow_schedules.py"
-            [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
-            [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
-            [files-service]="tests/test_isolation.py tests/test_store.py"
-            [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py tests/test_lookup_indexes.py tests/test_list_routes.py tests/test_statement_budget.py"
-            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py tests/test_access_check.py tests/test_acting_for.py tests/test_api_key_target.py tests/test_audit_events.py tests/test_bootstrap.py tests/test_boundary.py tests/test_cors.py tests/test_custom_roles.py tests/test_dev_sign_in.py tests/test_flags.py tests/test_identity_seam.py tests/test_introspect.py tests/test_member_options.py tests/test_reply_pins.py tests/test_saml_security.py tests/test_seed.py tests/test_team_names.py tests/test_tenancy_mode.py tests/test_workspace_admin.py tests/test_body_name_pins.py tests/test_signin_lockout.py tests/test_signin_password.py tests/test_auth.py tests/test_holders.py tests/test_signin_secrets.py tests/test_api_keys.py tests/test_step_up.py tests/test_role_assignments.py"
-            [tools-service]="tests/test_policed_tables.py tests/test_module_tenant_policy.py tests/test_mcp_link_rows_isolated.py tests/test_secret_rows_isolated.py tests/test_sign_in_rows_isolated.py tests/test_registry_store.py tests/test_background_two_tenants.py tests/test_gateway_fences.py tests/test_statement_budget.py"
-          )
-          failed=0
+          # The service's database_url runs on PostgreSQL and on a scratch SQL Server database holding its golden DDL
+          # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only
+          # (scripts/mssql-store-tests.json); the provider, storage and route tests stay in the service job.
+          uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
           printf '| service | PostgreSQL passed | SQL Server passed | result |\n|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
-          for s in agents-service models-service documents-service files-service kb-service tools-service platform-service; do
-            log="$RUNNER_TEMP/mssql-$s.log"
-            read -ra picked <<<"${files[$s]}"
-            (cd "services/$s" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -vv -rs -p no:cacheprovider "${picked[@]}") > "$log" 2>&1 || failed=1
-            grep -E " (FAILED|ERROR)|^(FAILED|ERROR|SKIPPED)|^E  " "$log" | head -60 || true
-            pg=$(grep " PASSED" "$log" | grep -c "postgresql" || true)
-            ms=$(grep " PASSED" "$log" | grep -c "mssql" || true)
-            result=$(tail -1 "$log")
-            echo "$s: PostgreSQL passed $pg, SQL Server passed $ms; $result"
-            echo "| $s | $pg | $ms | $result |" >> "$GITHUB_STEP_SUMMARY"
-            if [ "$ms" -eq 0 ] || grep -qE "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$log"; then
-              echo "::error title=SQL Server not tested::$s passed no SQL Server case, or skipped one."; failed=1
-            fi
-          done
+          log="$RUNNER_TEMP/mssql-$SERVICE.log"
+          read -ra picked <<<"$(python3 scripts/mssql_store_tests.py files "$SERVICE")"
+          failed=0
+          (cd "services/$SERVICE" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -vv -rs -p no:cacheprovider "${picked[@]}") > "$log" 2>&1 || failed=1
+          grep -E " (FAILED|ERROR)|^(FAILED|ERROR|SKIPPED)|^E  " "$log" | head -60 || true
+          pg=$(grep " PASSED" "$log" | grep -c "postgresql" || true)
+          ms=$(grep " PASSED" "$log" | grep -c "mssql" || true)
+          result=$(tail -1 "$log")
+          echo "$SERVICE: PostgreSQL passed $pg, SQL Server passed $ms; $result"
+          echo "| $SERVICE | $pg | $ms | $result |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ms" -eq 0 ] || grep -qE "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$log"; then
+            echo "::error title=SQL Server not tested::$SERVICE passed no SQL Server case, or skipped one."; failed=1
+          fi
           exit $failed
 
   release-proof:

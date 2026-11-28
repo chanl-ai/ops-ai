@@ -1,0 +1,91 @@
+{
+  "_note": "The store test files each service runs on PostgreSQL and SQL Server (ci.yml job store-mssql, one matrix entry per service; scripts/ci_local.py). A service with a store folder needs an entry (test_ci_plan.py).",
+  "services": {
+    "agents-service": [
+      "tests/store/test_registry_policies.py",
+      "tests/store/test_registry_policies_migration.py",
+      "tests/store/test_registry_tenant_migration.py",
+      "tests/store/test_registry_tenant_keys_migration.py",
+      "tests/store/test_skill_list.py",
+      "tests/store/test_threads_list.py",
+      "tests/store/test_skill_step_tools_migration.py",
+      "tests/store/test_stale_saves.py",
+      "tests/store/test_schedule_teams_migration.py",
+      "tests/store/test_workflow_schedules.py"
+    ],
+    "models-service": [
+      "tests/test_call_log_isolation_migration.py",
+      "tests/test_call_log_rows_isolated.py",
+      "tests/test_model_key_share_rows_isolated.py",
+      "tests/test_provider_key_rows_isolated.py",
+      "tests/test_alias_current_index.py",
+      "tests/test_spend_caps.py",
+      "tests/test_key_spend_race.py",
+      "tests/test_spend_retention.py"
+    ],
+    "documents-service": [
+      "tests/test_isolation.py",
+      "tests/test_template_copies.py"
+    ],
+    "files-service": [
+      "tests/test_isolation.py",
+      "tests/test_store.py"
+    ],
+    "kb-service": [
+      "tests/test_kb_isolation.py",
+      "tests/test_kb_changed.py",
+      "tests/test_team_isolation.py",
+      "tests/test_background_tenants.py",
+      "tests/test_system_user_predicates.py",
+      "tests/test_lookup_indexes.py",
+      "tests/test_list_routes.py",
+      "tests/test_statement_budget.py"
+    ],
+    "platform-service": [
+      "tests/test_store_both_databases.py",
+      "tests/test_lookup_exposure.py",
+      "tests/test_migrations.py",
+      "tests/test_rls.py",
+      "tests/test_policies.py",
+      "tests/test_access_check.py",
+      "tests/test_acting_for.py",
+      "tests/test_api_key_target.py",
+      "tests/test_audit_events.py",
+      "tests/test_bootstrap.py",
+      "tests/test_boundary.py",
+      "tests/test_cors.py",
+      "tests/test_custom_roles.py",
+      "tests/test_dev_sign_in.py",
+      "tests/test_flags.py",
+      "tests/test_identity_seam.py",
+      "tests/test_introspect.py",
+      "tests/test_member_options.py",
+      "tests/test_reply_pins.py",
+      "tests/test_saml_security.py",
+      "tests/test_seed.py",
+      "tests/test_team_names.py",
+      "tests/test_tenancy_mode.py",
+      "tests/test_workspace_admin.py",
+      "tests/test_body_name_pins.py",
+      "tests/test_signin_lockout.py",
+      "tests/test_signin_password.py",
+      "tests/test_auth.py",
+      "tests/test_holders.py",
+      "tests/test_signin_secrets.py",
+      "tests/test_api_keys.py",
+      "tests/test_step_up.py",
+      "tests/test_role_assignments.py"
+    ],
+    "tools-service": [
+      "tests/test_policed_tables.py",
+      "tests/test_module_tenant_policy.py",
+      "tests/test_mcp_link_rows_isolated.py",
+      "tests/test_secret_rows_isolated.py",
+      "tests/test_sign_in_rows_isolated.py",
+      "tests/test_registry_store.py",
+      "tests/test_background_two_tenants.py",
+      "tests/test_gateway_fences.py",
+      "tests/test_statement_budget.py"
+    ]
+  }
+}
